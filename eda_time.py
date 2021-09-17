@@ -60,6 +60,66 @@ def time_of_day_historgram(df, event='ADMIT'):
   plt.show()
 
 
-def postOp_los_histogram(df):
+# Postoperative LoS Histogram
+def postop_los_histogram(df, unit="H", exclude_outliers=0, plot_los=False):
+  post_los_df = (df.DISCHARGE_DATE_TIME - df.ACTUAL_STOP_DATE_TIME).astype('timedelta64[ns]')
+  # print("before rounding", post_los_df.head(6))
+  if unit == globals.HOUR:
+    post_los_df = post_los_df.dt.round('1h').astype('timedelta64[h]')
+    # print("after rounding: ", post_los_df.head(6))
+    unit_txt = "hour"
+  elif unit == globals.DAY:
+    post_los_df = post_los_df.dt.round('1h').astype('timedelta64[D]')
+    unit_txt = "day"
+  else:
+    raise ValueError("Unit %d is not supported!" % unit)
+  min_postLos, max_postLos = int(min(post_los_df)), int(max(post_los_df))
+  print("Min: ", min_postLos, "; Max: ", max_postLos)
+
+  if exclude_outliers > 0:
+    post_los_df.drop(post_los_df.nlargest(exclude_outliers).index, inplace=True)
+    max_postLos = int(max(post_los_df))
+
+  # Plot
+  fig, ax = plt.subplots(figsize=(14, 7))
+  bins = np.linspace(min_postLos, max_postLos + 0.5, 100)
+  ax.set_xlim([bins[0], bins[-1]])
+
+
+  if plot_los:
+    los_df = df.LENGTH_OF_STAY if unit == globals.DAY else df.LENGTH_OF_STAY * 24
+    if exclude_outliers > 0:
+      los_df.drop(los_df.nlargest(exclude_outliers).index, inplace=True)
+
+    ax.hist([post_los_df, los_df], bins, edgecolor='black', alpha=0.8, linewidth=0.5,
+            label=["Postoperative LoS", "LoS"])
+  else:
+    ax.hist(post_los_df, bins, color="orange", edgecolor='black', alpha=0.9, linewidth=0.5)
+
+  plt.title("Los & Postoperative LoS Histogram" if plot_los else "Postoperative LoS Histogram")
+  plt.xlabel("LoS (%s)" % unit_txt)
+  plt.ylabel("Number of surgical cases")
+  plt.legend()
+  plt.show()
+
+  return post_los_df
+
+
+def los_histogram(df, unit="D", exclude_outliers=0):
+
+
+  minLos, maxLos = min(df.LENGTH_OF_STAY), max(df.LENGTH_OF_STAY)
+  if exclude_outliers > 0:
+
+    maxLos = max(los_df)
+
+  fig, ax = plt.subplots(figsize=(12, 7))
+  bins = np.linspace(minLos, maxLos + globals.DELTA, 100)
+  ax.set_xlim([bins[0], bins[-1]])
+  ax.hist(df.LENGTH_OF_STAY, bins, color="red", alpha=0.65, edgecolor='black', linewidth=0.5)
+  plt.title("LoS Histogram")
+  plt.xlabel("LoS (%s)" % unit_txt)
+  plt.ylabel("Number of surgical cases")
+  plt.show()
 
   return
