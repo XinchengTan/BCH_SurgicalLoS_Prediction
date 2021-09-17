@@ -5,3 +5,11 @@ diaglabels = ['Cardiovascular', 'Digestive', 'Endocrine',
                 'Uncategorized', 'Urogenital']
 
 DELTA = 1e-8
+
+ADMIT = "ADMIT"
+DISCHARGE = "DISCHARGE"
+IPSTART = "IPSTART"
+STARTOS = "SOS"
+ENDOS = "EOS"
+WHEELIN = "WHEELIN"
+WHEELOUT = "WHEELOUT"

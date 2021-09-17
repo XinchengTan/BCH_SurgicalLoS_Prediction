@@ -8,9 +8,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from globals import diaglabels, DELTA
-import plot_utils
-import utils
+from .globals import diaglabels, DELTA
+from . import plot_utils
+from . import utils
 
 
 # Gender & LOS

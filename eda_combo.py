@@ -9,8 +9,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from globals import diaglabels
-import plot_utils
+from .globals import diaglabels
+from . import plot_utils
 
 
 def gen_cooccurrence_graph(dashboard_df, diagcode_type='OS', threshold=500):

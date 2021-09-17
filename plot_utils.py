@@ -4,7 +4,7 @@ import matplotlib.patches as mpatches
 import numpy as np
 import networkx as nx
 
-from globals import diaglabels
+from .globals import diaglabels
 
 
 def plot_connectivity_graph(A, cmap=plt.cm.tab20, threshold=0, threshold_pct=0):
