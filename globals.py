@@ -16,4 +16,4 @@ WHEELOUT = "WHEELOUT"
 
 HOUR = "H"
 DAY = "D"
-
+NIGHT = "N"

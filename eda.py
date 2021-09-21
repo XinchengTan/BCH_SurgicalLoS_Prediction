@@ -13,7 +13,7 @@ from . import plot_utils
 from . import utils
 
 
-# Gender & LOS
+# ---------------------------------------- Gender & LOS ----------------------------------------
 def gender_eda(dashboard_df):
   labels = ["Male", "Female"]
   gender_cnts = [dashboard_df[dashboard_df.SEX_CODE == "M"].shape[0],
@@ -37,7 +37,8 @@ def gender_eda(dashboard_df):
   plt.show()
 
 
-# Surgical case histogram & organ system code
+# ---------------------------------------- Organ System Code ----------------------------------------
+# Surgical case histogram VS OS code
 def organ_system_eda(dashboard_df):
   diag_cnts = [dashboard_df[lbl].sum() for lbl in diaglabels]
 
@@ -66,7 +67,7 @@ def organ_system_eda(dashboard_df):
 
 
 # Organ system code & LOS
-def organ_system_los_boxplot(dashboard_df, exclude_outliers=0):
+def organ_system_los_boxplot(dashboard_df, exclude_outliers=0, xlim=None):
   # Box plot of LoS distribution over all 21 OS codes
   dashboard_df = utils.drop_outliers(dashboard_df, exclude_outliers)
 
@@ -84,6 +85,8 @@ def organ_system_los_boxplot(dashboard_df, exclude_outliers=0):
   ax.set_xlabel("LoS (day)", fontsize=16)
   ax.set_yticklabels(diaglabels, fontsize=14)
   ax.set_ylabel("Organ System Code", fontsize=16)
+  if xlim:
+    ax.set_xlim([0, xlim])
 
   for patch, color in zip(bplot["fliers"], colors):
     patch.set_markeredgecolor(color)
@@ -93,7 +96,7 @@ def organ_system_los_boxplot(dashboard_df, exclude_outliers=0):
     patch.set_facecolor(color)
 
 
-# Age & LOS
+# ---------------------------------------- Age & LOS ----------------------------------------
 def age_los_eda(dashboard_df):
   max_age, min_age = np.ceil(max(dashboard_df.AGE_AT_PROC_YRS) + DELTA), np.floor(min(dashboard_df.AGE_AT_PROC_YRS))
   age_bins = np.linspace(int(min_age), int(max_age), int(np.ceil(max_age - min_age)))
@@ -122,12 +125,36 @@ def age_los_eda(dashboard_df):
   axs[2].set_title("Median LoS in each Age Group")
   axs[2].set_xlabel("Age (yr)")
   axs[2].set_ylabel("LoS")
+  figs.tight_layout(pad=3.0)
 
   print("Correlation between age and LoS: ",
         np.corrcoef(dashboard_df.AGE_AT_PROC_YRS, dashboard_df.LENGTH_OF_STAY)[0, 1])
 
 
-# Weight z-score & LOS
+def age_los_boxplot(df, max_age=30, bin_width=1, ylim=None):
+  age2los = defaultdict()
+  last_i = 0
+  for i in range(bin_width, max_age + 1, bin_width):
+    age2los[i] = df[(i - bin_width <= df.AGE_AT_PROC_YRS) & (df.AGE_AT_PROC_YRS < i)].LENGTH_OF_STAY.tolist()
+    last_i = i
+  age2los[last_i] = df[last_i <= df.AGE_AT_PROC_YRS].LENGTH_OF_STAY.tolist()
+
+  fig, ax = plt.subplots(figsize=(15, 10))
+  bplot = ax.boxplot([age2los[i] for i in age2los.keys()], widths=0.7, notch=True, patch_artist=True)
+  ax.set_title("LoS Distribution by Age Group", fontsize=19, y=1.01)
+  ax.set_xlabel("Age (yr)", fontsize=16)
+  ax.set_ylabel("LoS (day)", fontsize=16)
+  labels = [str(k) for k in age2los.keys()]
+  labels[-1] = str(last_i) + "+"
+  ax.set_xticklabels(labels)
+  if ylim:
+    ax.set_ylim([0, ylim])
+
+  plt.show()
+
+
+# ---------------------------------------- Weight z-score & LOS ----------------------------------------
+#
 def weightz_los_eda(dashboard_df):
   max_wt, min_wt = int(np.ceil(max(dashboard_df.WEIGHT_ZSCORE) + DELTA)), int(np.floor(min(dashboard_df.WEIGHT_ZSCORE)))
   wt_bins = np.linspace(min_wt, max_wt, int(np.ceil(max_wt - min_wt)) * 2)
@@ -157,12 +184,37 @@ def weightz_los_eda(dashboard_df):
   axs[2].set_title("Median LoS in each Weight z-score Group")
   axs[2].set_xlabel("Weight z-score")
   axs[2].set_ylabel("LoS")
+  figs.tight_layout(pad=3.0)
 
   print("Correlation between age and LoS: ", np.corrcoef(dashboard_df.WEIGHT_ZSCORE, dashboard_df.LENGTH_OF_STAY)[0, 1])
 
 
-# Max total number of CHEWS scores & LOS  TODO: How and when is the score generated?
-def chews_los_eda(dashboard_df):
+def weightz_los_boxplot(df, weightz_range, bin_width=1, ylim=None):
+  wz2los = defaultdict()
+  wz2los[weightz_range[0]-1] = df[df.WEIGHT_ZSCORE < weightz_range[0]].LENGTH_OF_STAY.tolist()
+  last_i = 0
+  for i in range(weightz_range[0], weightz_range[-1] + 1, bin_width):
+    wz2los[i] = df[(i - bin_width <= df.WEIGHT_ZSCORE) & (df.WEIGHT_ZSCORE < i)].LENGTH_OF_STAY.tolist()
+    last_i = i
+  wz2los[last_i] = df[last_i <= df.WEIGHT_ZSCORE].LENGTH_OF_STAY.tolist()
+
+  fig, ax = plt.subplots(figsize=(15, 10))
+  bplot = ax.boxplot([wz2los[i] for i in wz2los.keys()], widths=0.7, notch=True, patch_artist=True)
+  ax.set_title("LoS Distribution by Age Group", fontsize=19, y=1.01)
+  ax.set_xlabel("Age (yr)", fontsize=16)
+  ax.set_ylabel("LoS (day)", fontsize=16)
+  labels = [str(k) for k in wz2los.keys()]
+  labels[0] = '<' + str(weightz_range[0])
+  labels[-1] = str(last_i) + "+"
+  ax.set_xticklabels(labels)
+  if ylim:
+    ax.set_ylim([0, ylim])
+
+  plt.show()
+
+# --------------------------------------- Max total number of CHEWS scores & LOS ---------------------------------------
+# TODO: How and when is the score generated?
+def chews_los_eda(dashboard_df, ylim=None):
   max_chew, min_chew = int(np.ceil(max(dashboard_df.MAX_TOTAL_CHEWS) + DELTA)), int(np.floor(min(dashboard_df.AGE_AT_PROC_YRS)))
   chew_bins = np.linspace(min_chew, max_chew, int(np.ceil(max_chew - min_chew)))
 
@@ -192,6 +244,8 @@ def chews_los_eda(dashboard_df):
   axs.set_title("LoS Distribution for each CHEWs Count", fontsize=15)
   axs.set_xlabel("Max Total CHEWs", fontsize=13)
   axs.set_ylabel("LoS", fontsize=13)
+  if ylim:
+    axs.set_ylim([0, ylim])
 
   # bplot = ax.boxplot([diag2los[d] for d in diaglabels], widths=0.7, notch=True, vert=False,
   #                    patch_artist=True,flierprops={'color':colors})
