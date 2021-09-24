@@ -118,7 +118,7 @@ def postop_los_histogram(df, unit="H", exclude_outliers=0, plot_los=False):
 
 def los_postop_los_scatter(df, unit=globals.HOUR, xylim=None):
   postop_los_df, unit_txt = gen_postop_los(df, counting_unit=unit)
-  los_df = df.LENGTH_OF_STAY * 24
+  los_df = df.LENGTH_OF_STAY * 24 if unit == globals.HOUR else df.LENGTH_OF_STAY
 
   fig, ax = plt.subplots(figsize=(11,10))
   ax.scatter(los_df, postop_los_df, s=20, facecolors='none', edgecolors='purple')
@@ -128,11 +128,12 @@ def los_postop_los_scatter(df, unit=globals.HOUR, xylim=None):
   if xylim:
     ax.set_xlim([0, xylim])
     ax.set_ylim([0, xylim])
-  lims = [
-    np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
-    np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
-  ]
+  lims = np.array([np.min([ax.get_xlim(), ax.get_ylim()]),
+                   np.max([ax.get_xlim(), ax.get_ylim()])])
   ax.plot(lims, lims, '--', color='k', linewidth=3, alpha=0.8)
+  if unit == globals.HOUR:
+    ax.plot(lims, lims - 10, '--', color='r', linewidth=2.5, alpha=0.8)
+
   plt.show()
 
 

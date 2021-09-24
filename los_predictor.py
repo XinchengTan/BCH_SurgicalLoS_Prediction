@@ -28,22 +28,26 @@ Evaluation:
 Analysis:
 - feature importance (Shapley value)
 """
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sn
+from sklearn.metrics import mean_squared_error, confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
+from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, RidgeCV
 from sklearn import svm
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, GradientBoostingClassifier, GradientBoostingRegressor
 
+from . import globals
 
 SEED = 998
 
 # TODO: add data cleaning, e.g. check for negative LoS and remove it
 
 # Generate data matrix X
-def gen_Xy(df, outcome="LOS", nranges=None, cols=None):
+def gen_Xy(df, outcome="los", nranges=None, cols=None):
   """
 
   :param df:
@@ -58,15 +62,14 @@ def gen_Xy(df, outcome="LOS", nranges=None, cols=None):
             'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
             'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic',
             'Nutrition', 'Optic', 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin',
-            'Uncategorized', 'Urogenital']
+            'Uncategorized', 'Urogenital', 'NUM_OF_NIGHTS']
   X = df[cols]
   X.loc[(X.SEX_CODE != 'F'), 'SEX_CODE'] = 0.0
   X.loc[(X.SEX_CODE == 'F'), 'SEX_CODE'] = 1.0
   X = X.to_numpy(dtype=np.float64)
 
-  y = df.LENGTH_OF_STAY
-  y = y.to_numpy()
-  if outcome == "LOS":
+  y = df.LENGTH_OF_STAY.to_numpy()
+  if outcome == globals.LOS:
     return X, y
   elif outcome == ">12h":
     y[y > 0.5] = 1
@@ -74,11 +77,9 @@ def gen_Xy(df, outcome="LOS", nranges=None, cols=None):
   elif outcome == ">1d":
     y[y > 1] = 1
     y[y <= 1] = 0
-  elif outcome == "nranges":
-    assert nranges is not None, "Please specify 'nranges'"
-    # TODO: Is this right to encode range like this?
-    for i in range(1, len(nranges)):
-      y[y >= nranges[i-1] & y < nranges[i]] = i - 1
+  elif outcome == "num_nights":
+    y = df['NUM_OF_NIGHTS'].to_numpy()
+    y[y > globals.MAX_NNT] = globals.MAX_NNT + 1
 
   return X, y
 
@@ -97,7 +98,75 @@ def standardize(X_train, X_test=None):
   return scaler.transform(X_test)
 
 
-# Run models
-def predict_los(Xtrain, ytrain, Xtest, ytest, model='reg'):
+def run_regression_model(Xtrain, ytrain, Xtest, ytest, model='lr', eval=True):
+  if model == 'lr':
+    model = LinearRegression().fit(Xtrain, ytrain)
+  elif model == 'ridgecv':
+    model = RidgeCV(alphas=[1e-3, 1e-2, 1e-1, 1]).fit(Xtrain, ytrain)
+  elif model == 'dt':
+    model = DecisionTreeRegressor(random_state=0, max_depth=4).fit(Xtrain, ytrain)
+  elif model == 'rmf':
+    model = RandomForestRegressor(max_depth=5, random_state=0).fit(Xtrain, ytrain)
+  elif model == 'gb':
+    model = GradientBoostingRegressor(random_state=0, max_depth=2).fit(Xtrain, ytrain)
+  else:
+    raise ValueError("Model %s not supported!" % model)
+
+  if eval:
+    pred_train, pred_val = model.predict(Xtrain), model.predict(Xtest)
+    train_mse = mean_squared_error(ytrain, pred_train)
+    val_mse = mean_squared_error(ytest, pred_val)
+    print("%s:" % globals.model2name[model])
+    print("R-squared (training set): ", model.score(Xtrain, ytrain))
+    print("R-squared (validation set): ", model.score(Xtest, ytest))
+    print("MSE (training set): ", train_mse, "RMSE: ", np.sqrt(train_mse))
+    print("MSE (validation set): ", val_mse, "RMSE: ", np.sqrt(val_mse))
+  return model
+
+
+def run_classifier(Xtrain, ytrain, Xtest, ytest, model='lr'):
+
+  pass
+
+
+def gen_confusion_matrix(y_true, y_pred, labels=None):
 
   return
+
+
+def predict_los(Xtrain, ytrain, Xtest, ytest, outcome='los', model=None, isTest=False):
+  model2trained = {}
+
+  if model is None:  # run all
+    if outcome == globals.LOS:
+      for md in globals.model2name.keys():
+        md = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=md)
+        model2trained[model] = md
+
+    elif outcome == globals.NNT:
+      for md in globals.model2name.keys():
+        md = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=md, eval=False)
+        model2trained[model] = md
+        # predict and round to the nearest int
+        pred_train, pred_test = np.rint(model.predict(Xtrain)), np.rint(model.predict(Xtest))
+        # bucket them into finite number of classes
+        pred_train[pred_train > globals.MAX_NNT] = globals.MAX_NNT + 1
+        pred_test[pred_test > globals.MAX_NNT] = globals.MAX_NNT + 1
+        # confusion matrix
+        confmat_train = confusion_matrix(ytrain, pred_train, labels=np.arange(0, globals.MAX_NNT+2, 1))
+        confmat_test = confusion_matrix(ytest, pred_test, labels=np.arange(0, globals.MAX_NNT+2, 1))
+        # plot
+        figs, axs = plt.subplots(nrows=2, ncols=1, figsize=(15, 7))
+        sn.set(font_scale=1.4)  # for label size
+        sn.heatmap(confmat_train, annot=True, annot_kws={"size": 16}, ax=axs[0])  # font size
+        axs[0].set_title("Confusion Matrix (training set)")
+        sn.heatmap(confmat_test, annot=True, annot_kws={"size": 16}, ax=axs[0])  # font size
+        axs[1].set_title("Confusion Matrix (test set)" if isTest else "Confusion Matrix (validation set)")
+        plt.show()
+
+  else:
+    trained_model = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=model)
+    model2trained[model] = trained_model
+
+  return model2trained
+

@@ -69,21 +69,23 @@ def organ_system_eda(dashboard_df):
 # Organ system code & LOS
 def organ_system_los_boxplot(dashboard_df, exclude_outliers=0, xlim=None):
   # Box plot of LoS distribution over all 21 OS codes
-  dashboard_df = utils.drop_outliers(dashboard_df, exclude_outliers)
+  #dashboard_df = utils.drop_outliers(dashboard_df, exclude_outliers)
 
   diag2los = defaultdict(list)
   for diag in diaglabels:
     diag2los[diag] = dashboard_df[dashboard_df[diag] == 1].LENGTH_OF_STAY.tolist()
+  dlabels = [k for k, _ in sorted(diag2los.items(), key=lambda kv: np.median(kv[1]))]
 
   fig, ax = plt.subplots(figsize=(25, 17))
   cmap = plt.cm.get_cmap('tab20')
-  colors = [cmap(i) for i in range(len(diaglabels))]
+  colors = [cmap(i) for i in range(len(dlabels))]
+  colors[-1] = plt.cm.get_cmap('tab20b')(2)
 
-  bplot = ax.boxplot([diag2los[d] for d in diaglabels], widths=0.7, notch=True, vert=False,
+  bplot = ax.boxplot([diag2los[d] for d in dlabels], widths=0.7, notch=True, vert=False,
                      patch_artist=True, flierprops={'color': colors})
   ax.set_title("LoS Distribution by Organ System Diagnosis Code", fontsize=22, y=1.01)
   ax.set_xlabel("LoS (day)", fontsize=16)
-  ax.set_yticklabels(diaglabels, fontsize=14)
+  ax.set_yticklabels(dlabels, fontsize=14)
   ax.set_ylabel("Organ System Code", fontsize=16)
   if xlim:
     ax.set_xlim([0, xlim])
@@ -212,7 +214,7 @@ def weightz_los_boxplot(df, weightz_range, bin_width=1, ylim=None):
 
   plt.show()
 
-# --------------------------------------- Max total number of CHEWS scores & LOS ---------------------------------------
+# --------------------------------------- Max total CHEWS & LOS ---------------------------------------
 # TODO: How and when is the score generated?
 def chews_los_eda(dashboard_df, ylim=None):
   max_chew, min_chew = int(np.ceil(max(dashboard_df.MAX_TOTAL_CHEWS) + DELTA)), int(np.floor(min(dashboard_df.AGE_AT_PROC_YRS)))

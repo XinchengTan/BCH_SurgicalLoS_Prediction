@@ -17,3 +17,20 @@ WHEELOUT = "WHEELOUT"
 HOUR = "H"
 DAY = "D"
 NIGHT = "N"
+
+LOS = "los"
+NNT = "num_nights"
+
+MAX_NNT = 7
+
+LR = 'lr'
+RIDGECV = 'ridgecv'
+DT = 'dt'
+RMF = 'rmf'
+GB = 'gb'
+
+model2name = {LR: "Linear Regression",
+              RIDGECV: "RidgeCV",
+              DT: "Decision Tree",
+              RMF: "Random Forest",
+              GB: "Gradient Boosting"}
