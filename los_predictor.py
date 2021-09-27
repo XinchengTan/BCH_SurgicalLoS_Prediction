@@ -32,7 +32,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sn
-from sklearn.metrics import mean_squared_error, confusion_matrix
+from sklearn.metrics import mean_squared_error, confusion_matrix, accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, RidgeCV
@@ -47,7 +47,7 @@ SEED = 998
 # TODO: add data cleaning, e.g. check for negative LoS and remove it
 
 # Generate data matrix X
-def gen_Xy(df, outcome="los", nranges=None, cols=None):
+def gen_Xy(df, outcome="los", cols=None):
   """
 
   :param df:
@@ -57,13 +57,10 @@ def gen_Xy(df, outcome="los", nranges=None, cols=None):
   :return:
   """
   if cols is None:
-    cols = ['SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
-            'PROC_DECILE', 'Cardiovascular', 'Digestive',
-            'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
-            'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic',
-            'Nutrition', 'Optic', 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin',
-            'Uncategorized', 'Urogenital', 'NUM_OF_NIGHTS']
-  X = df[cols]
+    ftr_cols = globals.FEATURE_COLS
+  else:
+    ftr_cols = cols
+  X = df[ftr_cols]
   X.loc[(X.SEX_CODE != 'F'), 'SEX_CODE'] = 0.0
   X.loc[(X.SEX_CODE == 'F'), 'SEX_CODE'] = 1.0
   X = X.to_numpy(dtype=np.float64)
@@ -100,28 +97,28 @@ def standardize(X_train, X_test=None):
 
 def run_regression_model(Xtrain, ytrain, Xtest, ytest, model='lr', eval=True):
   if model == 'lr':
-    model = LinearRegression().fit(Xtrain, ytrain)
+    reg = LinearRegression().fit(Xtrain, ytrain)
   elif model == 'ridgecv':
-    model = RidgeCV(alphas=[1e-3, 1e-2, 1e-1, 1]).fit(Xtrain, ytrain)
+    reg = RidgeCV(alphas=[1e-3, 1e-2, 1e-1, 1]).fit(Xtrain, ytrain)
   elif model == 'dt':
-    model = DecisionTreeRegressor(random_state=0, max_depth=4).fit(Xtrain, ytrain)
+    reg = DecisionTreeRegressor(random_state=0, max_depth=4).fit(Xtrain, ytrain)
   elif model == 'rmf':
-    model = RandomForestRegressor(max_depth=5, random_state=0).fit(Xtrain, ytrain)
+    reg = RandomForestRegressor(max_depth=5, random_state=0).fit(Xtrain, ytrain)
   elif model == 'gb':
-    model = GradientBoostingRegressor(random_state=0, max_depth=2).fit(Xtrain, ytrain)
+    reg = GradientBoostingRegressor(random_state=0, max_depth=2).fit(Xtrain, ytrain)
   else:
     raise ValueError("Model %s not supported!" % model)
 
   if eval:
-    pred_train, pred_val = model.predict(Xtrain), model.predict(Xtest)
+    pred_train, pred_val = reg.predict(Xtrain), reg.predict(Xtest)
     train_mse = mean_squared_error(ytrain, pred_train)
     val_mse = mean_squared_error(ytest, pred_val)
     print("%s:" % globals.model2name[model])
-    print("R-squared (training set): ", model.score(Xtrain, ytrain))
-    print("R-squared (validation set): ", model.score(Xtest, ytest))
+    print("R-squared (training set): ", reg.score(Xtrain, ytrain))
+    print("R-squared (validation set): ", reg.score(Xtest, ytest))
     print("MSE (training set): ", train_mse, "RMSE: ", np.sqrt(train_mse))
     print("MSE (validation set): ", val_mse, "RMSE: ", np.sqrt(val_mse))
-  return model
+  return reg
 
 
 def run_classifier(Xtrain, ytrain, Xtest, ytest, model='lr'):
@@ -129,9 +126,13 @@ def run_classifier(Xtrain, ytrain, Xtest, ytest, model='lr'):
   pass
 
 
-def gen_confusion_matrix(y_true, y_pred, labels=None):
-
-  return
+def gen_feature_importance(model, mdabbr, ftrs=globals.FEATURE_COLS, pretty_print=False):
+  sorted_frts = [(x, y) for y, x in sorted(zip(model.feature_importances_, ftrs), reverse=True, key=lambda p: p[0])]
+  if pretty_print:
+    print("\n" + globals.model2name[mdabbr])
+    for x, y in sorted_frts:
+      print("{ftr}:  {score}".format(ftr=x, score=round(y, 4)))
+  return sorted_frts
 
 
 def predict_los(Xtrain, ytrain, Xtest, ytest, outcome='los', model=None, isTest=False):
@@ -144,24 +145,35 @@ def predict_los(Xtrain, ytrain, Xtest, ytest, outcome='los', model=None, isTest=
         model2trained[model] = md
 
     elif outcome == globals.NNT:
-      for md in globals.model2name.keys():
-        md = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=md, eval=False)
-        model2trained[model] = md
+      for md, md_name in globals.model2name.items():
+        reg = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=md, eval=True)
+        model2trained[model] = reg
         # predict and round to the nearest int
-        pred_train, pred_test = np.rint(model.predict(Xtrain)), np.rint(model.predict(Xtest))
+        pred_train, pred_test = np.rint(reg.predict(Xtrain)), np.rint(reg.predict(Xtest))
         # bucket them into finite number of classes
         pred_train[pred_train > globals.MAX_NNT] = globals.MAX_NNT + 1
         pred_test[pred_test > globals.MAX_NNT] = globals.MAX_NNT + 1
         # confusion matrix
-        confmat_train = confusion_matrix(ytrain, pred_train, labels=np.arange(0, globals.MAX_NNT+2, 1))
-        confmat_test = confusion_matrix(ytest, pred_test, labels=np.arange(0, globals.MAX_NNT+2, 1))
+        labels = [str(i) for i in range(globals.MAX_NNT+2)]
+        labels[-1] = '%s+' % globals.MAX_NNT
+        confmat_train = confusion_matrix(ytrain, pred_train, labels=np.arange(0, globals.MAX_NNT+2, 1), normalize='all')
+        confmat_test = confusion_matrix(ytest, pred_test, labels=np.arange(0, globals.MAX_NNT+2, 1), normalize='all')
+        print("Accuracy (training): ", accuracy_score(ytrain, pred_train, normalize=True))
+        print("Accuracy (validation): ", accuracy_score(ytest, pred_test, normalize=True))
         # plot
-        figs, axs = plt.subplots(nrows=2, ncols=1, figsize=(15, 7))
-        sn.set(font_scale=1.4)  # for label size
-        sn.heatmap(confmat_train, annot=True, annot_kws={"size": 16}, ax=axs[0])  # font size
-        axs[0].set_title("Confusion Matrix (training set)")
-        sn.heatmap(confmat_test, annot=True, annot_kws={"size": 16}, ax=axs[0])  # font size
-        axs[1].set_title("Confusion Matrix (test set)" if isTest else "Confusion Matrix (validation set)")
+        figs, axs = plt.subplots(nrows=2, ncols=1, figsize=(12, 21))
+        sn.set(font_scale=1.3)  # for label size
+        # sn.cubehelix_palette(start=.5, rot=-.5, as_cmap=True)
+        sn.heatmap(confmat_train, fmt=".2%", cmap=sn.color_palette("ch:start=.2,rot=-.3", as_cmap=True),
+                   annot=True, annot_kws={"size": 16}, ax=axs[0])  # font size
+        axs[0].set_title("Confusion Matrix (%s - training)" % md_name, fontsize=18, y=1.01)
+        axs[0].set_xlabel("Predicted outcome")
+        axs[0].set_ylabel("True outcome")
+        sn.heatmap(confmat_test, fmt=".2%", cmap='rocket_r', annot=True, annot_kws={"size": 16}, ax=axs[1])
+        axs[1].set_title("Confusion Matrix (%s - test)" % md_name if isTest else "Confusion Matrix (%s - validation)" % md_name,
+                         fontsize=18, y=1.01)
+        axs[1].set_xlabel("Predicted outcome")
+        axs[1].set_ylabel("True outcome")
         plt.show()
 
   else:

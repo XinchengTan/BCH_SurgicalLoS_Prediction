@@ -202,8 +202,8 @@ def weightz_los_boxplot(df, weightz_range, bin_width=1, ylim=None):
 
   fig, ax = plt.subplots(figsize=(15, 10))
   bplot = ax.boxplot([wz2los[i] for i in wz2los.keys()], widths=0.7, notch=True, patch_artist=True)
-  ax.set_title("LoS Distribution by Age Group", fontsize=19, y=1.01)
-  ax.set_xlabel("Age (yr)", fontsize=16)
+  ax.set_title("LoS Distribution by Weight z-score Group", fontsize=19, y=1.01)
+  ax.set_xlabel("Weight z-score", fontsize=16)
   ax.set_ylabel("LoS (day)", fontsize=16)
   labels = [str(k) for k in wz2los.keys()]
   labels[0] = '<' + str(weightz_range[0])

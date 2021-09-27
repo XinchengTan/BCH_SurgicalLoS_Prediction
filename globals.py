@@ -4,6 +4,13 @@ diaglabels = ['Cardiovascular', 'Digestive', 'Endocrine',
                 'Nutrition', 'Optic', 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin',
                 'Uncategorized', 'Urogenital']
 
+FEATURE_COLS = ['SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
+                'PROC_DECILE', 'Cardiovascular', 'Digestive',
+                'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
+                'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic',
+                'Nutrition', 'Optic', 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin',
+                'Uncategorized', 'Urogenital']
+
 DELTA = 1e-8
 
 ADMIT = "ADMIT"
