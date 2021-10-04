@@ -129,9 +129,11 @@ def run_classifier(Xtrain, ytrain, Xtest, ytest, model='lr'):
 def gen_feature_importance(model, mdabbr, ftrs=globals.FEATURE_COLS, pretty_print=False):
   sorted_frts = [(x, y) for y, x in sorted(zip(model.feature_importances_, ftrs), reverse=True, key=lambda p: p[0])]
   if pretty_print:
-    print("\n" + globals.model2name[mdabbr])
+    print("\n" + globals.model2name[mdabbr] + ":")
+    c = 1
     for x, y in sorted_frts:
-      print("{ftr}:  {score}".format(ftr=x, score=round(y, 4)))
+      print("{c}.{ftr}:  {score}".format(c=c, ftr=x, score=round(y, 4)))
+      c += 1
   return sorted_frts
 
 
@@ -147,7 +149,7 @@ def predict_los(Xtrain, ytrain, Xtest, ytest, outcome='los', model=None, isTest=
     elif outcome == globals.NNT:
       for md, md_name in globals.model2name.items():
         reg = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=md, eval=True)
-        model2trained[model] = reg
+        model2trained[md] = reg
         # predict and round to the nearest int
         pred_train, pred_test = np.rint(reg.predict(Xtrain)), np.rint(reg.predict(Xtest))
         # bucket them into finite number of classes
@@ -156,8 +158,8 @@ def predict_los(Xtrain, ytrain, Xtest, ytest, outcome='los', model=None, isTest=
         # confusion matrix
         labels = [str(i) for i in range(globals.MAX_NNT+2)]
         labels[-1] = '%s+' % globals.MAX_NNT
-        confmat_train = confusion_matrix(ytrain, pred_train, labels=np.arange(0, globals.MAX_NNT+2, 1), normalize='all')
-        confmat_test = confusion_matrix(ytest, pred_test, labels=np.arange(0, globals.MAX_NNT+2, 1), normalize='all')
+        confmat_train = confusion_matrix(ytrain, pred_train, labels=np.arange(0, globals.MAX_NNT+2, 1), normalize='true')
+        confmat_test = confusion_matrix(ytest, pred_test, labels=np.arange(0, globals.MAX_NNT+2, 1), normalize='true')
         print("Accuracy (training): ", accuracy_score(ytrain, pred_train, normalize=True))
         print("Accuracy (validation): ", accuracy_score(ytest, pred_test, normalize=True))
         # plot
@@ -166,14 +168,14 @@ def predict_los(Xtrain, ytrain, Xtest, ytest, outcome='los', model=None, isTest=
         # sn.cubehelix_palette(start=.5, rot=-.5, as_cmap=True)
         sn.heatmap(confmat_train, fmt=".2%", cmap=sn.color_palette("ch:start=.2,rot=-.3", as_cmap=True),
                    annot=True, annot_kws={"size": 16}, ax=axs[0])  # font size
-        axs[0].set_title("Confusion Matrix (%s - training)" % md_name, fontsize=18, y=1.01)
-        axs[0].set_xlabel("Predicted outcome")
-        axs[0].set_ylabel("True outcome")
+        axs[0].set_title("Confusion Matrix (%s - training)" % md_name, fontsize=20, y=1.01)
+        axs[0].set_xlabel("Predicted outcome", fontsize=16)
+        axs[0].set_ylabel("True outcome", fontsize=16)
         sn.heatmap(confmat_test, fmt=".2%", cmap='rocket_r', annot=True, annot_kws={"size": 16}, ax=axs[1])
         axs[1].set_title("Confusion Matrix (%s - test)" % md_name if isTest else "Confusion Matrix (%s - validation)" % md_name,
                          fontsize=18, y=1.01)
-        axs[1].set_xlabel("Predicted outcome")
-        axs[1].set_ylabel("True outcome")
+        axs[1].set_xlabel("Predicted outcome", fontsize=16)
+        axs[1].set_ylabel("True outcome", fontsize=16)
         plt.show()
 
   else:

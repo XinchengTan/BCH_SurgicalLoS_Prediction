@@ -12,9 +12,9 @@ from . import globals
 # histograms (admit, discharge, end of surgery, wheel-out time ...)
 def time_of_day_historgram(df, event='ADMIT'):
   total = df.SURG_CASE_KEY.nunique()
-  if event == globals.WHEELIN or event == globals.ADMIT:
+  if event == event == globals.ADMIT:
     event_df = df.groupby(df.ACTUAL_START_DATE_TIME.dt.hour).SURG_CASE_KEY.count()
-    event_txt = "Wheel-in"
+    event_txt = "Admission"
   elif event == globals.WHEELOUT:
     event_df = df.groupby(df.ACTUAL_STOP_DATE_TIME.dt.hour).SURG_CASE_KEY.count()
     event_txt = "Wheel-out"
