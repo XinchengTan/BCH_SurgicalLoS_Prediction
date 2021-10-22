@@ -11,7 +11,7 @@ def gen_cpt_groups(cpt_df, granularity=7, verbose=True):
   at each level above are assigned to its lowest-level category.
 
   :param cpt_df:
-  :param granularity: an int between 1 and 7
+  :param granularity: an int between 1 and 7 (TODO: This is a key param to watch in EDA)
 
   :return: a mapping from CPT category to a list of CPTs
   """
@@ -97,6 +97,7 @@ def is_valid_cpt_grouping(cpt_df, group2cpts):
 
   if np.sum(cpt_markers) != len(all_cpt_codes):
     raise ValueError("Some CPT code is not covered by the grouping!")
+  return True
 
 
 def gen_cpt_decile(df, score_range, by_code=True):
