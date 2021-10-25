@@ -3,7 +3,9 @@ from collections import Counter
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sn
+
 from sklearn import metrics
 from sklearn.inspection import permutation_importance
 
@@ -43,7 +45,7 @@ def gen_confusion_matrix(yTrue, yPred, md_name, isTrain=True, isTest=False, plot
 
   if plot:
     if isTrain:
-      cmap = sn.color_palette("ch:start=.2,rot=-.3", as_cmap=True)
+      cmap = sn.color_palette("ch:start=.2,rot=-.3")
       title = "Confusion Matrix (%s - training)" % md_name
     else:
       cmap = 'rocket_r'
@@ -52,15 +54,15 @@ def gen_confusion_matrix(yTrue, yPred, md_name, isTrain=True, isTest=False, plot
     # plot confusion matrix
     figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 10), gridspec_kw={'width_ratios': [2, 1]})
     sn.set(font_scale=1.3)  # for label size
-    sn.heatmap(confmat, fmt=".2%", cmap=cmap,
-               annot=True, annot_kws={"size": 16}, ax=axs[0])  # font size
+    sn.heatmap(confmat, fmt=".2%", cmap=cmap, linecolor='white', linewidths=0.5,
+               annot=True, annot_kws={"size": 15}, ax=axs[0])  # font size
     axs[0].set_title(title, fontsize=20, y=1.01)
     axs[0].set_xlabel("Predicted outcome", fontsize=16)
     axs[0].set_ylabel("True outcome", fontsize=16)
     axs[0].set_xticks(np.arange(9)+0.5)
-    axs[0].set_xticklabels([str(i) for i in range(8)] + ['7+'])
+    axs[0].set_xticklabels([str(i) for i in range(8)] + ['7+'], fontsize=13)
     axs[0].set_yticks(np.arange(9)+0.5)
-    axs[0].set_yticklabels([str(i) for i in range(8)] + ['7+'])
+    axs[0].set_yticklabels([str(i) for i in range(8)] + ['7+'], fontsize=13)
 
     # Plot a vertical histogram of outcome
     outcome_cnter = Counter(yTrue)
@@ -68,7 +70,7 @@ def gen_confusion_matrix(yTrue, yPred, md_name, isTrain=True, isTest=False, plot
     axs[1].set_xlabel("Number of surgical cases")
     axs[1].invert_yaxis()
     axs[1].set_yticks(range(9))
-    axs[1].set_yticklabels([str(i) for i in range(8)] + ['7+'])
+    axs[1].set_yticklabels([str(i) for i in range(8)] + ['7+'], fontsize=13)
     figs.tight_layout()
     plt.show()
 
@@ -106,6 +108,11 @@ def eval_multi_clf(clf, Xtrain, ytrain, Xval, yval, md_name, Xtest=None, ytest=N
   print("%s:" % md_name)
   print("Accuracy (training): ", metrics.accuracy_score(ytrain, pred_train, normalize=True))
   print("Accuracy (validation): ", metrics.accuracy_score(yval, pred_val, normalize=True))
+  class_names = [str(i) for i in range(globals.MAX_NNT+1)] + ["%d+" % globals.MAX_NNT]
+  f1_train = pd.DataFrame({"NNT class": class_names, "F-1 score": metrics.f1_score(ytrain, pred_train, average=None)})
+  f1_val = pd.DataFrame({"NNT class": class_names, "F-1 score": metrics.f1_score(yval, pred_val, average=None)})
+  print("F-1 score (training): ", f1_train)
+  print("F-1 score (training): ", f1_val)
 
   print("R-squared (training set): ", clf.score(Xtrain, ytrain))
   print("R-squared (validation set): ", clf.score(Xval, yval))
@@ -123,7 +130,7 @@ def eval_multi_clf(clf, Xtrain, ytrain, Xval, yval, md_name, Xtest=None, ytest=N
   gen_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights", ax=axs[0])
   gen_error_histogram(yval, pred_val, md_name, Xtype='validation', yType="Number of nights", ax=axs[1])
 
-  return pred_train, pred_val
+  return pred_train, pred_val, f1_train, f1_val
 
 
 def plot_roc_basics(ax, cutoff=None, Xtype='training'):
@@ -146,11 +153,12 @@ def plot_roc_fpr_pct_threshold(X, y, clf, ax):
   ix = np.argmin()
 
 
-def eval_binary_clf(clf, cutoff, Xtrain, ytrain, Xval, yval, md_name, plot_roc=True, metric=None, Xtest=None, ytest=None):
+def eval_binary_clf(clf, cutoff, Xtrain, ytrain, Xval, yval, md_name, plot_roc=True, metric=None, axs=None,
+                    Xtest=None, ytest=None):
   """If built-in pred = False, optimize for geometric mean of trp & 1-fpr"""
   # Naive guess acc
   upper_ratio_train, upper_ratio_test = np.sum(ytrain) / len(ytrain), np.sum(yval) / len(yval)
-  print("%s:" % md_name)
+  print("\n%s:" % md_name)
   print("Naive guess accuracy (training): ", max(1.0 - upper_ratio_train, upper_ratio_train))
   print("Naive guess accuracy (validation): ", max(1.0 - upper_ratio_test, upper_ratio_test))
 
@@ -186,29 +194,30 @@ def eval_binary_clf(clf, cutoff, Xtrain, ytrain, Xval, yval, md_name, plot_roc=T
   confmat_val = metrics.confusion_matrix(yval, pred_val, labels=[0, 1], normalize='true')
   class_names = ['< ' + str(cutoff), '%d+' % cutoff]
 
-  figs, axs = plt.subplots(1, 2, figsize=(13, 5))
-  sn.heatmap(confmat_train, fmt=".2%", cmap=sn.color_palette("ch:start=.2,rot=-.3", as_cmap=True),
-             annot=True, annot_kws={"size": 16}, ax=axs[0])  # font size
+  if axs is None:
+    figs, axs = plt.subplots(1, 2, figsize=(13, 5))
+  sn.heatmap(confmat_train, fmt=".2%", cmap=sn.color_palette("ch:start=.2,rot=-.3"), square=True,
+             annot=True, annot_kws={"size": 18, "weight": "bold"}, ax=axs[0], linecolor='white', linewidths=0.8)
   axs[0].set_title("Cutoff =%d: Confusion matrix\n(%s - training)" % (cutoff, md_name),
-                   y=1.01, fontsize=16)
-  axs[0].set_xlabel("Predicted Class", fontsize=15)
-  axs[0].set_ylabel("True Class", fontsize=15)
+                   y=1.01, fontsize=17)
+  axs[0].set_xlabel("Predicted Class", fontsize=16)
+  axs[0].set_ylabel("True Class", fontsize=16)
   axs[0].set_xticks(np.arange(2) + 0.5)
-  axs[0].set_xticklabels(class_names, fontsize=14)
+  axs[0].set_xticklabels(class_names, fontsize=15)
   axs[0].set_yticks(np.arange(2) + 0.5)
-  axs[0].set_yticklabels(['< ' + str(cutoff), '%d+' % cutoff], fontsize=14)
+  axs[0].set_yticklabels(['< ' + str(cutoff), '%d+' % cutoff], fontsize=15)
 
-  sn.heatmap(confmat_val, fmt=".2%", cmap='rocket_r',
-             annot=True, annot_kws={"size": 16}, ax=axs[1])  # font size
+  sn.heatmap(confmat_val, fmt=".2%", cmap='rocket_r', square=True, linecolor='white', linewidths=0.8,
+             annot=True, annot_kws={"size": 18, "weight": "bold"}, ax=axs[1])
   axs[1].set_title("Cutoff =%d: Confusion matrix\n(%s - validation)" % (cutoff, md_name),
-                   y=1.01, fontsize=16)
-  axs[1].set_xlabel("Predicted Class", fontsize=15)
-  axs[1].set_ylabel("True Class", fontsize=15)
+                   y=1.01, fontsize=17)
+  axs[1].set_xlabel("Predicted Class", fontsize=16)
+  axs[1].set_ylabel("True Class", fontsize=16)
   axs[1].set_xticks(np.arange(2) + 0.5)
-  axs[1].set_xticklabels(class_names, fontsize=14)
+  axs[1].set_xticklabels(class_names, fontsize=15)
   axs[1].set_yticks(np.arange(2) + 0.5)
-  axs[1].set_yticklabels(['< ' + str(cutoff), '%d+' % cutoff], fontsize=14)
-  plt.show()
+  axs[1].set_yticklabels(['< ' + str(cutoff), '%d+' % cutoff], fontsize=15)
+  #plt.show()
 
   # ROC curve
   if plot_roc:
@@ -241,7 +250,7 @@ def gen_feature_importance_bin_clf(clf, md, X, y, cutoff=None, ftrs=globals.FEAT
   """
   if md == globals.LGR or md == globals.SVC:
     ftr_importance = permutation_importance(clf, X, y, n_repeats=5, random_state=0).importances_mean
-  elif md == globals.DTCLF or md == globals.RMFCLF or md == globals.GBCLF:
+  elif md == globals.DTCLF or md == globals.RMFCLF or md == globals.GBCLF or md == globals.XGBCLF:
     ftr_importance = clf.feature_importances_
     #sorted_frts = [(x, y) for y, x in sorted(zip(clf.feature_importances_, ftrs), reverse=True, key=lambda p: p[0])]
   else:

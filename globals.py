@@ -10,10 +10,9 @@ DASHDATA_COLS = ['SURG_CASE_KEY', 'LENGTH_OF_STAY', 'SPS_PREDICTED_LOS', 'BOOKIN
                  'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic', 'Oral',
                  'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital']
 
-DATETIME_COLS = ['SURG_CASE_KEY', 'CARE_CLASS', 'PRIMARY_PROC', 'ICU_BED_NEEDED',
-                 'ADMIT_DATE', 'DISCHARGE_DATE', 'SURGEON_START_DT_TM', 'SURGERY_END_DT_TM']
+DATETIME_COLS = ['SURG_CASE_KEY', 'CARE_CLASS', 'ICU_BED_NEEDED',
+                 'ADMIT_DATE', 'DISCHARGE_DATE', 'SURGEON_START_DT_TM', 'SURGERY_END_DT_TM']  # 'PRIMARY_PROC',
 
-# 'PROC_DECILE'
 FEATURE_COLS = ['SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE', 'PROC_DECILE', 'Endocrine',
                 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental', 'Metabolic',
                 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic', 'Oral',
@@ -36,9 +35,11 @@ NIGHT = "N"
 
 LOS = "los"
 NNT = "num_nights"
-NNT_BINS = []
+NNT_CUTOFFS = [1,2,3,4,5,6,7,8]
 
 MAX_NNT = 7
+
+SURGEON = 'SPS Surgeon'
 
 LR = 'lr'
 RIDGECV = 'ridgecv'
@@ -59,12 +60,14 @@ SVC = 'svc'
 DTCLF = 'dt-clf'
 RMFCLF = 'rmf-clf'
 GBCLF = 'gb-clf'
+XGBCLF = 'xgb-clf'
 
 clf2name = {LGR: "Logistic Regression",
             SVC: "Support Vector Classifier",
             DTCLF: "Decision Tree Classifier",
             RMFCLF: "Random Forest Classifier",
-            GBCLF: "Gradient Boosting Classifier"}
+            GBCLF: "Gradient Boosting Classifier",
+            XGBCLF: "XGBoost Classifier"}
 
 
 GMEAN = "G-mean"

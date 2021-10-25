@@ -40,9 +40,11 @@ from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, Ri
 from sklearn.svm import SVC, SVR
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, GradientBoostingClassifier, GradientBoostingRegressor
+from xgboost import XGBClassifier
 
 from . import globals
 from . import model_eval
+from . import data_preprocessing as dpp
 
 
 def run_regression_model(Xtrain, ytrain, Xtest, ytest, model=globals.LR, eval=True):
@@ -93,18 +95,21 @@ def predict_los(Xtrain, ytrain, Xtest, ytest, model=None, isTest=False):
   return model2trained
 
 
-def run_classifier(Xtrain, ytrain, model):
+def run_classifier(Xtrain, ytrain, model, cls_weight=None):
   # TODO: Need to use cross validation for model selection here, consider eval metric other than built-in criteria
   if model == globals.LGR:
-    clf = make_pipeline(StandardScaler(), LogisticRegression(random_state=0, class_weight='balanced')).fit(Xtrain, ytrain)
+    clf = make_pipeline(StandardScaler(), LogisticRegression(random_state=0, class_weight=cls_weight)).fit(Xtrain, ytrain)
   elif model == globals.SVC:  # TODO: default is rbf kernel, need to experiment with others
-    clf = make_pipeline(StandardScaler(), SVC(gamma='auto', class_weight='balanced', probability=True)).fit(Xtrain, ytrain)
+    clf = make_pipeline(StandardScaler(), SVC(gamma='auto', class_weight=cls_weight, probability=True)).fit(Xtrain, ytrain)
   elif model == globals.DTCLF:
-    clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight='balanced').fit(Xtrain, ytrain)
+    clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight=cls_weight).fit(Xtrain, ytrain)
   elif model == globals.RMFCLF:
-    clf = RandomForestClassifier(max_depth=6, random_state=0, class_weight='balanced').fit(Xtrain, ytrain)
+    clf = RandomForestClassifier(max_depth=6, random_state=0, class_weight=cls_weight).fit(Xtrain, ytrain)
   elif model == globals.GBCLF:
     clf = GradientBoostingClassifier(random_state=0, max_depth=2).fit(Xtrain, ytrain)  # TODO: imbalanced class issue here!
+  elif model == globals.XGBCLF:
+    print("Running xgboost")
+    clf = XGBClassifier(random_state=0).fit(Xtrain, ytrain)
   else:
     raise NotImplementedError("Model %s is not supported!" % model)
 
@@ -129,23 +134,27 @@ def predict_nnt_regression_rounding(Xtrain, ytrain, Xval, yval, model=None, Xtes
   return model2trained
 
 
-def predict_nnt_multi_clf(Xtrain, ytrain, Xval, yval, model=None, Xtest=None, ytest=None):
+def predict_nnt_multi_clf(Xtrain, ytrain, Xval, yval, model=None, cls_weight=None, Xtest=None, ytest=None):
   """ Predict number of nights via a multi-class classfier"""
   model2trained = {}
+  model2f1s = {}
   if model is None:
     for md, md_name in globals.clf2name.items():
-      clf = run_classifier(Xtrain, ytrain, model=md)
+      clf = run_classifier(Xtrain, ytrain, model=md, cls_weight=cls_weight)
       model2trained[md] = clf
-      model_eval.eval_multi_clf(clf, Xtrain, ytrain, Xval, yval, md_name)
+      _, _, f1_train, f1_val = model_eval.eval_multi_clf(clf, Xtrain, ytrain, Xval, yval, md_name)
+      model2f1s[md] = [f1_train, f1_val]
   else:
-    clf = run_classifier(Xtrain, ytrain, model=model)
+    clf = run_classifier(Xtrain, ytrain, model=model, cls_weight=cls_weight)
     model2trained[model] = clf
-    model_eval.eval_multi_clf(clf, Xtrain, ytrain, Xval, yval, md_name=globals.clf2name[model])
+    _, _, f1_train, f1_val = model_eval.eval_multi_clf(clf, Xtrain, ytrain, Xval, yval, md_name=globals.clf2name[model])
+    model2f1s[model] = [f1_train, f1_val]
 
-  return model2trained
+  return model2trained, model2f1s
 
 
-def predict_nnt_binary_clf(Xtrain, ytrain, Xval, yval, clf_cutoffs, metric=None, model=None, eval=True, Xtest=None, ytest=None):
+def predict_nnt_binary_clf(Xtrain, ytrain, Xval, yval, clf_cutoffs, metric=None, model=None, cls_weight=None, eval=True,
+                           Xtest=None, ytest=None):
   """
   Predict number of nights via a series of binary classifiers, given a list of integer cutoffs.
   e.g. [1, 2] means two classifiers: one for if NNT < 1 or >= 1, the other for if NNT < 2 or >= 2
@@ -159,15 +168,11 @@ def predict_nnt_binary_clf(Xtrain, ytrain, Xval, yval, clf_cutoffs, metric=None,
       cutoff2clf = {}
       for md, md_name in globals.clf2name.items():
         # Build binary outcome
-        ytrain_b = np.copy(ytrain)
-        ytrain_b[ytrain_b < cutoff] = 0
-        ytrain_b[ytrain_b >= cutoff] = 1
-        yval_b = np.copy(yval)
-        yval_b[yval_b < cutoff] = 0
-        yval_b[yval_b >= cutoff] = 1
+        ytrain_b = dpp.gen_y_nnt_binary(ytrain, cutoff)
+        yval_b = dpp.gen_y_nnt_binary(yval, cutoff)
 
         # Train classifier
-        clf = run_classifier(Xtrain, ytrain_b, model=md)
+        clf = run_classifier(Xtrain, ytrain_b, model=md, cls_weight=cls_weight)
         cutoff2clf[cutoff] = clf
 
         # Evaluate model
@@ -195,25 +200,25 @@ def predict_nnt_binary_clf(Xtrain, ytrain, Xval, yval, clf_cutoffs, metric=None,
       model2binclfs[model] = cutoff2clf  # save models
   else:
     cutoff2clf = {}
+    figs, axs = plt.subplots(nrows=4, ncols=4, figsize=(21, 21))
     for cutoff in clf_cutoffs:
       # Build binary outcome
-      ytrain_b = np.copy(ytrain)
-      ytrain_b[ytrain_b < cutoff] = 0
-      ytrain_b[ytrain_b >= cutoff] = 1
-      yval_b = np.copy(yval)
-      yval_b[yval_b < cutoff] = 0
-      yval_b[yval_b >= cutoff] = 1
+      ytrain_b = dpp.gen_y_nnt_binary(ytrain, cutoff)
+      yval_b = dpp.gen_y_nnt_binary(yval, cutoff)
 
       # Train classifier
-      clf = run_classifier(Xtrain, ytrain_b, model=model)
+      clf = run_classifier(Xtrain, ytrain_b, model=model, cls_weight=cls_weight)
       cutoff2clf[cutoff] = clf
 
       # Evaluate model
-      model_eval.eval_binary_clf(clf, cutoff, Xtrain, ytrain_b, Xval, yval_b, globals.clf2name[model], metric=metric, plot_roc=False)
+      model_eval.eval_binary_clf(clf, cutoff, Xtrain, ytrain_b, Xval, yval_b, globals.clf2name[model], metric=metric,
+                                 plot_roc=False, axs=[axs[(cutoff-1)//4][(cutoff-1)%4], axs[2+(cutoff-1)//4][(cutoff-1)%4]])
 
       # Generate feature importance ranking
-      model_eval.gen_feature_importance_bin_clf(clf, model, Xval, yval_b, cutoff=cutoff)
+      #model_eval.gen_feature_importance_bin_clf(clf, model, Xval, yval_b, cutoff=cutoff)
     model2binclfs[model] = cutoff2clf
+    figs.tight_layout()
+    figs.savefig("%s (val-%s) binclf.png" % (model, str(cls_weight)))
 
   return model2binclfs
 
