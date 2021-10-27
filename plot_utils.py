@@ -4,7 +4,7 @@ import matplotlib.patches as mpatches
 import numpy as np
 import networkx as nx
 
-from .globals import diaglabels
+from .globals import diaglabels, clf2name
 
 
 def plot_connectivity_graph(A, cmap=plt.cm.tab20, threshold=0, threshold_pct=0):
@@ -29,6 +29,74 @@ def plot_connectivity_graph(A, cmap=plt.cm.tab20, threshold=0, threshold_pct=0):
     patches.append(mpatches.Patch(color=cmap(nd), label='%d. %s' % (nd + 1, diaglabels[nd])))
   plt.legend(handles=patches, bbox_to_anchor=(1, 1.01))
   plt.axis('off')
+
+
+def plot_learning_curve(gs, x_param_name, x_params, md, scorers):
+  gs_cv_results = gs.cv_results_
+  plt.figure(figsize=(13, 10), facecolor='white')
+  plt.title("GridSearchCV for %s over '%s'" % (clf2name[md], x_param_name), fontsize=18, y=1.01)
+  plt.xlabel(x_param_name)
+  plt.ylabel("Score")
+
+  ax = plt.gca()
+  ax.set_xlim(x_params[0], x_params[-1])
+  ax.set_ylim(0.5, 1.05)
+  ax.set_facecolor('white')
+  for pos in ['top', 'left', 'bottom', 'right']:
+    ax.spines[pos].set_edgecolor('black')
+  ax.grid(color='k', linestyle=':', linewidth=0.5)
+
+  # Get the regular numpy array from the MaskedArray
+  X_axis = np.array(gs_cv_results["param_%s" % x_param_name].data, dtype=float)
+
+  colors = ["orange", 'r', "g", "k"]
+  for scorer, color in zip(sorted(scorers), colors[:len(scorers)]):
+    for sample, style, marker, annot_delta in (("train", "--", ",", 1.01), ("test", "-", "o", 0.99)):
+      sample_score_mean = gs_cv_results["mean_%s_%s" % (sample, scorer)]
+      sample_score_std = gs_cv_results["std_%s_%s" % (sample, scorer)]
+      if np.isnan(X_axis).any():
+        idx = np.where(np.isnan(X_axis))[0][0]
+        ax.scatter(x=0.5, y=sample_score_mean[idx], marker=marker, c=color)
+        ax.text(0.5, sample_score_mean[idx]*annot_delta, '%s_%s: %.3f' % (sample, scorer, sample_score_mean[idx]))
+      ax.fill_between(
+        X_axis,
+        sample_score_mean - sample_score_std,
+        sample_score_mean + sample_score_std,
+        alpha=0.1 if sample == "test" else 0,
+        color=color,
+      )
+      ax.plot(
+        X_axis,
+        sample_score_mean,
+        style,
+        color=color,
+        alpha=1 if sample == "test" else 0.7,
+        label="%s (%s)" % (scorer, sample),
+      )
+
+    best_index = np.nonzero(gs_cv_results["rank_test_%s" % scorer] == 1)[0][0]
+    best_score = gs_cv_results["mean_test_%s" % scorer][best_index]
+
+    # Plot a dotted vertical line at the best score for that scorer marked by x
+    ax.plot(
+      [
+        X_axis[best_index],
+      ]
+      * 2,
+      [0, best_score],
+      linestyle="-.",
+      color=color,
+      marker="x",
+      markeredgewidth=3,
+      ms=8,
+    )
+
+    # Annotate the best score for that scorer
+    ax.annotate("%0.3f" % best_score, (X_axis[best_index], best_score + 0.005))
+
+  plt.legend(loc="best")
+  plt.show()
+  return
 
 
 def heatmap(data, row_labels, col_labels, ax=None,

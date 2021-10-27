@@ -105,8 +105,10 @@ def eval_surgeon_perf(df, idxs=None, Xtype='all'):
   print("F-1 score (%s): " % Xtype, f1_sps)
   print("RMSE (%s)" % Xtype, rmse)
 
-  fig, ax = plt.subplots(figsize=(10, 7))
-  model_eval.gen_error_histogram(true_nnt, surgeon_pred, globals.SURGEON, Xtype=Xtype, yType="Number of nights", ax=ax)
+  figs, axs = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
+  model_eval.gen_error_histogram(true_nnt, surgeon_pred, globals.SURGEON, Xtype=Xtype, yType="Number of nights", ax=axs[0],
+                                 groupby_outcome=True)
+  model_eval.gen_error_hist_pct(true_nnt, surgeon_pred, globals.SURGEON, Xtype=Xtype, yType="Number of nights", ax=axs[1])
 
   # Binary cases
   figs, axs = plt.subplots(nrows=2, ncols=4, figsize=(21, 10))

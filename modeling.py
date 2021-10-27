@@ -34,7 +34,8 @@ import seaborn as sn
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
-from sklearn.metrics import mean_squared_error, roc_curve, plot_roc_curve
+from sklearn.metrics import mean_squared_error, make_scorer, plot_roc_curve
+from sklearn.model_selection import cross_val_score, GridSearchCV
 
 from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, RidgeCV
 from sklearn.svm import SVC, SVR
@@ -108,12 +109,79 @@ def run_classifier(Xtrain, ytrain, model, cls_weight=None):
   elif model == globals.GBCLF:
     clf = GradientBoostingClassifier(random_state=0, max_depth=2).fit(Xtrain, ytrain)  # TODO: imbalanced class issue here!
   elif model == globals.XGBCLF:
-    print("Running xgboost")
     clf = XGBClassifier(random_state=0).fit(Xtrain, ytrain)
   else:
     raise NotImplementedError("Model %s is not supported!" % model)
 
   return clf
+
+
+def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
+  n_frts = X.shape[1]
+  if md == globals.RMFCLF:
+    #     'oob_score': False
+    #     'min_impurity_decrease': 0.0,
+    #     'min_impurity_split': None,
+    #     'criterion': ['gini', 'entropy'],
+    #     'bootstrap': True
+    clf = RandomForestClassifier(random_state=globals.SEED)
+    default_params = clf.get_params()
+    default_params['class_weight'] = class_weight
+    param_space = {
+      'max_depth': [None, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      'max_features': np.arange(2, 1 + n_frts // 2),
+      'max_leaf_nodes': [None] + list(range(5, 101, 5)),
+      'max_samples': np.arange(0.1, 1, 0.1),
+      'min_samples_leaf': [1] + [i for i in range(2, 17, 2)],
+      'min_samples_split': np.arange(2, 65, 4),
+      'n_estimators': [20, 30, 40, 50, 80, 100, 200, 300, 400]
+    }
+  elif md == globals.GBCLF:
+    param_space = {
+      'learning_rate': [0.001, 0.03, 0.01, 0.3, 0.1, 0.3],
+      'loss': 'deviance',
+      'max_depth': np.arange(3, 10),
+      #'max_features': np.arange(2, n_frts+1, 2),
+      'max_leaf_nodes': None,
+      #'min_impurity_decrease': 0.0,
+      #'min_impurity_split': None,
+      'min_samples_leaf': 1,
+      'min_samples_split': 2,
+      #'min_weight_fraction_leaf': 0.0,
+      'n_estimators': [20, 30, 40, 50, 80, 100, 200, 300, 400]
+    }
+    clf = GradientBoostingClassifier(random_state=globals.SEED)
+  else:
+    raise NotImplementedError("Model %s is not supported!" % md)
+
+  # Define scorer
+  refit = True
+  if scorer == globals.SCR_1NNT_TOL:
+    scorer = make_scorer(scorer_1nnt_tol, greater_is_better=True)
+  elif scorer == globals.SCR_1NNT_TOL_ACC:
+    scorer = {globals.SCR_ACC: globals.SCR_ACC,
+              globals.SCR_1NNT_TOL: make_scorer(scorer_1nnt_tol, greater_is_better=True)}
+    refit = globals.SCR_1NNT_TOL
+  elif scorer == globals.SCR_MULTI_ALL:
+    scorer = {globals.SCR_ACC: globals.SCR_ACC, globals.SCR_AUC: globals.SCR_AUC,
+              globals.SCR_1NNT_TOL: make_scorer(scorer_1nnt_tol, greater_is_better=True)}
+    refit = globals.SCR_AUC
+
+  # For each parameter, iterate through its param grid
+  param2gs = {}
+  for param, param_grid in param_space.items():
+    print("\nSearching %s among " % param, param_grid)
+    gs = GridSearchCV(estimator=clf, param_grid={param: param_grid}, scoring=scorer, n_jobs=-1, cv=kfold,
+                      refit=refit, return_train_score=True, verbose=2)
+    gs.fit(X, y)
+    param2gs[param] = gs
+  return param2gs, param_space
+
+
+def scorer_1nnt_tol(ytrue, ypred):
+  # accuracy within +-1 nnt error tolerance
+  acc_1nnt_tol = len(np.where(np.abs(ytrue - ypred) <= 1)[0]) / len(ytrue)
+  return acc_1nnt_tol
 
 
 def predict_nnt_regression_rounding(Xtrain, ytrain, Xval, yval, model=None, Xtest=None, ytest=None):
@@ -222,125 +290,3 @@ def predict_nnt_binary_clf(Xtrain, ytrain, Xval, yval, clf_cutoffs, metric=None,
 
   return model2binclfs
 
-
-# def predict_nnt(Xtrain, ytrain, Xval, yval, Xtest, ytest, use_reg=True, clf_cutoffs=None, model=None):
-#   """
-#   Predictive models for number of nights stay
-#
-#   :param Xtrain:
-#   :param ytrain:
-#   :param Xtest:
-#   :param ytest:
-#   :param clf_cutoffs:
-#   :param model:
-#   :param isTest:
-#   :return:
-#   """
-#   model2trained = {}
-#
-#   if model is None:  # run all
-#     if clf_cutoffs is None:  # fit regression models and round to the nearest int
-#       if use_reg:
-#         for md, md_name in globals.reg2name.items():
-#           reg = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=md, eval=True)
-#           model2trained[md] = reg
-#           # predict and round to the nearest int
-#           pred_train, pred_test = np.rint(reg.predict(Xtrain)), np.rint(reg.predict(Xtest))
-#           # bucket them into finite number of classes
-#           pred_train[pred_train > globals.MAX_NNT] = globals.MAX_NNT + 1
-#           pred_test[pred_test > globals.MAX_NNT] = globals.MAX_NNT + 1
-#
-#           print("Accuracy (training): ", accuracy_score(ytrain, pred_train, normalize=True))
-#           print("Accuracy (validation): ", accuracy_score(ytest, pred_test, normalize=True))
-#
-#           # Confusion matrix
-#           labels = [str(i) for i in range(globals.MAX_NNT + 2)]
-#           labels[-1] = '%s+' % globals.MAX_NNT
-#           model_eval.gen_confusion_matrix(ytrain, pred_train, md_name, isTrain=True)
-#           model_eval.gen_confusion_matrix(ytest, pred_test, md_name, isTrain=False)
-#
-#           # Error histogram
-#           figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 5))
-#           model_eval.gen_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights",
-#                                          ax=axs[0])
-#           model_eval.gen_error_histogram(ytest, pred_test, md_name, Xtype='validation', yType="Number of nights",
-#                                          ax=axs[1])
-#       else:
-#         for md, md_name in globals.clf2name.items():
-#           clf = run_classifier(Xtrain, ytrain, model=md)
-#           model2trained[md] = clf
-#           pred_train, pred_test = model_eval.eval_classifier(clf, Xtrain, ytrain, Xtest, ytest, model=md)
-#
-#           # Confusion matrix
-#           labels = [str(i) for i in range(globals.MAX_NNT + 2)]
-#           labels[-1] = '%s+' % globals.MAX_NNT
-#           model_eval.gen_confusion_matrix(ytrain, pred_train, md_name, isTrain=True)
-#           model_eval.gen_confusion_matrix(ytest, pred_test, md_name, isTrain=False)
-#
-#           # Error histogram
-#           figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 5))
-#           model_eval.gen_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights",
-#                                          ax=axs[0])
-#           model_eval.gen_error_histogram(ytest, pred_test, md_name, Xtype='validation', yType="Number of nights",
-#                                          ax=axs[1])
-#
-#
-#     else:  # fit multiple binary classifiers independently
-#       # assume classifier_cutoffs is an increasing list of integers, each represent a cutoff value
-#       for cutoff in clf_cutoffs:
-#         fig, ax = plt.subplots(figsize=(11, 9))
-#         for md, md_name in globals.clf2name.items():
-#           # Build binary outcome
-#           ytrain_b = np.copy(ytrain)
-#           ytrain_b[ytrain_b < cutoff] = 0
-#           ytrain_b[ytrain_b >= cutoff] = 1
-#           ytest_b = np.copy(ytest)
-#           ytest_b[ytest_b < cutoff] = 0
-#           ytest_b[ytest_b >= cutoff] = 1
-#
-#           # Train classifier
-#           clf = run_classifier(Xtrain, ytrain_b, model=md)
-#
-#           # Evaluate model
-#           #eval_bin_clf(clf, cutoff, Xtrain, ytrain_b, Xtest, ytest_b, model=md, plot_roc=False)
-#
-#           # Generate feature importance ranking
-#           #gen_feature_importance_bin_clf(clf, md, Xtest, ytest_b, cutoff=cutoff)
-#
-#           # Plot ROC curve
-#           plot_roc_curve(clf, Xtest, ytest_b, name=md_name, ax=ax)
-#         ax.set_title("Cutoff=%d: ROC Curve Comparison" % cutoff, y=1.01, fontsize=18)
-#         ax.set_xlabel("False Positive Rate", fontsize=15)
-#         ax.set_ylabel("True Positive Rate", fontsize=15)
-#         ax.legend(prop=dict(size=14))
-#         plt.show()
-#
-#
-#   else:  # run a specific model
-#     if clf_cutoffs is None:
-#       clf = run_classifier(Xtrain, ytrain, model=model)
-#       model2trained[model] = clf
-#       model_eval.eval_classifier(clf, Xtrain, ytrain, Xtest, ytest, model=model)
-#     else:
-#       # independent classifiers
-#       # e.g. [1, 2] --> two classifiers: one for if NNT < 1 or >= 1, the other for if NNT < 2 or >= 2
-#       for cutoff in clf_cutoffs:
-#         # Build binary outcome
-#         ytrain_b = np.copy(ytrain)
-#         ytrain_b[ytrain_b < cutoff] = 0
-#         ytrain_b[ytrain_b >= cutoff] = 1
-#         ytest_b = np.copy(ytest)
-#         ytest_b[ytest_b < cutoff] = 0
-#         ytest_b[ytest_b >= cutoff] = 1
-#
-#         # Train classifier
-#         clf = run_classifier(Xtrain, ytrain_b, model=model)
-#
-#         # Evaluate model
-#         #eval_bin_clf(clf, cutoff, Xtrain, ytrain_b, Xtest, ytest_b, model=model, plot_roc=False)
-#
-#         # Generate feature importance ranking
-#         model_eval.gen_feature_importance_bin_clf(clf, model, Xtest, ytest_b, cutoff=cutoff)
-#
-#
-#   return model2trained

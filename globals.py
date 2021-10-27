@@ -73,3 +73,10 @@ clf2name = {LGR: "Logistic Regression",
 GMEAN = "G-mean"
 F1 = "F1 score"
 FPRPCT15 = "< 0.15"
+
+
+SCR_ACC = 'accuracy'
+SCR_AUC = 'roc_auc'
+SCR_1NNT_TOL = 'Accuracy (tol = 1 NNT)'
+SCR_1NNT_TOL_ACC = 'Accuracy (Hit rate and tol=1NNT)'
+SCR_MULTI_ALL = 'multiple scorers (all)'

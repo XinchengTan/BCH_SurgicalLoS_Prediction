@@ -55,7 +55,14 @@ def gen_y_nnt_binary(y, cutoff):
   return yb
 
 
-# Perform train-test split (treat the test set as validation set)
+# Perform train-test split
+def gen_train_test(X, y, test_pct=0.2):
+  X, y = pd.DataFrame(X), pd.Series(y)
+  X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_pct, random_state=globals.SEED)
+  return X_train.to_numpy(), X_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy(),X_train.index, X_test.index
+
+
+# train-validation-test split
 def gen_train_val_test(X, y, val_pct=0.2, test_pct=0.2):
   X, y = pd.DataFrame(X), pd.Series(y)
   X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=test_pct, random_state=globals.SEED)

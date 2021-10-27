@@ -12,7 +12,7 @@ from sklearn.inspection import permutation_importance
 from . import globals
 
 
-def gen_error_histogram(true_y, pred_y, md_name, Xtype='train', yType="LoS (days)", ax=None):
+def gen_error_histogram(true_y, pred_y, md_name, Xtype='train', yType="LoS (days)", ax=None, groupby_outcome=False):
   error = np.array(pred_y) - np.array(true_y)
   bins = np.arange(-globals.MAX_NNT, globals.MAX_NNT+1, 1)
 
@@ -24,20 +24,56 @@ def gen_error_histogram(true_y, pred_y, md_name, Xtype='train', yType="LoS (days
     plt.ylabel("Number of surgical cases", fontsize=16)
     plt.show()
   else:
-    counts, bins, patches = ax.hist(error, bins=bins, align='left', color='gray')
+    ax.set_facecolor("white")
+    ax.grid(color='k', linestyle=':', linewidth=0.5)
+    for pos in ['top', 'left', 'bottom', 'right']:
+      ax.spines[pos].set_edgecolor('black')
+    if not groupby_outcome:
+      counts, bins, patches = ax.hist(error, bins=bins, align='left', color='gray')
+      rects = ax.patches
+      labels = ["{:.1%}".format(cnt / len(true_y)) for cnt in counts]
+      for rect, label in zip(rects, labels):
+        height = rect.get_height()
+        ax.text(rect.get_x() + rect.get_width() / 2, height + 0.01, label,
+                ha='center', va='bottom', fontsize=11)
+    else:
+      errs = []
+      for i in range(globals.MAX_NNT+2):
+        err = np.array(pred_y)[true_y == i] - np.array(true_y)[true_y == i]
+        errs.append(err)
+      counts, bins, patches = ax.hist(errs, bins=bins, align='left', label=['True NNT = %d' % i for i in range(globals.MAX_NNT+2)])
+      ax.legend()
+
     ax.set_title("Prediction Error Histogram (%s - %s)" % (md_name, Xtype), y=1.01, fontsize=18)
     ax.set_xlabel(yType, fontsize=16)
     ax.set_xticks(bins)
     ax.set_ylabel("Number of surgical cases", fontsize=16)
 
-    rects = ax.patches
-    total_cnt = sum(counts)
-    labels = ["{:.1%}".format(cnt / total_cnt) for cnt in counts]
-    for rect, label in zip(rects, labels):
-      height = rect.get_height()
-      ax.text(rect.get_x() + rect.get_width() / 2, height + 0.01, label,
-              ha='center', va='bottom', fontsize=11)
   return error
+
+
+def gen_error_hist_pct(true_y, pred_y, md_name, Xtype='train', yType="LoS (days)", ax=None):
+  ax.set_facecolor("white")
+  for pos in ['top', 'left', 'bottom', 'right']:
+    ax.spines[pos].set_edgecolor('black')
+  ax.grid(color='k', linestyle=':', linewidth=0.5)
+  bins = np.arange(-globals.MAX_NNT, globals.MAX_NNT+1, 1)
+
+  wd = 0.1
+  center_i = (globals.MAX_NNT+1) // 2
+  outcome_cntr = Counter(true_y)
+  for i in range(globals.MAX_NNT + 2):
+    err = np.array(pred_y)[true_y == i] - np.array(true_y)[true_y == i]
+    cnter = Counter(err)
+    label = 'True NNT = %d' % i if i < globals.MAX_NNT + 1 else 'True NNT = %d+' % globals.MAX_NNT
+    ax.bar(bins+wd*(i - center_i), [100 * cnter[j] / outcome_cntr[i] for j in bins], width=0.1, label=label)
+
+  ax.set_title("Prediction Error Histogram (%s - %s)" % (md_name, Xtype), y=1.01, fontsize=18)
+  ax.set_xlabel(yType, fontsize=16)
+  ax.set_xticks(bins)
+  ax.set_ylabel("Percentage of the True Class Size (%)", fontsize=16)
+  ax.legend()
+
 
 
 def gen_confusion_matrix(yTrue, yPred, md_name, isTrain=True, isTest=False, plot=True):
@@ -59,18 +95,26 @@ def gen_confusion_matrix(yTrue, yPred, md_name, isTrain=True, isTest=False, plot
     axs[0].set_title(title, fontsize=20, y=1.01)
     axs[0].set_xlabel("Predicted outcome", fontsize=16)
     axs[0].set_ylabel("True outcome", fontsize=16)
-    axs[0].set_xticks(np.arange(9)+0.5)
-    axs[0].set_xticklabels([str(i) for i in range(8)] + ['7+'], fontsize=13)
-    axs[0].set_yticks(np.arange(9)+0.5)
-    axs[0].set_yticklabels([str(i) for i in range(8)] + ['7+'], fontsize=13)
+    axs[0].set_xticks(np.arange(globals.MAX_NNT+2)+0.5)
+    axs[0].set_xticklabels([str(i) for i in range(globals.MAX_NNT+1)] + ['7+'], fontsize=13)
+    axs[0].set_yticks(np.arange(globals.MAX_NNT+2)+0.5)
+    axs[0].set_yticklabels([str(i) for i in range(globals.MAX_NNT+1)] + ['7+'], fontsize=13)
 
-    # Plot a vertical histogram of outcome
+    # Plot a vertical histogram of outcome distribution
     outcome_cnter = Counter(yTrue)
-    axs[1].barh(range(9), [outcome_cnter[i] for i in range(9)], align='center')
+    axs[1].barh(range(globals.MAX_NNT+2), [outcome_cnter[i] for i in range(globals.MAX_NNT+2)], align='center')
     axs[1].set_xlabel("Number of surgical cases")
     axs[1].invert_yaxis()
-    axs[1].set_yticks(range(9))
-    axs[1].set_yticklabels([str(i) for i in range(8)] + ['7+'], fontsize=13)
+    axs[1].set_yticks(range(globals.MAX_NNT+2))
+    axs[1].set_yticklabels([str(i) for i in range(globals.MAX_NNT+1)] + ['7+'], fontsize=13)
+    rects = axs[1].patches
+    total_cnt = len(yTrue)
+    labels = ["{:.1%}".format(outcome_cnter[i] / total_cnt) for i in range(globals.MAX_NNT+2)]
+    for rect, label in zip(rects, labels):
+      ht, wd = rect.get_height(), rect.get_width()
+      axs[1].text(wd + 2.5, rect.get_y() + ht / 2, label,
+                  ha='left', va='center', fontsize=15)
+
     figs.tight_layout()
     plt.show()
 
@@ -129,6 +173,14 @@ def eval_multi_clf(clf, Xtrain, ytrain, Xval, yval, md_name, Xtest=None, ytest=N
   figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 5))
   gen_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights", ax=axs[0])
   gen_error_histogram(yval, pred_val, md_name, Xtype='validation', yType="Number of nights", ax=axs[1])
+
+  figs2, axs2 = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
+  gen_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights", ax=axs2[0], groupby_outcome=True)
+  gen_error_hist_pct(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights", ax=axs2[1])
+
+  figs3, axs3 = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
+  gen_error_histogram(yval, pred_val, md_name, Xtype='validation', yType="Number of nights", ax=axs3[0], groupby_outcome=True)
+  gen_error_hist_pct(yval, pred_val, md_name, Xtype='validation', yType="Number of nights", ax=axs3[1])
 
   return pred_train, pred_val, f1_train, f1_val
 
@@ -217,7 +269,6 @@ def eval_binary_clf(clf, cutoff, Xtrain, ytrain, Xval, yval, md_name, plot_roc=T
   axs[1].set_xticklabels(class_names, fontsize=15)
   axs[1].set_yticks(np.arange(2) + 0.5)
   axs[1].set_yticklabels(['< ' + str(cutoff), '%d+' % cutoff], fontsize=15)
-  #plt.show()
 
   # ROC curve
   if plot_roc:
