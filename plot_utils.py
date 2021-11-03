@@ -1,46 +1,25 @@
+from collections import Counter
+
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 import networkx as nx
+from sklearn import metrics
 
-from .globals import diaglabels, clf2name
-
-
-def plot_connectivity_graph(A, cmap=plt.cm.tab20, threshold=0, threshold_pct=0):
-  plt.figure(figsize=(12, 9))
-
-  G = nx.convert_matrix.from_numpy_array(A)
-  # edge_weights = [A[i][j] for i, j in G.edges]
-  edge_weights = [A[i][j] if A[i][j] > threshold else 1 for i, j in G.edges]
-
-  node_colors = list(range(A.shape[0]))
-  pos = nx.spring_layout(G, weight='edges')
-  # pos = nx.spectral_layout(G, weight='edges')
-
-  sc = nx.draw_networkx_nodes(G, pos=pos, node_color=node_colors, cmap=cmap, node_size=800)
-  nx.draw_networkx_edges(G, pos=pos, width=[np.log10(e) for e in edge_weights],
-                         edge_color=edge_weights, edge_cmap=plt.cm.Greys)  # YlOrRd
-  nx.draw_networkx_labels(G, pos=pos, labels={i: i + 1 for i in G.nodes})
-
-  patches = []
-  for nd in G.nodes:
-    plt.plot([0], [0], color=cmap(nd), label=diaglabels[nd])
-    patches.append(mpatches.Patch(color=cmap(nd), label='%d. %s' % (nd + 1, diaglabels[nd])))
-  plt.legend(handles=patches, bbox_to_anchor=(1, 1.01))
-  plt.axis('off')
+from . import globals
 
 
 def plot_learning_curve(gs, x_param_name, x_params, md, scorers):
   gs_cv_results = gs.cv_results_
-  plt.figure(figsize=(13, 10), facecolor='white')
-  plt.title("GridSearchCV for %s over '%s'" % (clf2name[md], x_param_name), fontsize=18, y=1.01)
+  plt.figure(figsize=(13, 9), facecolor='white')
+  plt.title("GridSearchCV for %s over '%s'" % (globals.clf2name[md], x_param_name), fontsize=18, y=1.01)
   plt.xlabel(x_param_name)
   plt.ylabel("Score")
 
   ax = plt.gca()
-  ax.set_xlim(x_params[0], x_params[-1])
-  ax.set_ylim(0.5, 1.05)
+  ax.set_xlim(x_params[0], x_params[-1]*1.01)
+  ax.set_ylim(0.2, 1.05)
   ax.set_facecolor('white')
   for pos in ['top', 'left', 'bottom', 'right']:
     ax.spines[pos].set_edgecolor('black')
@@ -57,7 +36,7 @@ def plot_learning_curve(gs, x_param_name, x_params, md, scorers):
       if np.isnan(X_axis).any():
         idx = np.where(np.isnan(X_axis))[0][0]
         ax.scatter(x=0.5, y=sample_score_mean[idx], marker=marker, c=color)
-        ax.text(0.5, sample_score_mean[idx]*annot_delta, '%s_%s: %.3f' % (sample, scorer, sample_score_mean[idx]))
+        ax.text(0.6, sample_score_mean[idx]*annot_delta, '{}_{} = {:.1%}'.format(sample, scorer, sample_score_mean[idx]))
       ax.fill_between(
         X_axis,
         sample_score_mean - sample_score_std,
@@ -92,11 +71,116 @@ def plot_learning_curve(gs, x_param_name, x_params, md, scorers):
     )
 
     # Annotate the best score for that scorer
-    ax.annotate("%0.3f" % best_score, (X_axis[best_index], best_score + 0.005))
+    ax.annotate("{:.1%}".format(best_score), (X_axis[best_index], best_score + 0.005), fontsize=16)
+
+    # Plot doctor's estimation
+    # Acc: 69.4%, 1-NNT Acc: 90.8%
+
 
   plt.legend(loc="best")
   plt.show()
-  return
+
+
+def plot_error_histogram(true_y, pred_y, md_name, Xtype='train', yType="LoS (days)", ax=None, groupby_outcome=False):
+  error = np.array(pred_y) - np.array(true_y)
+  bins = np.arange(-globals.MAX_NNT, globals.MAX_NNT+1, 1)
+
+  if ax is None:
+    plt.hist(error, bins=bins, align='left', color='grey')
+    plt.title("Prediction Error Histogram (%s - %s)" % (md_name, Xtype), y=1.01, fontsize=18)
+    plt.xlabel(yType, fontsize=16)
+    plt.xticks(bins)
+    plt.ylabel("Number of surgical cases", fontsize=16)
+    plt.show()
+  else:
+    ax.set_facecolor("white")
+    ax.grid(color='k', linestyle=':', linewidth=0.5)
+    for pos in ['top', 'left', 'bottom', 'right']:
+      ax.spines[pos].set_edgecolor('black')
+    if not groupby_outcome:
+      counts, bins, patches = ax.hist(error, bins=bins, align='left', color='gray')
+      rects = ax.patches
+      labels = ["{:.1%}".format(cnt / len(true_y)) for cnt in counts]
+      for rect, label in zip(rects, labels):
+        height = rect.get_height()
+        ax.text(rect.get_x() + rect.get_width() / 2, height + 0.01, label,
+                ha='center', va='bottom', fontsize=11)
+    else:
+      errs = []
+      for i in range(globals.MAX_NNT+2):
+        err = np.array(pred_y)[true_y == i] - np.array(true_y)[true_y == i]
+        errs.append(err)
+      labels = ['True NNT = %d' % i for i in range(globals.MAX_NNT+1)] + ['True NNT = %d+' % globals.MAX_NNT]
+      counts, bins, patches = ax.hist(errs, bins=bins, align='left', label=labels)
+      ax.legend()
+
+    ax.set_title("Prediction Error Histogram (%s - %s)" % (md_name, Xtype), y=1.01, fontsize=18)
+    ax.set_xlabel(yType, fontsize=16)
+    ax.set_xticks(bins)
+    ax.set_ylabel("Number of surgical cases", fontsize=16)
+  return error
+
+
+def plot_error_hist_pct(true_y, pred_y, md_name, Xtype='train', yType="LoS (days)", ax=None):
+  ax.set_facecolor("white")
+  for pos in ['top', 'left', 'bottom', 'right']:
+    ax.spines[pos].set_edgecolor('black')
+  ax.grid(color='k', linestyle=':', linewidth=0.5)
+  bins = np.arange(-globals.MAX_NNT, globals.MAX_NNT+1, 1)
+
+  wd = 0.1
+  center_i = (globals.MAX_NNT+1) // 2
+  outcome_cntr = Counter(true_y)
+  for i in range(globals.MAX_NNT + 2):
+    err = np.array(pred_y)[true_y == i] - np.array(true_y)[true_y == i]
+    cnter = Counter(err)
+    label = 'True NNT = %d' % i if i < globals.MAX_NNT + 1 else 'True NNT = %d+' % globals.MAX_NNT
+    ax.bar(bins+wd*(i - center_i), [100 * cnter[j] / outcome_cntr[i] for j in bins], width=0.1, label=label)
+
+  ax.set_title("Prediction Error Histogram (%s - %s)" % (md_name, Xtype), y=1.01, fontsize=18)
+  ax.set_xlabel(yType, fontsize=16)
+  ax.set_xticks(bins)
+  ax.set_ylabel("Percentage of the True Class Size (%)", fontsize=16)
+  ax.legend()
+
+
+def plot_roc_basics(ax, cutoff=None, Xtype='training'):
+  ax.plot([0, 1], [0, 1], linestyle='--', label='No Skill')
+  title = "Cutoff=%d: ROC Curve Comparison (%s)" % (cutoff, Xtype) if cutoff is not None else "ROC Curves (%s)" % Xtype
+  ax.set_title(title, y=1.01, fontsize=18)
+  ax.set_xlabel("False Positive Rate", fontsize=15)
+  ax.set_ylabel("True Positive Rate", fontsize=15)
+  ax.legend(prop=dict(size=14))
+
+
+def plot_roc_best_threshold(X, y, clf, ax):
+  fpr, tpr, thresholds = metrics.roc_curve(y, clf.predict_proba(X)[:, 1])
+  ix = np.argmax(tpr - fpr)
+  ax.scatter(fpr[ix], tpr[ix], s=[120], marker='*', color='red')
+
+
+def plot_connectivity_graph(A, cmap=plt.cm.tab20, threshold=0, threshold_pct=0):
+  plt.figure(figsize=(12, 9))
+
+  G = nx.convert_matrix.from_numpy_array(A)
+  # edge_weights = [A[i][j] for i, j in G.edges]
+  edge_weights = [A[i][j] if A[i][j] > threshold else 1 for i, j in G.edges]
+
+  node_colors = list(range(A.shape[0]))
+  pos = nx.spring_layout(G, weight='edges')
+  # pos = nx.spectral_layout(G, weight='edges')
+
+  sc = nx.draw_networkx_nodes(G, pos=pos, node_color=node_colors, cmap=cmap, node_size=800)
+  nx.draw_networkx_edges(G, pos=pos, width=[np.log10(e) for e in edge_weights],
+                         edge_color=edge_weights, edge_cmap=plt.cm.Greys)  # YlOrRd
+  nx.draw_networkx_labels(G, pos=pos, labels={i: i + 1 for i in G.nodes})
+
+  patches = []
+  for nd in G.nodes:
+    plt.plot([0], [0], color=cmap(nd), label=globals.diaglabels[nd])
+    patches.append(mpatches.Patch(color=cmap(nd), label='%d. %s' % (nd + 1, globals.diaglabels[nd])))
+  plt.legend(handles=patches, bbox_to_anchor=(1, 1.01))
+  plt.axis('off')
 
 
 def heatmap(data, row_labels, col_labels, ax=None,

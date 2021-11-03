@@ -12,6 +12,7 @@ from sklearn import metrics
 from . import globals
 from . import model_eval
 from . import data_preprocessing as dpp
+from . import plot_utils as pltutil
 
 pd.set_option('display.max_columns', 50)
 
@@ -23,22 +24,22 @@ def gen_cols_with_nan(df):
 
 def print_df_info(df, dfname="Dashboard"):
   print("%s columns:\n" % dfname, df.keys())
-  print("Number of cases:", df.shape[0])
-  print("Number of NaNs in each column:\n",gen_cols_with_nan(df))
+  print("Number of cases:", df['SURG_CASE_KEY'].nunique())
+  print("Number of NaNs in each column:\n", gen_cols_with_nan(df))
   print("\n")
 
 
-def prepare_data(data_fp, dtime_fp, exclude21=True):
+def prepare_data(data_fp, dtime_fp, cpt_fp, cpt_grp_fp, exclude2021=True):
   """
-  Prepares the patient data, combining date-time related info
+  Prepares the patient LoS dataset, combining datetime and CPT related info
   """
   # Load dashboard dataset
   dashb_df = pd.read_csv(data_fp)
   print_df_info(dashb_df, dfname='Dashboard')
+
   # Drop rows with NaN in weight z-score
   dashb_df = dashb_df[globals.DASHDATA_COLS].dropna(subset=['WEIGHT_ZSCORE'])
   print_df_info(dashb_df, dfname='Processed Dashboard')
-
 
   # Load datetime dataset
   dtime_df = pd.read_csv(dtime_fp, parse_dates=['ADMIT_DATE', 'DISCHARGE_DATE', 'SURGEON_START_DT_TM',
@@ -51,7 +52,6 @@ def prepare_data(data_fp, dtime_fp, exclude21=True):
   # Compute the number of nights
   admit_date, discharge_date = dtime_df['ADMIT_DATE'].dt.date, dtime_df['DISCHARGE_DATE'].dt.date
   dtime_df['NUM_OF_NIGHTS'] = (discharge_date - admit_date) / np.timedelta64(1, 'D')
-  #print(dtime_df.head(20))
 
   # Combine with dashboard_df
   dashb_df = dashb_df.join(dtime_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')
@@ -59,11 +59,41 @@ def prepare_data(data_fp, dtime_fp, exclude21=True):
   # print(dashb_df[dashb_df['NUM_OF_NIGHTS'].isnull()])
   # TODO: Very weird that case 62211921 is null at admit and discharge time, investigate this with csv reader
 
-  # Load CPT and combine with existing hierarchy
+  # Load CPTs for each case and combine with the existing hierarchy
+  cpt_df, cpt_grp_df = pd.read_csv(cpt_fp), pd.read_csv(cpt_grp_fp)
+  all_cases_cnt = cpt_df['SURG_CASE_KEY'].nunique()  # TODO: Dashboard df and CPT df does not match in surgical case keys
+  print("All cases (CPT df): %d" % all_cases_cnt)
+  # Join with CPT hierarchy group; discard cases if any of their CPT is not present in the existing hierarchy
+  cpt_df = cpt_df.join(cpt_grp_df.set_index('CPT_CODE'), on='CPT_CODE', how='inner')
+  print_df_info(cpt_df, 'CPT with Group')
+
+  # debug:
+  tmp_df = dashb_df.join(cpt_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')
+  print("\nNumber of unique CPT groups in Dashboard dataset: ", tmp_df['CPT_GROUP'].nunique())
+  tmp_df = tmp_df.loc[tmp_df['DISCHARGE_DATE'].dt.year < 2021]
+  print("Number of unique CPT groups in dashboard dataset (exclude 2021)", tmp_df['CPT_GROUP'].nunique())
+  tmp_df = tmp_df.loc[tmp_df['SPS_PREDICTED_LOS'].notnull()]
+  print("Number of unique CPT groups in SPS dataset (exclude 2021): ", tmp_df['CPT_GROUP'].nunique())
+
+  cpt_df = cpt_df.groupby('SURG_CASE_KEY').agg({
+    'CPT_CODE': lambda x: list(x),
+    'length_of_stay_decile': lambda x: list(x),
+    'CPT_GROUP': lambda x: list(x)
+  }).reset_index()
+  print("\nDiscarded %d cases whose CPT(s) are all unknown!\n" % (all_cases_cnt - cpt_df.shape[0]))
+
+  # Join case to list of CPTs with the dashboard data
+  dashb_df = dashb_df.join(cpt_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')\
+    .rename(columns={'CPT_CODE': 'CPTS',
+             'length_of_stay_decile': 'CPT_DECILES',
+             'CPT_GROUP': 'CPT_GROUPS'}
+            )
+  print_df_info(dashb_df, dfname="Dashboard df with CPT info")
+  # left join: 18654; inner join: 17269
 
 
   # Exclude 2021 data by request
-  if exclude21:
+  if exclude2021:
     dashb_df = dashb_df[dashb_df['DISCHARGE_DATE'].dt.year < 2021]
     print_df_info(dashb_df, "Final Dashboard (2021 excluded)")
 
@@ -80,11 +110,6 @@ def gen_sps_data(df):
 def gen_data_without_sps_pred(df):
   """Select a subset of cases where SPS surgeon estimation is not available"""
   return df.loc[df['SPS_PREDICTED_LOS'].isnull()]
-
-
-def gen_cpt_group_one_hot(df, cpt2group_df):
-
-  return
 
 
 def eval_surgeon_perf(df, idxs=None, Xtype='all'):
@@ -106,9 +131,9 @@ def eval_surgeon_perf(df, idxs=None, Xtype='all'):
   print("RMSE (%s)" % Xtype, rmse)
 
   figs, axs = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
-  model_eval.gen_error_histogram(true_nnt, surgeon_pred, globals.SURGEON, Xtype=Xtype, yType="Number of nights", ax=axs[0],
-                                 groupby_outcome=True)
-  model_eval.gen_error_hist_pct(true_nnt, surgeon_pred, globals.SURGEON, Xtype=Xtype, yType="Number of nights", ax=axs[1])
+  pltutil.plot_error_histogram(true_nnt, surgeon_pred, globals.SURGEON, Xtype=Xtype, yType="Number of nights", ax=axs[0],
+                                 groupby_outcome=False)
+  pltutil.plot_error_hist_pct(true_nnt, surgeon_pred, globals.SURGEON, Xtype=Xtype, yType="Number of nights", ax=axs[1])
 
   # Binary cases
   figs, axs = plt.subplots(nrows=2, ncols=4, figsize=(21, 10))

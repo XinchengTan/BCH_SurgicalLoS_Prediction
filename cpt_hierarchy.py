@@ -45,7 +45,9 @@ def gen_cpt_groups(cpt_df, granularity=7, verbose=True):
           actual_k = cpt_df.iloc[df_idx][i]
           cpt_groups[actual_k].append(df_idx)
     if verbose:
-      print("Level %d: #cpts covered in grouping: " % i, sum(len(v) for v in cpt_groups.values()), "\n")
+      print("Level %d: #cpts covered in grouping: " % i, sum(len(v) for v in cpt_groups.values()))
+      #print("Number of CPTs with level %d category: %d" % (i, CPT_TOTAL - cpt_map['bucket_%d' % i].isnull().sum()))
+      print("Number of unique CPT categories: %d\n" % cpt_df['bucket_%d' % i].nunique(dropna=True), "\n")
 
   if verbose:
     print("Duplicated CPT groups and their occurrence bucket levels:")

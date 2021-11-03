@@ -10,69 +10,7 @@ from sklearn import metrics
 from sklearn.inspection import permutation_importance
 
 from . import globals
-
-
-def gen_error_histogram(true_y, pred_y, md_name, Xtype='train', yType="LoS (days)", ax=None, groupby_outcome=False):
-  error = np.array(pred_y) - np.array(true_y)
-  bins = np.arange(-globals.MAX_NNT, globals.MAX_NNT+1, 1)
-
-  if ax is None:
-    plt.hist(error, bins=bins, align='left', color='grey')
-    plt.title("Prediction Error Histogram (%s - %s)" % (md_name, Xtype), y=1.01, fontsize=18)
-    plt.xlabel(yType, fontsize=16)
-    plt.xticks(bins)
-    plt.ylabel("Number of surgical cases", fontsize=16)
-    plt.show()
-  else:
-    ax.set_facecolor("white")
-    ax.grid(color='k', linestyle=':', linewidth=0.5)
-    for pos in ['top', 'left', 'bottom', 'right']:
-      ax.spines[pos].set_edgecolor('black')
-    if not groupby_outcome:
-      counts, bins, patches = ax.hist(error, bins=bins, align='left', color='gray')
-      rects = ax.patches
-      labels = ["{:.1%}".format(cnt / len(true_y)) for cnt in counts]
-      for rect, label in zip(rects, labels):
-        height = rect.get_height()
-        ax.text(rect.get_x() + rect.get_width() / 2, height + 0.01, label,
-                ha='center', va='bottom', fontsize=11)
-    else:
-      errs = []
-      for i in range(globals.MAX_NNT+2):
-        err = np.array(pred_y)[true_y == i] - np.array(true_y)[true_y == i]
-        errs.append(err)
-      counts, bins, patches = ax.hist(errs, bins=bins, align='left', label=['True NNT = %d' % i for i in range(globals.MAX_NNT+2)])
-      ax.legend()
-
-    ax.set_title("Prediction Error Histogram (%s - %s)" % (md_name, Xtype), y=1.01, fontsize=18)
-    ax.set_xlabel(yType, fontsize=16)
-    ax.set_xticks(bins)
-    ax.set_ylabel("Number of surgical cases", fontsize=16)
-
-  return error
-
-
-def gen_error_hist_pct(true_y, pred_y, md_name, Xtype='train', yType="LoS (days)", ax=None):
-  ax.set_facecolor("white")
-  for pos in ['top', 'left', 'bottom', 'right']:
-    ax.spines[pos].set_edgecolor('black')
-  ax.grid(color='k', linestyle=':', linewidth=0.5)
-  bins = np.arange(-globals.MAX_NNT, globals.MAX_NNT+1, 1)
-
-  wd = 0.1
-  center_i = (globals.MAX_NNT+1) // 2
-  outcome_cntr = Counter(true_y)
-  for i in range(globals.MAX_NNT + 2):
-    err = np.array(pred_y)[true_y == i] - np.array(true_y)[true_y == i]
-    cnter = Counter(err)
-    label = 'True NNT = %d' % i if i < globals.MAX_NNT + 1 else 'True NNT = %d+' % globals.MAX_NNT
-    ax.bar(bins+wd*(i - center_i), [100 * cnter[j] / outcome_cntr[i] for j in bins], width=0.1, label=label)
-
-  ax.set_title("Prediction Error Histogram (%s - %s)" % (md_name, Xtype), y=1.01, fontsize=18)
-  ax.set_xlabel(yType, fontsize=16)
-  ax.set_xticks(bins)
-  ax.set_ylabel("Percentage of the True Class Size (%)", fontsize=16)
-  ax.legend()
+from . import plot_utils as pltutil
 
 
 
@@ -139,9 +77,9 @@ def eval_nnt_regressor(reg, Xtrain, ytrain, Xval, yval, md_name, Xtest=None, yte
 
   # Error histogram
   figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 5))
-  gen_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights",
+  pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights",
                                  ax=axs[0])
-  gen_error_histogram(yval, pred_test, md_name, Xtype='validation', yType="Number of nights",
+  pltutil.plot_error_histogram(yval, pred_test, md_name, Xtype='validation', yType="Number of nights",
                                  ax=axs[1])
 
 
@@ -171,38 +109,18 @@ def eval_multi_clf(clf, Xtrain, ytrain, Xval, yval, md_name, Xtest=None, ytest=N
 
   # Error histogram
   figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 5))
-  gen_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights", ax=axs[0])
-  gen_error_histogram(yval, pred_val, md_name, Xtype='validation', yType="Number of nights", ax=axs[1])
+  pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights", ax=axs[0])
+  pltutil.plot_error_histogram(yval, pred_val, md_name, Xtype='validation', yType="Number of nights", ax=axs[1])
 
   figs2, axs2 = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
-  gen_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights", ax=axs2[0], groupby_outcome=True)
-  gen_error_hist_pct(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights", ax=axs2[1])
+  pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights", ax=axs2[0], groupby_outcome=True)
+  pltutil.plot_error_hist_pct(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights", ax=axs2[1])
 
   figs3, axs3 = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
-  gen_error_histogram(yval, pred_val, md_name, Xtype='validation', yType="Number of nights", ax=axs3[0], groupby_outcome=True)
-  gen_error_hist_pct(yval, pred_val, md_name, Xtype='validation', yType="Number of nights", ax=axs3[1])
+  pltutil.plot_error_histogram(yval, pred_val, md_name, Xtype='validation', yType="Number of nights", ax=axs3[0], groupby_outcome=True)
+  pltutil.plot_error_hist_pct(yval, pred_val, md_name, Xtype='validation', yType="Number of nights", ax=axs3[1])
 
   return pred_train, pred_val, f1_train, f1_val
-
-
-def plot_roc_basics(ax, cutoff=None, Xtype='training'):
-  ax.plot([0, 1], [0, 1], linestyle='--', label='No Skill')
-  title = "Cutoff=%d: ROC Curve Comparison (%s)" % (cutoff, Xtype) if cutoff is not None else "ROC Curves (%s)" % Xtype
-  ax.set_title(title, y=1.01, fontsize=18)
-  ax.set_xlabel("False Positive Rate", fontsize=15)
-  ax.set_ylabel("True Positive Rate", fontsize=15)
-  ax.legend(prop=dict(size=14))
-
-
-def plot_roc_best_threshold(X, y, clf, ax):
-  fpr, tpr, thresholds = metrics.roc_curve(y, clf.predict_proba(X)[:, 1])
-  ix = np.argmax(tpr - fpr)
-  ax.scatter(fpr[ix], tpr[ix], s=[120], marker='*', color='red')
-
-
-def plot_roc_fpr_pct_threshold(X, y, clf, ax):
-  fpr, tpr, thresholds = metrics.roc_curve(y, clf.predict_proba(X)[:, 1])
-  ix = np.argmin()
 
 
 def eval_binary_clf(clf, cutoff, Xtrain, ytrain, Xval, yval, md_name, plot_roc=True, metric=None, axs=None,

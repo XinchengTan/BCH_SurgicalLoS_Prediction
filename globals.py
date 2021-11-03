@@ -13,10 +13,17 @@ DASHDATA_COLS = ['SURG_CASE_KEY', 'LENGTH_OF_STAY', 'SPS_PREDICTED_LOS', 'BOOKIN
 DATETIME_COLS = ['SURG_CASE_KEY', 'CARE_CLASS', 'ICU_BED_NEEDED',
                  'ADMIT_DATE', 'DISCHARGE_DATE', 'SURGEON_START_DT_TM', 'SURGERY_END_DT_TM']  # 'PRIMARY_PROC',
 
-FEATURE_COLS = ['SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE', 'PROC_DECILE', 'Endocrine',
+FEATURE_COLS = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE', 'PROC_DECILE', 'Endocrine',
                 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental', 'Metabolic',
                 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic', 'Oral',
-                'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital']
+                'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital', 'CPT_GROUPS']
+
+SPS_LOS_FTR = 'SPS_PREDICTED_LOS'
+FEATURE_COLS_SPS = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE', 'PROC_DECILE', SPS_LOS_FTR,
+                    'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
+                    'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic', 'Oral',
+                    'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital', 'CPT_GROUPS']
+
 
 DELTA = 1e-8
 SEED = 998
@@ -67,7 +74,7 @@ clf2name = {LGR: "Logistic Regression",
             DTCLF: "Decision Tree Classifier",
             RMFCLF: "Random Forest Classifier",
             GBCLF: "Gradient Boosting Classifier",
-            XGBCLF: "XGBoost Classifier"}
+            } # XGBCLF: "XGBoost Classifier"
 
 
 GMEAN = "G-mean"

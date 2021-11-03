@@ -41,11 +41,42 @@ from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, Ri
 from sklearn.svm import SVC, SVR
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, GradientBoostingClassifier, GradientBoostingRegressor
+from statsmodels.miscmodels.ordinal_model import OrderedModel
 from xgboost import XGBClassifier
 
 from . import globals
 from . import model_eval
 from . import data_preprocessing as dpp
+from . import plot_utils as pltutil
+
+
+class AllModels(object):
+
+  def __init__(self, regs_map=None, multi_clfs_map=None, bin_cutoff2clfs=None):
+    self.mdname_model_map = dict()
+    self.mdnames = []
+    if regs_map is not None:
+      for mdname, model in regs_map.items():
+        self.mdname_model_map["REG_" + mdname] = model
+        self.mdnames.append("REG_" + mdname)
+    if multi_clfs_map is not None:
+      for mdname, model in multi_clfs_map.items():
+        self.mdname_model_map["MULTI_CLF\n" + mdname] = model
+        self.mdnames.append("MULTI_CLF\n" + mdname)
+    if bin_cutoff2clfs is not None:
+      for mdname, cutoff2clf in bin_cutoff2clfs.items():
+        for cutoff, clf in cutoff2clf.items():
+          name = "< %d NNTs\n(%s)" % (cutoff, mdname)
+          self.mdname_model_map[name] = clf
+          self.mdnames.append(name)
+
+  def predict_all(self, X):
+    if len(self.mdname_model_map) == 0:
+      return None
+    md2preds = dict()
+    for mdname, model in self.mdname_model_map.items():
+      md2preds[mdname] = model.predict(X)
+    return md2preds
 
 
 def run_regression_model(Xtrain, ytrain, Xtest, ytest, model=globals.LR, eval=True):
@@ -85,9 +116,9 @@ def predict_los(Xtrain, ytrain, Xtest, ytest, model=None, isTest=False):
 
       # Error histogram
       figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 5))
-      model_eval.gen_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights",
+      pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights",
                                      ax=axs[0])
-      model_eval.gen_error_histogram(ytest, pred_test, md_name, Xtype='validation', yType="Number of nights",
+      pltutil.plot_error_histogram(ytest, pred_test, md_name, Xtype='validation', yType="Number of nights",
                                      ax=axs[1])
   else:  # run a specific model
     reg = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=model)
@@ -99,7 +130,7 @@ def predict_los(Xtrain, ytrain, Xtest, ytest, model=None, isTest=False):
 def run_classifier(Xtrain, ytrain, model, cls_weight=None):
   # TODO: Need to use cross validation for model selection here, consider eval metric other than built-in criteria
   if model == globals.LGR:
-    clf = make_pipeline(StandardScaler(), LogisticRegression(random_state=0, class_weight=cls_weight)).fit(Xtrain, ytrain)
+    clf = make_pipeline(StandardScaler(), LogisticRegression(random_state=0, class_weight=cls_weight, max_iter=300)).fit(Xtrain, ytrain)
   elif model == globals.SVC:  # TODO: default is rbf kernel, need to experiment with others
     clf = make_pipeline(StandardScaler(), SVC(gamma='auto', class_weight=cls_weight, probability=True)).fit(Xtrain, ytrain)
   elif model == globals.DTCLF:
@@ -118,17 +149,19 @@ def run_classifier(Xtrain, ytrain, model, cls_weight=None):
 
 def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
   n_frts = X.shape[1]
-  if md == globals.RMFCLF:
+  if md == globals.SVC:
+    pass
+  elif md == globals.DTCLF:
+    pass
+  elif md == globals.RMFCLF:
     #     'oob_score': False
     #     'min_impurity_decrease': 0.0,
     #     'min_impurity_split': None,
     #     'criterion': ['gini', 'entropy'],
     #     'bootstrap': True
-    clf = RandomForestClassifier(random_state=globals.SEED)
-    default_params = clf.get_params()
-    default_params['class_weight'] = class_weight
+    clf = RandomForestClassifier(random_state=globals.SEED, class_weight=class_weight)
     param_space = {
-      'max_depth': [None, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      'max_depth': [None, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
       'max_features': np.arange(2, 1 + n_frts // 2),
       'max_leaf_nodes': [None] + list(range(5, 101, 5)),
       'max_samples': np.arange(0.1, 1, 0.1),
@@ -137,20 +170,20 @@ def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
       'n_estimators': [20, 30, 40, 50, 80, 100, 200, 300, 400]
     }
   elif md == globals.GBCLF:
+    clf = GradientBoostingClassifier(random_state=globals.SEED, class_weight=class_weight)
     param_space = {
       'learning_rate': [0.001, 0.03, 0.01, 0.3, 0.1, 0.3],
       'loss': 'deviance',
       'max_depth': np.arange(3, 10),
-      #'max_features': np.arange(2, n_frts+1, 2),
+      'max_features': np.arange(2, n_frts+1, 2),
       'max_leaf_nodes': None,
       #'min_impurity_decrease': 0.0,
       #'min_impurity_split': None,
+      # 'min_weight_fraction_leaf': 0.0,
       'min_samples_leaf': 1,
       'min_samples_split': 2,
-      #'min_weight_fraction_leaf': 0.0,
       'n_estimators': [20, 30, 40, 50, 80, 100, 200, 300, 400]
     }
-    clf = GradientBoostingClassifier(random_state=globals.SEED)
   else:
     raise NotImplementedError("Model %s is not supported!" % md)
 
@@ -202,16 +235,22 @@ def predict_nnt_regression_rounding(Xtrain, ytrain, Xval, yval, model=None, Xtes
   return model2trained
 
 
-def predict_nnt_multi_clf(Xtrain, ytrain, Xval, yval, model=None, cls_weight=None, Xtest=None, ytest=None):
+def predict_nnt_multi_clf(Xtrain, ytrain, Xval, yval, model=None, cls_weight=None, eval=True, Xtest=None, ytest=None):
   """ Predict number of nights via a multi-class classfier"""
   model2trained = {}
   model2f1s = {}
   if model is None:
-    for md, md_name in globals.clf2name.items():
-      clf = run_classifier(Xtrain, ytrain, model=md, cls_weight=cls_weight)
-      model2trained[md] = clf
-      _, _, f1_train, f1_val = model_eval.eval_multi_clf(clf, Xtrain, ytrain, Xval, yval, md_name)
-      model2f1s[md] = [f1_train, f1_val]
+    if not eval:
+      for md, md_name in globals.clf2name.items():
+        print("Fitting %s" % md_name)
+        clf = run_classifier(Xtrain, ytrain, model=md, cls_weight=cls_weight)
+        model2trained[md] = clf
+    else:
+      for md, md_name in globals.clf2name.items():
+        clf = run_classifier(Xtrain, ytrain, model=md, cls_weight=cls_weight)
+        model2trained[md] = clf
+        _, _, f1_train, f1_val = model_eval.eval_multi_clf(clf, Xtrain, ytrain, Xval, yval, md_name)
+        model2f1s[md] = [f1_train, f1_val]
   else:
     clf = run_classifier(Xtrain, ytrain, model=model, cls_weight=cls_weight)
     model2trained[model] = clf
@@ -231,41 +270,52 @@ def predict_nnt_binary_clf(Xtrain, ytrain, Xval, yval, clf_cutoffs, metric=None,
   if model is None:
     # fit multiple binary classifiers independently
     # assume classifier_cutoffs is an increasing list of integers, each represent a cutoff value
-    for cutoff in clf_cutoffs:
-      figs, axs = plt.subplots(ncols=2, nrows=1, figsize=(20, 7))
-      cutoff2clf = {}
+    if not eval:
       for md, md_name in globals.clf2name.items():
-        # Build binary outcome
-        ytrain_b = dpp.gen_y_nnt_binary(ytrain, cutoff)
-        yval_b = dpp.gen_y_nnt_binary(yval, cutoff)
+        print("Fitting binary classifiers %s" % md_name)
+        cutoff2clf = {}
+        for cutoff in clf_cutoffs:
+          # Build binary outcome
+          ytrain_b = dpp.gen_y_nnt_binary(ytrain, cutoff)
+          # Train classifier
+          clf = run_classifier(Xtrain, ytrain_b, model=md, cls_weight=cls_weight)
+          cutoff2clf[cutoff] = clf
+        model2binclfs[md] = cutoff2clf  # save models
+    else:
+      for cutoff in clf_cutoffs:
+        figs, axs = plt.subplots(ncols=2, nrows=1, figsize=(20, 7))
+        cutoff2clf = {}
+        for md, md_name in globals.clf2name.items():
+          # Build binary outcome
+          ytrain_b = dpp.gen_y_nnt_binary(ytrain, cutoff)
+          yval_b = dpp.gen_y_nnt_binary(yval, cutoff)
 
-        # Train classifier
-        clf = run_classifier(Xtrain, ytrain_b, model=md, cls_weight=cls_weight)
-        cutoff2clf[cutoff] = clf
+          # Train classifier
+          clf = run_classifier(Xtrain, ytrain_b, model=md, cls_weight=cls_weight)
+          cutoff2clf[cutoff] = clf
 
-        # Evaluate model
-        if eval:
-          pred_train, pred_val, ix = model_eval.eval_binary_clf(clf, cutoff, Xtrain, ytrain_b, Xval, yval_b, md_name,
-                                                                metric=metric, plot_roc=False)
+          # Evaluate model
+          if eval:
+            pred_train, pred_val, ix = model_eval.eval_binary_clf(clf, cutoff, Xtrain, ytrain_b, Xval, yval_b, md_name,
+                                                                  metric=metric, plot_roc=False)
 
-          # Generate feature importance ranking
-          model_eval.gen_feature_importance_bin_clf(clf, md, Xval, yval_b, cutoff=cutoff)
+            # Generate feature importance ranking
+            model_eval.gen_feature_importance_bin_clf(clf, md, Xval, yval_b, cutoff=cutoff)
 
-        # Plot ROC curve for the current model at 'cutoff'
-        plot_roc_curve(clf, Xtrain, ytrain_b, name=md_name, ax=axs[0])
-        plot_roc_curve(clf, Xval, yval_b, name=md_name, ax=axs[1])
-        if metric == globals.GMEAN:
-          model_eval.plot_roc_best_threshold(Xtrain, ytrain_b, clf, axs[0])
-          model_eval.plot_roc_best_threshold(Xval, yval_b, clf, axs[1])
-        elif metric == globals.FPRPCT15:
+          # Plot ROC curve for the current model at 'cutoff'
+          plot_roc_curve(clf, Xtrain, ytrain_b, name=md_name, ax=axs[0])
+          plot_roc_curve(clf, Xval, yval_b, name=md_name, ax=axs[1])
+          if metric == globals.GMEAN:
+            pltutil.plot_roc_best_threshold(Xtrain, ytrain_b, clf, axs[0])
+            pltutil.plot_roc_best_threshold(Xval, yval_b, clf, axs[1])
+          elif metric == globals.FPRPCT15:
+            continue
+          # TODO: add prec-recall plot for F1
 
-          continue
-        # TODO: add prec-recall plot for F1
-
-      model_eval.plot_roc_basics(axs[0], cutoff, 'training')
-      model_eval.plot_roc_basics(axs[1], cutoff, 'validation')
-      plt.show()
-      model2binclfs[model] = cutoff2clf  # save models
+        pltutil.plot_roc_basics(axs[0], cutoff, 'training')
+        pltutil.plot_roc_basics(axs[1], cutoff, 'validation')
+        plt.show()
+        model2binclfs[model] = cutoff2clf  # save models
   else:
     cutoff2clf = {}
     figs, axs = plt.subplots(nrows=4, ncols=4, figsize=(21, 21))
