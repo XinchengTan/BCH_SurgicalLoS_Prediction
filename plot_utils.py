@@ -144,6 +144,15 @@ def plot_error_hist_pct(true_y, pred_y, md_name, Xtype='train', yType="LoS (days
   ax.legend()
 
 
+def plot_calibration_basics(ax, cutoff=None, Xtype='training'):
+  ax.plot([0, 1], [0, 1], linestyle='--', color='black')
+  title = "Cutoff=%d: Calibration Curves (%s)" % (cutoff, Xtype) if cutoff is not None else "Calibration Curves (%s)" % Xtype
+  ax.set_title(title, y=1.01, fontsize=18)
+  ax.set_xlabel("Mean Predicted Probability", fontsize=15)
+  ax.set_ylabel("Fraction of Positives", fontsize=15)
+  ax.legend(prop=dict(size=14))
+
+
 def plot_roc_basics(ax, cutoff=None, Xtype='training'):
   ax.plot([0, 1], [0, 1], linestyle='--', label='No Skill')
   title = "Cutoff=%d: ROC Curve Comparison (%s)" % (cutoff, Xtype) if cutoff is not None else "ROC Curves (%s)" % Xtype

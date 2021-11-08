@@ -35,8 +35,9 @@ import seaborn as sn
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 from sklearn.metrics import mean_squared_error, make_scorer, plot_roc_curve
-from sklearn.model_selection import cross_val_score, GridSearchCV
+from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split
 
+from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, RidgeCV
 from sklearn.svm import SVC, SVR
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
@@ -55,18 +56,14 @@ class AllModels(object):
   def __init__(self, regs_map=None, multi_clfs_map=None, bin_cutoff2clfs=None):
     self.mdname_model_map = dict()
     self.mdnames = []
-    if regs_map is not None:
-      for mdname, model in regs_map.items():
-        self.mdname_model_map["REG_" + mdname] = model
-        self.mdnames.append("REG_" + mdname)
     if multi_clfs_map is not None:
       for mdname, model in multi_clfs_map.items():
-        self.mdname_model_map["MULTI_CLF\n" + mdname] = model
-        self.mdnames.append("MULTI_CLF\n" + mdname)
+        self.mdname_model_map["MULTI_CLF_%s" % mdname] = model
+        self.mdnames.append("MULTI_CLF_%s" % mdname)
     if bin_cutoff2clfs is not None:
       for mdname, cutoff2clf in bin_cutoff2clfs.items():
         for cutoff, clf in cutoff2clf.items():
-          name = "< %d NNTs\n(%s)" % (cutoff, mdname)
+          name = "< %d NNTs  %s" % (cutoff, mdname)
           self.mdname_model_map[name] = clf
           self.mdnames.append(name)
 
@@ -77,6 +74,30 @@ class AllModels(object):
     for mdname, model in self.mdname_model_map.items():
       md2preds[mdname] = model.predict(X)
     return md2preds
+
+
+# An extensible wrapper classifier of statsmodels's OrderedModel()
+class OrdinalClassifier(object):
+
+  def __init__(self, distr='logit', solver='lbgfs', disp=False, maxiter=500):
+    self.distr = distr
+    self.solver = solver
+    self.disp = disp
+    self.maxiter = maxiter
+    self.ord_model = None
+    self.fitted_ord_model = None
+
+  def fit(self, X, y):
+    self.ord_model = OrderedModel(endog=y, exog=X, distr=self.distr)
+    self.ord_fitted_model = self.ord_model.fit(method=self.solver, maxiter=self.maxiter, disp=self.disp)
+    return self
+
+  def predict(self, X):
+    proba = self.predict_proba(X)
+    return np.argmax(proba, axis=1)
+
+  def predict_proba(self, X):
+    return self.ord_fitted_model.model.predict(params=self.ord_fitted_model.params, exog=X, which='prob')
 
 
 def run_regression_model(Xtrain, ytrain, Xtest, ytest, model=globals.LR, eval=True):
@@ -127,22 +148,45 @@ def predict_los(Xtrain, ytrain, Xtest, ytest, model=None, isTest=False):
   return model2trained
 
 
-def run_classifier(Xtrain, ytrain, model, cls_weight=None):
-  # TODO: Need to use cross validation for model selection here, consider eval metric other than built-in criteria
+def run_classifier(Xtrain, ytrain, model, cls_weight=None, calibrate_method=None, calibrate_on_val=True, standardize=False):
+  """
+  :param Xtrain: a numpy array (n_cases, n_features)
+  :param ytrain: a numpy array (n_cases, )
+  :param model: abbreviation of the model name
+  :param cls_weight: If None, do not account for class imbalance; If 'balanced', correct for class imbalance in model parameters
+  :param calibrate_method: If None, do not calibrate; otherwise, use 'sigmoid' or 'isotonic' to calibrate classifier
+  :param standardize: If True, standardize "Xtrain" along each feature axis
+  :return:
+  """
+  Xtrain, Xval, ytrain, yval = train_test_split(Xtrain, ytrain, test_size=0.2, random_state=globals.SEED)
+
+  if standardize:
+    Xtrain = StandardScaler().fit_transform(Xtrain)
+
   if model == globals.LGR:
-    clf = make_pipeline(StandardScaler(), LogisticRegression(random_state=0, class_weight=cls_weight, max_iter=300)).fit(Xtrain, ytrain)
-  elif model == globals.SVC:  # TODO: default is rbf kernel, need to experiment with others
-    clf = make_pipeline(StandardScaler(), SVC(gamma='auto', class_weight=cls_weight, probability=True)).fit(Xtrain, ytrain)
+    clf = LogisticRegression(random_state=0, class_weight=cls_weight, max_iter=300).fit(Xtrain, ytrain)
+  elif model == globals.SVC:
+    clf =SVC(gamma='auto', class_weight=cls_weight, probability=True).fit(Xtrain, ytrain)
   elif model == globals.DTCLF:
     clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight=cls_weight).fit(Xtrain, ytrain)
   elif model == globals.RMFCLF:
-    clf = RandomForestClassifier(max_depth=6, random_state=0, class_weight=cls_weight).fit(Xtrain, ytrain)
+    clf = RandomForestClassifier(max_features=130, random_state=0, class_weight=cls_weight).fit(Xtrain, ytrain)
   elif model == globals.GBCLF:
     clf = GradientBoostingClassifier(random_state=0, max_depth=2).fit(Xtrain, ytrain)  # TODO: imbalanced class issue here!
   elif model == globals.XGBCLF:
     clf = XGBClassifier(random_state=0).fit(Xtrain, ytrain)
+  elif model == globals.ORDCLF_LOGIT:
+    clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True).fit(Xtrain, ytrain)
+  elif model == globals.ORDCLF_PROBIT:
+    clf = OrdinalClassifier(distr='probit', solver='bfgs', disp=True).fit(Xtrain, ytrain)
   else:
     raise NotImplementedError("Model %s is not supported!" % model)
+
+  if calibrate_method is not None:
+    if calibrate_on_val:
+      clf = CalibratedClassifierCV(clf, method=calibrate_method, cv='prefit').fit(Xval, yval)
+    else:
+      clf = CalibratedClassifierCV(clf, method=calibrate_method, cv='prefit').fit(Xtrain, ytrain)
 
   return clf
 
@@ -162,7 +206,7 @@ def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
     clf = RandomForestClassifier(random_state=globals.SEED, class_weight=class_weight)
     param_space = {
       'max_depth': [None, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
-      'max_features': np.arange(2, 1 + n_frts // 2),
+      'max_features': np.arange(2, 1 + n_frts // 2, 10),
       'max_leaf_nodes': [None] + list(range(5, 101, 5)),
       'max_samples': np.arange(0.1, 1, 0.1),
       'min_samples_leaf': [1] + [i for i in range(2, 17, 2)],
@@ -205,7 +249,7 @@ def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
   for param, param_grid in param_space.items():
     print("\nSearching %s among " % param, param_grid)
     gs = GridSearchCV(estimator=clf, param_grid={param: param_grid}, scoring=scorer, n_jobs=-1, cv=kfold,
-                      refit=refit, return_train_score=True, verbose=2)
+                      refit=refit, return_train_score=True, verbose=0)
     gs.fit(X, y)
     param2gs[param] = gs
   return param2gs, param_space
@@ -217,26 +261,29 @@ def scorer_1nnt_tol(ytrue, ypred):
   return acc_1nnt_tol
 
 
-def predict_nnt_regression_rounding(Xtrain, ytrain, Xval, yval, model=None, Xtest=None, ytest=None):
+def predict_nnt_regression_rounding(dataset: dpp.Dataset, model=None):
   """
   Predict number of nights via regression & rounding to nearest int
   """
+  Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
+
   model2trained = {}
   if model is None:  # run all
     for md, md_name in globals.reg2name.items():
       reg = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=md, eval=True)
       model2trained[md] = reg
-      model_eval.eval_nnt_regressor(reg, Xtrain, ytrain, Xval, yval, md_name)
+      model_eval.eval_nnt_regressor(reg, dataset, md_name)
   else:
-    reg = run_regression_model(Xtrain, ytrain, Xval, yval, model=model)
+    reg = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=model)
     model2trained[model] = reg
-    model_eval.eval_nnt_regressor(reg, Xtrain, ytrain, Xval, yval, md_name=globals.reg2name[model])
+    model_eval.eval_nnt_regressor(reg, dataset, md_name=globals.reg2name[model])
 
   return model2trained
 
 
-def predict_nnt_multi_clf(Xtrain, ytrain, Xval, yval, model=None, cls_weight=None, eval=True, Xtest=None, ytest=None):
+def predict_nnt_multi_clf(dataset: dpp.Dataset, model=None, cls_weight=None, eval=True):
   """ Predict number of nights via a multi-class classfier"""
+  Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
   model2trained = {}
   model2f1s = {}
   if model is None:
@@ -249,94 +296,110 @@ def predict_nnt_multi_clf(Xtrain, ytrain, Xval, yval, model=None, cls_weight=Non
       for md, md_name in globals.clf2name.items():
         clf = run_classifier(Xtrain, ytrain, model=md, cls_weight=cls_weight)
         model2trained[md] = clf
-        _, _, f1_train, f1_val = model_eval.eval_multi_clf(clf, Xtrain, ytrain, Xval, yval, md_name)
+        _, _, f1_train, f1_val = model_eval.eval_multi_clf(clf, dataset, md_name)
         model2f1s[md] = [f1_train, f1_val]
   else:
     clf = run_classifier(Xtrain, ytrain, model=model, cls_weight=cls_weight)
     model2trained[model] = clf
-    _, _, f1_train, f1_val = model_eval.eval_multi_clf(clf, Xtrain, ytrain, Xval, yval, md_name=globals.clf2name[model])
-    model2f1s[model] = [f1_train, f1_val]
+    if eval:
+      _, _, f1_train, f1_val = model_eval.eval_multi_clf(clf, dataset, md_name=globals.clf2name[model])
+      model2f1s[model] = [f1_train, f1_val]
 
   return model2trained, model2f1s
 
 
-def predict_nnt_binary_clf(Xtrain, ytrain, Xval, yval, clf_cutoffs, metric=None, model=None, cls_weight=None, eval=True,
-                           Xtest=None, ytest=None):
+def predict_nnt_binary_clf(dataset: dpp.Dataset, cutoffs, metric=None, model=None, cls_weight=None, eval=True,
+                           calibrate_method=None, calibrate_on_val=True):
   """
   Predict number of nights via a series of binary classifiers, given a list of integer cutoffs.
   e.g. [1, 2] means two classifiers: one for if NNT < 1 or >= 1, the other for if NNT < 2 or >= 2
   """
+  Xtrain, Xtest = dataset.Xtrain, dataset.Xtest
+  ytrain, ytest = np.copy(dataset.ytrain), np.copy(dataset.ytest)
+
   model2binclfs = {}
+
   if model is None:
     # fit multiple binary classifiers independently
     # assume classifier_cutoffs is an increasing list of integers, each represent a cutoff value
-    if not eval:
-      for md, md_name in globals.clf2name.items():
-        print("Fitting binary classifiers %s" % md_name)
-        cutoff2clf = {}
-        for cutoff in clf_cutoffs:
-          # Build binary outcome
-          ytrain_b = dpp.gen_y_nnt_binary(ytrain, cutoff)
-          # Train classifier
-          clf = run_classifier(Xtrain, ytrain_b, model=md, cls_weight=cls_weight)
-          cutoff2clf[cutoff] = clf
-        model2binclfs[md] = cutoff2clf  # save models
-    else:
-      for cutoff in clf_cutoffs:
-        figs, axs = plt.subplots(ncols=2, nrows=1, figsize=(20, 7))
-        cutoff2clf = {}
-        for md, md_name in globals.clf2name.items():
-          # Build binary outcome
-          ytrain_b = dpp.gen_y_nnt_binary(ytrain, cutoff)
-          yval_b = dpp.gen_y_nnt_binary(yval, cutoff)
+    for md, md_name in globals.binclf2name.items():
+      print("Fitting binary classifiers %s" % md_name)
+      cutoff2clf = {}
+      for cutoff in cutoffs:
+        # Train classifier
+        clf = run_classifier(Xtrain, dpp.gen_y_nnt_binary(ytrain, cutoff), model=md, cls_weight=cls_weight,
+                             calibrate_method=calibrate_method, calibrate_on_val=calibrate_on_val)
+        cutoff2clf[cutoff] = clf
+      model2binclfs[md] = cutoff2clf  # save models
 
-          # Train classifier
-          clf = run_classifier(Xtrain, ytrain_b, model=md, cls_weight=cls_weight)
-          cutoff2clf[cutoff] = clf
+    if eval:
+      run_all_eval_binclf(dataset, cutoffs, model2binclfs, metric)
 
-          # Evaluate model
-          if eval:
-            pred_train, pred_val, ix = model_eval.eval_binary_clf(clf, cutoff, Xtrain, ytrain_b, Xval, yval_b, md_name,
-                                                                  metric=metric, plot_roc=False)
-
-            # Generate feature importance ranking
-            model_eval.gen_feature_importance_bin_clf(clf, md, Xval, yval_b, cutoff=cutoff)
-
-          # Plot ROC curve for the current model at 'cutoff'
-          plot_roc_curve(clf, Xtrain, ytrain_b, name=md_name, ax=axs[0])
-          plot_roc_curve(clf, Xval, yval_b, name=md_name, ax=axs[1])
-          if metric == globals.GMEAN:
-            pltutil.plot_roc_best_threshold(Xtrain, ytrain_b, clf, axs[0])
-            pltutil.plot_roc_best_threshold(Xval, yval_b, clf, axs[1])
-          elif metric == globals.FPRPCT15:
-            continue
-          # TODO: add prec-recall plot for F1
-
-        pltutil.plot_roc_basics(axs[0], cutoff, 'training')
-        pltutil.plot_roc_basics(axs[1], cutoff, 'validation')
-        plt.show()
-        model2binclfs[model] = cutoff2clf  # save models
   else:
+    # When running each model individually, always evaluate
     cutoff2clf = {}
     figs, axs = plt.subplots(nrows=4, ncols=4, figsize=(21, 21))
-    for cutoff in clf_cutoffs:
-      # Build binary outcome
-      ytrain_b = dpp.gen_y_nnt_binary(ytrain, cutoff)
-      yval_b = dpp.gen_y_nnt_binary(yval, cutoff)
-
+    for cutoff in cutoffs:
+      dataset.ytrain = dpp.gen_y_nnt_binary(ytrain, cutoff)
+      dataset.ytest = dpp.gen_y_nnt_binary(ytest, cutoff)
       # Train classifier
-      clf = run_classifier(Xtrain, ytrain_b, model=model, cls_weight=cls_weight)
+      clf = run_classifier(Xtrain, dataset.ytrain, model=model, cls_weight=cls_weight, calibrate_method=calibrate_method)
       cutoff2clf[cutoff] = clf
 
       # Evaluate model
-      model_eval.eval_binary_clf(clf, cutoff, Xtrain, ytrain_b, Xval, yval_b, globals.clf2name[model], metric=metric,
+      model_eval.eval_binary_clf(clf, cutoff, dataset, globals.binclf2name[model], metric=metric,
                                  plot_roc=False, axs=[axs[(cutoff-1)//4][(cutoff-1)%4], axs[2+(cutoff-1)//4][(cutoff-1)%4]])
 
-      # Generate feature importance ranking
+      # Generate feature importance
       #model_eval.gen_feature_importance_bin_clf(clf, model, Xval, yval_b, cutoff=cutoff)
     model2binclfs[model] = cutoff2clf
     figs.tight_layout()
     figs.savefig("%s (val-%s) binclf.png" % (model, str(cls_weight)))
-
+    dataset.ytrain = ytrain
+    dataset.ytest = ytest
   return model2binclfs
 
+
+def run_all_eval_binclf(dataset, clf_cutoffs, model2binclfs, metric=None):
+  Xtrain, Xtest = dataset.Xtrain, dataset.Xtest
+  ytrain, ytest = np.copy(dataset.ytrain), np.copy(dataset.ytest)
+
+  for cutoff in clf_cutoffs:
+    figs, axs = plt.subplots(ncols=2, nrows=1, figsize=(20, 7))  # ROC curves
+    figs2, axs2 = plt.subplots(ncols=2, nrows=1, figsize=(20, 7))  # Calibration curves
+    for md, md_name in globals.binclf2name.items():
+      clf = model2binclfs[md][cutoff]
+      dataset.ytrain = dpp.gen_y_nnt_binary(ytrain, cutoff)
+      dataset.ytest = dpp.gen_y_nnt_binary(ytest, cutoff)
+      # Evaluate model
+      pred_train, pred_test, ix = model_eval.eval_binary_clf(clf, cutoff, dataset, md_name,
+                                                             metric=metric, plot_roc=False)
+      # # Generate feature importance
+      # model_eval.gen_feature_importance_bin_clf(clf, md, Xtest, dataset.ytest, cutoff=cutoff)
+
+      # Plot ROC curve for the model at 'cutoff'
+      plot_roc_curve(clf, Xtrain, dataset.ytrain, name=md_name, ax=axs[0])
+      plot_roc_curve(clf, Xtest, dataset.ytest, name=md_name, ax=axs[1])
+      if metric == globals.GMEAN:
+        pltutil.plot_roc_best_threshold(Xtrain, dataset.ytrain, clf, axs[0])
+        pltutil.plot_roc_best_threshold(Xtest, dataset.ytest, clf, axs[1])
+      elif metric == globals.FPRPCT15:
+        continue
+
+      # Plot calibration curve  TODO: decision_function() or predict_proba() ?
+      prob_class1_train, prob_class1_test = clf.predict_proba(Xtrain)[:, 1], clf.predict_proba(Xtest)[:, 1]
+      fop_train, mpv_train = calibration_curve(dataset.ytrain, prob_class1_train, n_bins=10, normalize=True)
+      fop_test, mpv_test = calibration_curve(dataset.ytest, prob_class1_test, n_bins=10, normalize=True)
+      # TODO: add probability distribution hist/bar plot
+
+      axs2[0].plot(mpv_train, fop_train, marker='.', label=md_name)
+      axs2[1].plot(mpv_test, fop_test, marker='.', label=md_name)
+
+    pltutil.plot_roc_basics(axs[0], cutoff, 'training')
+    pltutil.plot_roc_basics(axs[1], cutoff, 'test')
+    pltutil.plot_calibration_basics(axs2[0], cutoff, 'training')
+    pltutil.plot_calibration_basics(axs2[1], cutoff, 'test')
+    plt.show()
+
+  dataset.ytrain = ytrain
+  dataset.ytest = ytest

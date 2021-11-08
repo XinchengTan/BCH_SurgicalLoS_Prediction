@@ -7,10 +7,12 @@ import pandas as pd
 import seaborn as sn
 
 from sklearn import metrics
+from sklearn.calibration import calibration_curve
 from sklearn.inspection import permutation_importance
 
 from . import globals
 from . import plot_utils as pltutil
+from .data_preprocessing import Dataset
 
 
 
@@ -59,84 +61,89 @@ def gen_confusion_matrix(yTrue, yPred, md_name, isTrain=True, isTest=False, plot
   return confmat
 
 
-def eval_nnt_regressor(reg, Xtrain, ytrain, Xval, yval, md_name, Xtest=None, ytest=None):
+def eval_nnt_regressor(reg, dataset: Dataset, md_name):
+  Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
+
   # predict and round to the nearest int
-  pred_train, pred_test = np.rint(reg.predict(Xtrain)), np.rint(reg.predict(Xval))
+  pred_train, pred_test = np.rint(reg.predict(Xtrain)), np.rint(reg.predict(Xtest))
   # bucket them into finite number of classes
   pred_train[pred_train > globals.MAX_NNT] = globals.MAX_NNT + 1
   pred_test[pred_test > globals.MAX_NNT] = globals.MAX_NNT + 1
 
   print("Accuracy (training): ", metrics.accuracy_score(ytrain, pred_train, normalize=True))
-  print("Accuracy (validation): ", metrics.accuracy_score(yval, pred_test, normalize=True))
+  print("Accuracy (test): ", metrics.accuracy_score(ytest, pred_test, normalize=True))
 
   # Confusion matrix
   labels = [str(i) for i in range(globals.MAX_NNT + 2)]
   labels[-1] = '%s+' % globals.MAX_NNT
   gen_confusion_matrix(ytrain, pred_train, md_name, isTrain=True)
-  gen_confusion_matrix(yval, pred_test, md_name, isTrain=False)
-
-  # Error histogram
-  figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 5))
-  pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights",
-                                 ax=axs[0])
-  pltutil.plot_error_histogram(yval, pred_test, md_name, Xtype='validation', yType="Number of nights",
-                                 ax=axs[1])
-
-
-def eval_multi_clf(clf, Xtrain, ytrain, Xval, yval, md_name, Xtest=None, ytest=None):
-  pred_train, pred_val = clf.predict(Xtrain), clf.predict(Xval)
-  train_mse = metrics.mean_squared_error(ytrain, pred_train)
-  val_mse = metrics.mean_squared_error(yval, pred_val)
-  print("%s:" % md_name)
-  print("Accuracy (training): ", metrics.accuracy_score(ytrain, pred_train, normalize=True))
-  print("Accuracy (validation): ", metrics.accuracy_score(yval, pred_val, normalize=True))
-  class_names = [str(i) for i in range(globals.MAX_NNT+1)] + ["%d+" % globals.MAX_NNT]
-  f1_train = pd.DataFrame({"NNT class": class_names, "F-1 score": metrics.f1_score(ytrain, pred_train, average=None)})
-  f1_val = pd.DataFrame({"NNT class": class_names, "F-1 score": metrics.f1_score(yval, pred_val, average=None)})
-  print("F-1 score (training): ", f1_train)
-  print("F-1 score (training): ", f1_val)
-
-  print("R-squared (training set): ", clf.score(Xtrain, ytrain))
-  print("R-squared (validation set): ", clf.score(Xval, yval))
-  print("MSE (training set): ", train_mse, "RMSE: ", np.sqrt(train_mse))
-  print("MSE (validation set): ", val_mse, "RMSE: ", np.sqrt(val_mse))
-
-  # Confusion matrix
-  labels = [str(i) for i in range(globals.MAX_NNT + 2)]
-  labels[-1] = '%s+' % globals.MAX_NNT
-  gen_confusion_matrix(ytrain, pred_train, md_name, isTrain=True)
-  gen_confusion_matrix(yval, pred_val, md_name, isTrain=False)
+  gen_confusion_matrix(ytest, pred_test, md_name, isTrain=False)
 
   # Error histogram
   figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 5))
   pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights", ax=axs[0])
-  pltutil.plot_error_histogram(yval, pred_val, md_name, Xtype='validation', yType="Number of nights", ax=axs[1])
+  pltutil.plot_error_histogram(ytest, pred_test, md_name, Xtype='test', yType="Number of nights", ax=axs[1])
+
+
+def eval_multi_clf(clf, dataset: Dataset, md_name):
+  Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
+
+  pred_train, pred_val = clf.predict(Xtrain), clf.predict(Xtest)
+  train_mse = metrics.mean_squared_error(ytrain, pred_train)
+  val_mse = metrics.mean_squared_error(ytest, pred_val)
+  print("%s:" % md_name)
+  print("Accuracy (training): ", metrics.accuracy_score(ytrain, pred_train, normalize=True))
+  print("Accuracy (test): ", metrics.accuracy_score(ytest, pred_val, normalize=True))
+  class_names = [str(i) for i in range(globals.MAX_NNT+1)] + ["%d+" % globals.MAX_NNT]
+  f1_train = pd.DataFrame({"NNT class": class_names, "F-1 score": metrics.f1_score(ytrain, pred_train, average=None)})
+  f1_val = pd.DataFrame({"NNT class": class_names, "F-1 score": metrics.f1_score(ytest, pred_val, average=None)})
+  print("F-1 score (training): ", f1_train)
+  print("F-1 score (training): ", f1_val)
+
+  if "Ordinal" not in md_name:
+    print("R-squared (training set): ", clf.score(Xtrain, ytrain))
+    print("R-squared (test set): ", clf.score(Xtest, ytest))
+    print("MSE (training set): ", train_mse, "RMSE: ", np.sqrt(train_mse))
+    print("MSE (test set): ", val_mse, "RMSE: ", np.sqrt(val_mse))
+
+  # Confusion matrix
+  labels = [str(i) for i in range(globals.MAX_NNT + 2)]
+  labels[-1] = '%s+' % globals.MAX_NNT
+  gen_confusion_matrix(ytrain, pred_train, md_name, isTrain=True)
+  gen_confusion_matrix(ytest, pred_val, md_name, isTrain=False)
+
+  # Error histogram
+  type_tr, type_tst, yType = 'train', 'test', 'Number of nights'
+  figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 5))
+  pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype=type_tr, yType=yType, ax=axs[0])
+  pltutil.plot_error_histogram(ytest, pred_val, md_name, Xtype=type_tst, yType=yType, ax=axs[1])
 
   figs2, axs2 = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
-  pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights", ax=axs2[0], groupby_outcome=True)
-  pltutil.plot_error_hist_pct(ytrain, pred_train, md_name, Xtype='train', yType="Number of nights", ax=axs2[1])
+  pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype=type_tr, yType=yType, ax=axs2[0], groupby_outcome=True)
+  pltutil.plot_error_hist_pct(ytrain, pred_train, md_name, Xtype=type_tr, yType=yType, ax=axs2[1])
 
   figs3, axs3 = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
-  pltutil.plot_error_histogram(yval, pred_val, md_name, Xtype='validation', yType="Number of nights", ax=axs3[0], groupby_outcome=True)
-  pltutil.plot_error_hist_pct(yval, pred_val, md_name, Xtype='validation', yType="Number of nights", ax=axs3[1])
+  pltutil.plot_error_histogram(ytest, pred_val, md_name, Xtype=type_tst, yType=yType, ax=axs3[0], groupby_outcome=True)
+  pltutil.plot_error_hist_pct(ytest, pred_val, md_name, Xtype=type_tst, yType=yType, ax=axs3[1])
 
   return pred_train, pred_val, f1_train, f1_val
 
 
-def eval_binary_clf(clf, cutoff, Xtrain, ytrain, Xval, yval, md_name, plot_roc=True, metric=None, axs=None,
-                    Xtest=None, ytest=None):
+def eval_binary_clf(clf, cutoff, dataset: Dataset, md_name, plot_calib_curve=True, plot_roc=True,
+                    metric=None, axs=None):
   """If built-in pred = False, optimize for geometric mean of trp & 1-fpr"""
   # Naive guess acc
-  upper_ratio_train, upper_ratio_test = np.sum(ytrain) / len(ytrain), np.sum(yval) / len(yval)
+  Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
+  upper_ratio_train, upper_ratio_test = np.sum(ytrain) / len(ytrain), np.sum(ytest) / len(ytest)
   print("\n%s:" % md_name)
   print("Naive guess accuracy (training): ", max(1.0 - upper_ratio_train, upper_ratio_train))
   print("Naive guess accuracy (validation): ", max(1.0 - upper_ratio_test, upper_ratio_test))
 
   if metric is None:
-    pred_train, pred_val = clf.predict(Xtrain), clf.predict(Xval)
+    pred_train, pred_val = clf.predict(Xtrain), clf.predict(Xtest)
     ix = None
   else:
-    pred_train_prob, pred_val_prob = clf.predict_proba(Xtrain)[:, 1], clf.predict_proba(Xval)[:, 1]  # focus on class1 only
+    pred_train_prob, pred_val_prob = clf.predict_proba(Xtrain)[:, 1], clf.predict_proba(Xtest)[:, 1]  # focus on class1 only
     if metric == globals.GMEAN:
       # select an optimal threshold based on geometric mean / Youden’s J statistic of tpr and (1-fpr)
       fpr, tpr, thresholds = metrics.roc_curve(ytrain, pred_train_prob)
@@ -149,19 +156,19 @@ def eval_binary_clf(clf, cutoff, Xtrain, ytrain, Xval, yval, md_name, plot_roc=T
       raise NotImplementedError("Metric %s is not implemented yet!" % metric)
     # Update prediction based on the selected optimal threshold
     best_threshold = thresholds[ix]
-    pred_train, pred_val = np.zeros_like(ytrain), np.zeros_like(yval)
+    pred_train, pred_val = np.zeros_like(ytrain), np.zeros_like(ytest)
     pred_train[pred_train_prob > best_threshold] = 1
     pred_val[pred_val_prob > best_threshold] = 1
 
   # Acc, precision, sensitivity, F-1 score
   print("Accuracy (training): ", metrics.accuracy_score(ytrain, pred_train, normalize=True))
-  print("Accuracy (validation): ", metrics.accuracy_score(yval, pred_val, normalize=True))
-  print("F1 score (training): ", metrics.f1_score(ytrain, pred_train))
-  print("F1 score (validation): ", metrics.f1_score(yval, pred_val))
+  print("Accuracy (test): ", metrics.accuracy_score(ytest, pred_val, normalize=True))
+  print("F1 score (test): ", metrics.f1_score(ytrain, pred_train))
+  print("F1 score (test): ", metrics.f1_score(ytest, pred_val))
 
   # Confusion matrix
   confmat_train = metrics.confusion_matrix(ytrain, pred_train, labels=[0, 1], normalize='true')
-  confmat_val = metrics.confusion_matrix(yval, pred_val, labels=[0, 1], normalize='true')
+  confmat_val = metrics.confusion_matrix(ytest, pred_val, labels=[0, 1], normalize='true')
   class_names = ['< ' + str(cutoff), '%d+' % cutoff]
 
   if axs is None:
@@ -188,10 +195,14 @@ def eval_binary_clf(clf, cutoff, Xtrain, ytrain, Xval, yval, md_name, plot_roc=T
   axs[1].set_yticks(np.arange(2) + 0.5)
   axs[1].set_yticklabels(['< ' + str(cutoff), '%d+' % cutoff], fontsize=15)
 
+  # Calibration curve
+  if plot_calib_curve:
+    pass
+
   # ROC curve
   if plot_roc:
     fig, ax = plt.subplots(figsize=(10, 8))
-    metrics.plot_roc_curve(clf, Xval, yval, ax=ax)
+    metrics.plot_roc_curve(clf, Xtest, ytest, ax=ax)
     ax.set_xlabel("False Positive Rate", fontsize=16)
     ax.set_ylabel("True Positive Rate", fontsize=16)
     ax.set_title("Cutoff=%d: ROC Curve (%s)" % (cutoff, md_name), y=1.01, fontsize=18)

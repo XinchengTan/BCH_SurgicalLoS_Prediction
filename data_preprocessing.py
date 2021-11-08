@@ -10,9 +10,10 @@ from . import data_prepare as dp
 
 class Dataset(object):
 
-  def __init__(self, df, outcome=globals.LOS, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None,
+  def __init__(self, df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None,
                test_pct=0.2):
-    assert len(onehot_cols) == len(onehot_dtypes), "One-hot Encoding columns and dtypes must match!"
+    if (onehot_cols is not None) and (onehot_dtypes is not None):
+      assert len(onehot_cols) == len(onehot_dtypes), "One-hot Encoding columns and dtypes must match!"
     X, y, feature_cols, case_keys = gen_Xy(df, outcome, cols, onehot_cols, onehot_dtypes)
     # nan_cases = set(np.argwhere(np.isnan(X))[:, 0])
     # print("Number of cases with NaN in data matrix:", len(nan_cases))
@@ -21,6 +22,7 @@ class Dataset(object):
     self.feature_names = feature_cols
     self.case_keys = case_keys
     self.sps_preds = df[globals.SPS_LOS_FTR].to_numpy()  # Might contain NaN
+    self.cpt_groups = df['CPT_GROUPS'].to_numpy()
 
   def __str__(self):
     res = "Training set size: %d\n" \
@@ -33,7 +35,7 @@ class Dataset(object):
 
 # TODO: add data cleaning, e.g. check for negative LoS and remove it
 # Generate data matrix X
-def gen_Xy(df, outcome=globals.LOS, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None):
+def gen_Xy(df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None):
   """
   Generate X, y for downstream modeling
 
@@ -53,10 +55,7 @@ def gen_Xy(df, outcome=globals.LOS, cols=globals.FEATURE_COLS, onehot_cols=None,
     for oh_col, dtype in zip(onehot_cols, onehot_dtypes):
       if dtype == str:  # can directly use get_dummies()
         dummies = pd.get_dummies(X[oh_col], prefix=oh_col)
-      elif dtype == list:  # Need to expand list to (row_id, oh_col indicator) first TODO: Bug somewhere leading to a lot of NaNs!!
-        # dummies = pd.get_dummies(
-        #   pd.DataFrame(X[oh_col].to_list()).stack(), prefix=oh_col
-        # ).astype(int).sum(level=0)
+      elif dtype == list:  # Need to expand list to (row_id, oh_col indicator) first
         s = X[oh_col].explode()
         dummies = pd.crosstab(s.index, s)
       else:
@@ -66,12 +65,14 @@ def gen_Xy(df, outcome=globals.LOS, cols=globals.FEATURE_COLS, onehot_cols=None,
       feature_cols.extend(dummies.columns.to_list())
   #dp.print_df_info(X, 'Data Matrix (pd DF)')
 
-  # Drop SURG_CASE_KEY
+  # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_key = X['SURG_CASE_KEY'].to_numpy()
-  X = X.drop(columns=['SURG_CASE_KEY'])
-  feature_cols.remove('SURG_CASE_KEY')
+  X.drop(columns=globals.NON_NUMERIC_COLS, inplace=True, errors='ignore')  #
+  for nnm_col in globals.NON_NUMERIC_COLS:
+    if nnm_col in feature_cols:
+      feature_cols.remove(nnm_col)
 
-  # Bucket SPS predicted LoS into 9 classes, if there is such column
+  # Bucket SPS predicted LoS into 9 classes, if there such prediction exists
   if globals.SPS_LOS_FTR in cols:  # Assume SPS prediction are all integers?
     X.loc[X[globals.SPS_LOS_FTR] > globals.MAX_NNT] = globals.MAX_NNT + 1
   X = X.to_numpy(dtype=np.float64)
@@ -100,10 +101,10 @@ def gen_y_nnt(dfcol):
   return y
 
 
-def gen_y_nnt_binary(y, cutoff):
+def gen_y_nnt_binary(y, cutoff):  # task: predict if LoS <= cutoff (cutoff in range(0, 8)
   yb = np.copy(y)
-  yb[yb < cutoff] = 0
-  yb[yb >= cutoff] = 1
+  yb[y <= cutoff] = 1
+  yb[y > cutoff] = 0
   return yb
 
 
