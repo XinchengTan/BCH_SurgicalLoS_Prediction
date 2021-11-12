@@ -40,11 +40,19 @@ DAY = "D"
 NIGHT = "N"
 
 LOS = "los"
-NNT = "num_nights"
+NNT = "Number of Nights"
 MAX_NNT = 7
 NNT_CUTOFFS = list(range(MAX_NNT+1))
 NNT_CLASS_CNT = len(NNT_CUTOFFS) + 1
 NNT_CLASSES = list(range(MAX_NNT+2))
+NNT_CLASS_LABELS = [str(i) for i in range(MAX_NNT + 1)] + ["%d+" % MAX_NNT]
+
+# Dataset type
+XTRAIN = 'train'
+XTEST = 'test'
+XVAL = 'val'
+XAGREE = 'model & surgeon agree'
+XDISAGREE = 'model & surgeon disagree' # can define anything reasonable
 
 
 SURGEON = 'SPS Surgeon'
@@ -91,6 +99,7 @@ binclf2name = {LGR: "Logistic Regression",
 
 ALL_MODELS = set(clf2name.keys()).union(binclf2name.keys())
 
+# Tasks
 REG = 'reg'
 MULTI_CLF = 'multiclf'
 BIN_CLF = 'binclf'
@@ -105,7 +114,7 @@ F1 = "F1 score"
 FPRPCT15 = "< 0.15"
 
 # Evaluation metrics
-SCR_ACC = 'accuracy'
+SCR_ACC = 'Accuracy'
 SCR_AUC = 'roc_auc'
 SCR_1NNT_TOL = 'Accuracy (tol = 1 NNT)'
 SCR_1NNT_TOL_ACC = 'Accuracy (Hit rate and tol=1NNT)'

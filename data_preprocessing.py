@@ -23,6 +23,7 @@ class Dataset(object):
     self.case_keys = case_keys
     self.sps_preds = df[globals.SPS_LOS_FTR].to_numpy()  # Might contain NaN
     self.cpt_groups = df['CPT_GROUPS'].to_numpy()
+    self.df = df
 
   def __str__(self):
     res = "Training set size: %d\n" \

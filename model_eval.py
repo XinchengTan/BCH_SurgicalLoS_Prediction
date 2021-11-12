@@ -1,5 +1,6 @@
 # Helper functions for model evaluation
-from collections import Counter
+from collections import Counter, defaultdict
+from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,30 +16,66 @@ from . import plot_utils as pltutil
 from .data_preprocessing import Dataset
 
 
+@dataclass
+class ModelPerf:
+  """Class for saving evaluated stats of a model"""
+  XType: str
+  model_name: str
+  trained_md: object
+  acc: float
+  acc_1nnt_tol: float
+  rmse: float
+  f1s: pd.DataFrame
+  rsqr: float = np.nan
 
-def gen_confusion_matrix(yTrue, yPred, md_name, isTrain=True, isTest=False, plot=True):
-  confmat = metrics.confusion_matrix(yTrue, yPred, labels=np.arange(0, globals.MAX_NNT + 2, 1), normalize='true')
+  def __str__(self):
+    perf_str = "Model: %s\n" \
+               "X type: %s\n" \
+               "Accuracy: %.2f\n" \
+               "Accuracy (tol = 1 NNT): %.2f\n" \
+               "RMSE: %.2f\n" \
+               "R squared: %.2f\n" \
+               "F1 scores: %s\n" % \
+               (self.model_name, self.XType, self.acc, self.acc_1nnt_tol, self.rmse, self.rsqr, self.f1s.to_string())
+    return perf_str
+
+  def get_perf_as_dict(self):  # TODO: f1 scores as a list
+    return {"Accuracy": self.acc, "Accuracy (tol = 1 NNT)": self.acc_1nnt_tol, "RMSE": self.rmse, "R-squared": self.rsqr}
+
+  @classmethod
+  def get_metrics_formatter(cls):
+    return {"Accuracy": "{:.2%}".format, "Accuracy (tol = 1 NNT)": "{:.2%}".format,
+            "RMSE": "{:.2f}".format, "R-squared": "{:.2f}".format}
+
+  @classmethod
+  def get_perf_metrics(cls):
+    return ("Accuracy", "Accuracy (tol = 1 NNT)", "RMSE", "R-squared")
+
+
+Xtype_to_conf_style = {globals.XTRAIN: sn.color_palette("ch:start=.2,rot=-.3"),
+                       globals.XTEST: 'rocket_r'}
+Xtype_to_conf_style = defaultdict(lambda: 'rocket_r', Xtype_to_conf_style)
+
+
+def gen_confusion_matrix(yTrue, yPred, md_name, Xtype, normalize='true', plot=True):
+  confmat = metrics.confusion_matrix(yTrue, yPred, labels=np.arange(0, globals.MAX_NNT + 2, 1), normalize=normalize)
 
   if plot:
-    if isTrain:
-      cmap = sn.color_palette("ch:start=.2,rot=-.3")
-      title = "Confusion Matrix (%s - training)" % md_name
-    else:
-      cmap = 'rocket_r'
-      title = "Confusion Matrix (%s - test)" % md_name if isTest else "Confusion Matrix (%s - validation)" % md_name
+    cmap = Xtype_to_conf_style[Xtype]
+    title = 'Confusion Matrix (%s - %s)' % (md_name, Xtype)
 
     # plot confusion matrix
     figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 10), gridspec_kw={'width_ratios': [2, 1]})
     sn.set(font_scale=1.3)  # for label size
     sn.heatmap(confmat, fmt=".2%", cmap=cmap, linecolor='white', linewidths=0.5,
                annot=True, annot_kws={"size": 15}, ax=axs[0])  # font size
-    axs[0].set_title(title, fontsize=20, y=1.01)
+    axs[0].set_title(title, fontsize=20, y=1.02)
     axs[0].set_xlabel("Predicted outcome", fontsize=16)
     axs[0].set_ylabel("True outcome", fontsize=16)
     axs[0].set_xticks(np.arange(globals.MAX_NNT+2)+0.5)
-    axs[0].set_xticklabels([str(i) for i in range(globals.MAX_NNT+1)] + ['7+'], fontsize=13)
+    axs[0].set_xticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
     axs[0].set_yticks(np.arange(globals.MAX_NNT+2)+0.5)
-    axs[0].set_yticklabels([str(i) for i in range(globals.MAX_NNT+1)] + ['7+'], fontsize=13)
+    axs[0].set_yticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
 
     # Plot a vertical histogram of outcome distribution
     outcome_cnter = Counter(yTrue)
@@ -46,7 +83,7 @@ def gen_confusion_matrix(yTrue, yPred, md_name, isTrain=True, isTest=False, plot
     axs[1].set_xlabel("Number of surgical cases")
     axs[1].invert_yaxis()
     axs[1].set_yticks(range(globals.MAX_NNT+2))
-    axs[1].set_yticklabels([str(i) for i in range(globals.MAX_NNT+1)] + ['7+'], fontsize=13)
+    axs[1].set_yticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
     rects = axs[1].patches
     total_cnt = len(yTrue)
     labels = ["{:.1%}".format(outcome_cnter[i] / total_cnt) for i in range(globals.MAX_NNT+2)]
@@ -85,48 +122,79 @@ def eval_nnt_regressor(reg, dataset: Dataset, md_name):
   pltutil.plot_error_histogram(ytest, pred_test, md_name, Xtype='test', yType="Number of nights", ax=axs[1])
 
 
-def eval_multi_clf(clf, dataset: Dataset, md_name):
-  Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
+def scorer_1nnt_tol(ytrue, ypred):
+  # accuracy within +-1 nnt error tolerance
+  acc_1nnt_tol = len(np.where(np.abs(ytrue - ypred) <= 1)[0]) / len(ytrue)
+  return acc_1nnt_tol
 
-  pred_train, pred_val = clf.predict(Xtrain), clf.predict(Xtest)
-  train_mse = metrics.mean_squared_error(ytrain, pred_train)
-  val_mse = metrics.mean_squared_error(ytest, pred_val)
-  print("%s:" % md_name)
-  print("Accuracy (training): ", metrics.accuracy_score(ytrain, pred_train, normalize=True))
-  print("Accuracy (test): ", metrics.accuracy_score(ytest, pred_val, normalize=True))
-  class_names = [str(i) for i in range(globals.MAX_NNT+1)] + ["%d+" % globals.MAX_NNT]
-  f1_train = pd.DataFrame({"NNT class": class_names, "F-1 score": metrics.f1_score(ytrain, pred_train, average=None)})
-  f1_val = pd.DataFrame({"NNT class": class_names, "F-1 score": metrics.f1_score(ytest, pred_val, average=None)})
-  print("F-1 score (training): ", f1_train)
-  print("F-1 score (training): ", f1_val)
 
-  if "Ordinal" not in md_name:
-    print("R-squared (training set): ", clf.score(Xtrain, ytrain))
-    print("R-squared (test set): ", clf.score(Xtest, ytest))
-    print("MSE (training set): ", train_mse, "RMSE: ", np.sqrt(train_mse))
-    print("MSE (test set): ", val_mse, "RMSE: ", np.sqrt(val_mse))
+def eval_multiclf_on_Xy(clf, X, y, md_name, XType, yType=globals.NNT):
+  pred_y = clf.predict(X)
 
-  # Confusion matrix
-  labels = [str(i) for i in range(globals.MAX_NNT + 2)]
-  labels[-1] = '%s+' % globals.MAX_NNT
-  gen_confusion_matrix(ytrain, pred_train, md_name, isTrain=True)
-  gen_confusion_matrix(ytest, pred_val, md_name, isTrain=False)
+  # Numeric Metrics
+  mse = metrics.mean_squared_error(y, pred_y)
+  rmse = np.sqrt(mse)
+  acc = metrics.accuracy_score(y, pred_y, normalize=True)
+  acc_1nnt = scorer_1nnt_tol(y, pred_y)
+  f1s = pd.DataFrame({"NNT class": globals.NNT_CLASS_LABELS, "F-1 score": metrics.f1_score(y, pred_y, average=None)})
+  rsqr = clf.score(X, y) if ("Ordinal" not in md_name) and ("Ensemble" not in md_name) else np.nan
 
-  # Error histogram
-  type_tr, type_tst, yType = 'train', 'test', 'Number of nights'
-  figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 5))
-  pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype=type_tr, yType=yType, ax=axs[0])
-  pltutil.plot_error_histogram(ytest, pred_val, md_name, Xtype=type_tst, yType=yType, ax=axs[1])
+  model_perf = ModelPerf(XType, md_name, clf, acc, acc_1nnt, rmse, f1s, rsqr)
 
-  figs2, axs2 = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
-  pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype=type_tr, yType=yType, ax=axs2[0], groupby_outcome=True)
-  pltutil.plot_error_hist_pct(ytrain, pred_train, md_name, Xtype=type_tr, yType=yType, ax=axs2[1])
+  # Confusion Matrix
+  conf_mat = gen_confusion_matrix(y, pred_y, md_name, XType)
 
-  figs3, axs3 = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
-  pltutil.plot_error_histogram(ytest, pred_val, md_name, Xtype=type_tst, yType=yType, ax=axs3[0], groupby_outcome=True)
-  pltutil.plot_error_hist_pct(ytest, pred_val, md_name, Xtype=type_tst, yType=yType, ax=axs3[1])
+  # Error Histogram
+  figs, axs = plt.subplots(nrows=3, ncols=1, figsize=(18, 30))
+  pltutil.plot_error_histogram(y, pred_y, md_name, XType, yType=yType, ax=axs[0])
+  pltutil.plot_error_histogram(y, pred_y, md_name, XType, yType=yType, ax=axs[1], groupby_outcome=True)
+  pltutil.plot_error_hist_pct(y, pred_y, md_name, XType, yType=yType, ax=axs[2])
 
-  return pred_train, pred_val, f1_train, f1_val
+  return model_perf
+
+
+# def eval_multi_clf(clf, dataset: Dataset, md_name):
+#   Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
+#
+#   pred_train, pred_val = clf.predict(Xtrain), clf.predict(Xtest)
+#   train_mse = metrics.mean_squared_error(ytrain, pred_train)
+#   val_mse = metrics.mean_squared_error(ytest, pred_val)
+#   print("%s:" % md_name)
+#   print("Accuracy (training): ", metrics.accuracy_score(ytrain, pred_train, normalize=True))
+#   print("Accuracy (test): ", metrics.accuracy_score(ytest, pred_val, normalize=True))
+#   class_names = [str(i) for i in range(globals.MAX_NNT+1)] + ["%d+" % globals.MAX_NNT]
+#   f1_train = pd.DataFrame({"NNT class": class_names, "F-1 score": metrics.f1_score(ytrain, pred_train, average=None)})
+#   f1_val = pd.DataFrame({"NNT class": class_names, "F-1 score": metrics.f1_score(ytest, pred_val, average=None)})
+#   print("F-1 score (training): ", f1_train)
+#   print("F-1 score (training): ", f1_val)
+#
+#   if ("Ordinal" not in md_name) and ("Ensemble" not in md_name):
+#     print("R-squared (training set): ", clf.score(Xtrain, ytrain))
+#     print("R-squared (test set): ", clf.score(Xtest, ytest))
+#     print("MSE (training set): ", train_mse, "RMSE: ", np.sqrt(train_mse))
+#     print("MSE (test set): ", val_mse, "RMSE: ", np.sqrt(val_mse))
+#
+#   # Confusion matrix
+#   labels = [str(i) for i in range(globals.MAX_NNT + 2)]
+#   labels[-1] = '%s+' % globals.MAX_NNT
+#   gen_confusion_matrix(ytrain, pred_train, md_name, isTrain=True)
+#   gen_confusion_matrix(ytest, pred_val, md_name, isTrain=False)
+#
+#   # Error histogram
+#   type_tr, type_tst, yType = 'train', 'test', 'Number of nights'
+#   figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 5))
+#   pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype=type_tr, yType=yType, ax=axs[0])
+#   pltutil.plot_error_histogram(ytest, pred_val, md_name, Xtype=type_tst, yType=yType, ax=axs[1])
+#
+#   figs2, axs2 = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
+#   pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype=type_tr, yType=yType, ax=axs2[0], groupby_outcome=True)
+#   pltutil.plot_error_hist_pct(ytrain, pred_train, md_name, Xtype=type_tr, yType=yType, ax=axs2[1])
+#
+#   figs3, axs3 = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
+#   pltutil.plot_error_histogram(ytest, pred_val, md_name, Xtype=type_tst, yType=yType, ax=axs3[0], groupby_outcome=True)
+#   pltutil.plot_error_hist_pct(ytest, pred_val, md_name, Xtype=type_tst, yType=yType, ax=axs3[1])
+#
+#   return pred_train, pred_val, f1_train, f1_val
 
 
 def eval_binary_clf(clf, cutoff, dataset: Dataset, md_name, plot_calib_curve=True, plot_roc=True,
@@ -167,13 +235,13 @@ def eval_binary_clf(clf, cutoff, dataset: Dataset, md_name, plot_calib_curve=Tru
   print("F1 score (test): ", metrics.f1_score(ytest, pred_val))
 
   # Confusion matrix
-  confmat_train = metrics.confusion_matrix(ytrain, pred_train, labels=[0, 1], normalize='true')
-  confmat_val = metrics.confusion_matrix(ytest, pred_val, labels=[0, 1], normalize='true')
+  confmat_train = metrics.confusion_matrix(ytrain, pred_train, labels=[0, 1])# normalize='true'
+  confmat_val = metrics.confusion_matrix(ytest, pred_val, labels=[0, 1]) #normalize='true'
   class_names = ['< ' + str(cutoff), '%d+' % cutoff]
 
   if axs is None:
-    figs, axs = plt.subplots(1, 2, figsize=(13, 5))
-  sn.heatmap(confmat_train, fmt=".2%", cmap=sn.color_palette("ch:start=.2,rot=-.3"), square=True,
+    figs, axs = plt.subplots(1, 2, figsize=(13, 5)) #fmt=".2%",
+  sn.heatmap(confmat_train, cmap=sn.color_palette("ch:start=.2,rot=-.3"), square=True,
              annot=True, annot_kws={"size": 18, "weight": "bold"}, ax=axs[0], linecolor='white', linewidths=0.8)
   axs[0].set_title("Cutoff =%d: Confusion matrix\n(%s - training)" % (cutoff, md_name),
                    y=1.01, fontsize=17)
@@ -184,8 +252,8 @@ def eval_binary_clf(clf, cutoff, dataset: Dataset, md_name, plot_calib_curve=Tru
   axs[0].set_yticks(np.arange(2) + 0.5)
   axs[0].set_yticklabels(['< ' + str(cutoff), '%d+' % cutoff], fontsize=15)
 
-  sn.heatmap(confmat_val, fmt=".2%", cmap='rocket_r', square=True, linecolor='white', linewidths=0.8,
-             annot=True, annot_kws={"size": 18, "weight": "bold"}, ax=axs[1])
+  sn.heatmap(confmat_val, cmap='rocket_r', square=True, linecolor='white', linewidths=0.8,
+             annot=True, annot_kws={"size": 18, "weight": "bold"}, ax=axs[1]) #fmt=".2%",
   axs[1].set_title("Cutoff =%d: Confusion matrix\n(%s - validation)" % (cutoff, md_name),
                    y=1.01, fontsize=17)
   axs[1].set_xlabel("Predicted Class", fontsize=16)
@@ -243,3 +311,19 @@ def gen_feature_importance_bin_clf(clf, md, X, y, cutoff=None, ftrs=globals.FEAT
     ax.set_xlabel("Cutoff=%d: Feature Importance (%s)" % (cutoff, globals.clf2name[md]), fontsize=15)
   else:
     ax.set_xlabel("Feature Importance (%s)" % globals.clf2name[md], fontsize=15)
+
+
+def eval_model_by_cpts():
+  # TODO 1. First split by number of CPTs, then evaluate by the tuples within the set with same #cpts
+  # TODO 2. Aggregate everything and evaluate simply by CPT
+  pass
+
+
+def eval_model_by_primary_proc():
+
+  pass
+
+
+def eval_model_by_ccsrs():
+  pass
+

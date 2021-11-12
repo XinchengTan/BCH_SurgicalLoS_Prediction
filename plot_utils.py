@@ -76,12 +76,11 @@ def plot_learning_curve(gs, x_param_name, x_params, md, scorers):
     # Plot doctor's estimation
     # Acc: 69.4%, 1-NNT Acc: 90.8%
 
-
   plt.legend(loc="best")
   plt.show()
 
 
-def plot_error_histogram(true_y, pred_y, md_name, Xtype='train', yType="LoS (days)", ax=None, groupby_outcome=False):
+def plot_error_histogram(true_y, pred_y, md_name, Xtype=globals.XTRAIN, yType="LoS (days)", ax=None, groupby_outcome=False):
   error = np.array(pred_y) - np.array(true_y)
   bins = np.arange(-globals.MAX_NNT, globals.MAX_NNT+1, 1)
 
@@ -121,7 +120,7 @@ def plot_error_histogram(true_y, pred_y, md_name, Xtype='train', yType="LoS (day
   return error
 
 
-def plot_error_hist_pct(true_y, pred_y, md_name, Xtype='train', yType="LoS (days)", ax=None):
+def plot_error_hist_pct(true_y, pred_y, md_name, Xtype=globals.XTRAIN, yType="LoS (days)", ax=None):
   ax.set_facecolor("white")
   for pos in ['top', 'left', 'bottom', 'right']:
     ax.spines[pos].set_edgecolor('black')
@@ -144,7 +143,7 @@ def plot_error_hist_pct(true_y, pred_y, md_name, Xtype='train', yType="LoS (days
   ax.legend()
 
 
-def plot_calibration_basics(ax, cutoff=None, Xtype='training'):
+def plot_calibration_basics(ax, cutoff=None, Xtype=globals.XTRAIN):
   ax.plot([0, 1], [0, 1], linestyle='--', color='black')
   title = "Cutoff=%d: Calibration Curves (%s)" % (cutoff, Xtype) if cutoff is not None else "Calibration Curves (%s)" % Xtype
   ax.set_title(title, y=1.01, fontsize=18)
@@ -153,7 +152,7 @@ def plot_calibration_basics(ax, cutoff=None, Xtype='training'):
   ax.legend(prop=dict(size=14))
 
 
-def plot_roc_basics(ax, cutoff=None, Xtype='training'):
+def plot_roc_basics(ax, cutoff=None, Xtype=globals.XTRAIN):
   ax.plot([0, 1], [0, 1], linestyle='--', label='No Skill')
   title = "Cutoff=%d: ROC Curve Comparison (%s)" % (cutoff, Xtype) if cutoff is not None else "ROC Curves (%s)" % Xtype
   ax.set_title(title, y=1.01, fontsize=18)

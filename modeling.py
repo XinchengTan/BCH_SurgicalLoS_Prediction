@@ -27,11 +27,14 @@ Evaluation:
 Analysis:
 - feature importance (Shapley value)
 """
+from collections import defaultdict
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sn
 
+from IPython.display import display
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 from sklearn.metrics import mean_squared_error, make_scorer, plot_roc_curve
@@ -45,9 +48,10 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, Grad
 from statsmodels.miscmodels.ordinal_model import OrderedModel
 from xgboost import XGBClassifier
 
-from . import globals
-from . import model_eval
+from . import globals, model_eval, surgeon
 from . import data_preprocessing as dpp
+from .data_preprocessing import Dataset
+from .model_eval import ModelPerf
 from . import plot_utils as pltutil
 
 
@@ -79,7 +83,7 @@ class AllModels(object):
 # An extensible wrapper classifier of statsmodels's OrderedModel()
 class OrdinalClassifier(object):
 
-  def __init__(self, distr='logit', solver='lbgfs', disp=False, maxiter=500):
+  def __init__(self, distr='logit', solver='lbgfs', disp=False, maxiter=200):
     self.distr = distr
     self.solver = solver
     self.disp = disp
@@ -234,14 +238,14 @@ def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
   # Define scorer
   refit = True
   if scorer == globals.SCR_1NNT_TOL:
-    scorer = make_scorer(scorer_1nnt_tol, greater_is_better=True)
+    scorer = make_scorer(model_eval.scorer_1nnt_tol, greater_is_better=True)
   elif scorer == globals.SCR_1NNT_TOL_ACC:
     scorer = {globals.SCR_ACC: globals.SCR_ACC,
-              globals.SCR_1NNT_TOL: make_scorer(scorer_1nnt_tol, greater_is_better=True)}
+              globals.SCR_1NNT_TOL: make_scorer(model_eval.scorer_1nnt_tol, greater_is_better=True)}
     refit = globals.SCR_1NNT_TOL
   elif scorer == globals.SCR_MULTI_ALL:
     scorer = {globals.SCR_ACC: globals.SCR_ACC, globals.SCR_AUC: globals.SCR_AUC,
-              globals.SCR_1NNT_TOL: make_scorer(scorer_1nnt_tol, greater_is_better=True)}
+              globals.SCR_1NNT_TOL: make_scorer(model_eval.scorer_1nnt_tol, greater_is_better=True)}
     refit = globals.SCR_AUC
 
   # For each parameter, iterate through its param grid
@@ -255,13 +259,7 @@ def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
   return param2gs, param_space
 
 
-def scorer_1nnt_tol(ytrue, ypred):
-  # accuracy within +-1 nnt error tolerance
-  acc_1nnt_tol = len(np.where(np.abs(ytrue - ypred) <= 1)[0]) / len(ytrue)
-  return acc_1nnt_tol
-
-
-def predict_nnt_regression_rounding(dataset: dpp.Dataset, model=None):
+def predict_nnt_regression_rounding(dataset: Dataset, model=None):
   """
   Predict number of nights via regression & rounding to nearest int
   """
@@ -281,34 +279,81 @@ def predict_nnt_regression_rounding(dataset: dpp.Dataset, model=None):
   return model2trained
 
 
-def predict_nnt_multi_clf(dataset: dpp.Dataset, model=None, cls_weight=None, eval=True):
+def predict_nnt_multi_clf(dataset: Dataset, model=None, cls_weight=None, evaluate=True):
   """ Predict number of nights via a multi-class classfier"""
   Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
   model2trained = {}
-  model2f1s = {}
   if model is None:
-    if not eval:
-      for md, md_name in globals.clf2name.items():
-        print("Fitting %s" % md_name)
-        clf = run_classifier(Xtrain, ytrain, model=md, cls_weight=cls_weight)
-        model2trained[md] = clf
-    else:
-      for md, md_name in globals.clf2name.items():
-        clf = run_classifier(Xtrain, ytrain, model=md, cls_weight=cls_weight)
-        model2trained[md] = clf
-        _, _, f1_train, f1_val = model_eval.eval_multi_clf(clf, dataset, md_name)
-        model2f1s[md] = [f1_train, f1_val]
+    for md, md_name in globals.clf2name.items():
+      print("Fitting %s" % md_name)
+      clf = run_classifier(Xtrain, ytrain, model=md, cls_weight=cls_weight)
+      model2trained[md] = clf
   else:
     clf = run_classifier(Xtrain, ytrain, model=model, cls_weight=cls_weight)
     model2trained[model] = clf
-    if eval:
-      _, _, f1_train, f1_val = model_eval.eval_multi_clf(clf, dataset, md_name=globals.clf2name[model])
-      model2f1s[model] = [f1_train, f1_val]
 
-  return model2trained, model2f1s
+  if evaluate:
+    model2ModelPerf, eval_dfs = performance_eval_multiclfs(dataset, model2trained, XType=None)
+    for eval_df in eval_dfs:
+      display(eval_df)
+
+  return model2trained
 
 
-def predict_nnt_binary_clf(dataset: dpp.Dataset, cutoffs, metric=None, model=None, cls_weight=None, eval=True,
+def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType):
+  """
+  A high-level function that iterates through all trained multi-class classifiers and evaluate
+  the performance of each on test or test and training set.
+  Performance evaluation includes:
+  - hit rate, i.e. accuracy
+  - accuracy with 1 NNT error tolerance
+  - mean squared error
+  - confusion matrix (normalized by true class counts)
+  - ......
+  """
+  Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
+  md2ModelPerf = defaultdict(lambda: defaultdict(lambda: None))
+  xtypes = [XType] if XType is not None else [globals.XTRAIN, globals.XTEST]
+
+  for md, clf in model2trained_clf.items():
+    if XType is None:  # evaluate both training and test set
+      md2ModelPerf[md][globals.XTRAIN] = model_eval.eval_multiclf_on_Xy(clf, Xtrain, ytrain, globals.clf2name[md], globals.XTRAIN)
+      md2ModelPerf[md][globals.XTEST] = model_eval.eval_multiclf_on_Xy(clf, Xtest, ytest, globals.clf2name[md], globals.XTEST)
+
+    elif XType == globals.XTRAIN:
+      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, Xtrain, ytrain, globals.clf2name[md], XType)
+
+    elif XType == globals.XTEST:
+      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, Xtest, ytest, globals.clf2name[md], XType)
+
+    elif XType == globals.XAGREE:
+      _, Xdata, ydata = surgeon.gen_surgeon_model_agree_df_and_Xydata(dataset, model2trained_clf, md, use_test=True)
+      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, Xdata, ydata, globals.clf2name[md], XType)
+
+    elif XType == globals.XDISAGREE:
+      raise NotImplementedError("XType '%s' is not implemented yet!" % XType)
+
+    else:
+      raise NotImplementedError("XType '%s' is not implemented yet!" % XType)
+
+  # Create a dataframe table to present model performance along all the evaluation metrics
+  eval_dfs = []
+  for xtype in xtypes:
+    # create a data table from a dict
+    md2MP_xtype_dict = {globals.clf2name[md]: md2ModelPerf[md][xtype].get_perf_as_dict() for md in md2ModelPerf}
+    df = pd.DataFrame.from_dict(md2MP_xtype_dict, orient='index').sort_values(by=["Accuracy"], ascending=False)
+    df.index.name = 'Model'
+    df = df.style\
+      .set_table_attributes("style='display:inline'")\
+      .set_caption("Model Performance (%s cases)" % xtype)\
+      .format(ModelPerf.get_metrics_formatter())\
+      .set_properties(**{'text-align': 'center'})
+    eval_dfs.append(df)
+
+  return md2ModelPerf, eval_dfs
+
+
+def predict_nnt_binary_clf(dataset: Dataset, cutoffs, metric=None, model=None, cls_weight=None, eval=True,
                            calibrate_method=None, calibrate_on_val=True):
   """
   Predict number of nights via a series of binary classifiers, given a list of integer cutoffs.

@@ -9,10 +9,10 @@ import seaborn as sn
 from pathlib import Path
 from sklearn import metrics
 
-from . import globals
-from . import model_eval
+from . import globals, model_eval
 from . import data_preprocessing as dpp
 from . import plot_utils as pltutil
+
 
 pd.set_option('display.max_columns', 50)
 
@@ -112,59 +112,10 @@ def gen_data_without_sps_pred(df):
   return df.loc[df['SPS_PREDICTED_LOS'].isnull()]
 
 
-def eval_surgeon_perf(df, idxs=None, Xtype='all'):
-  if idxs is not None:
-    df = df.iloc[idxs]
-    print(df.shape[0])
-
-  # Evaluate SPS surgeon estimation performance
-  true_nnt = dpp.gen_y_nnt(df['NUM_OF_NIGHTS'])
-  surgeon_pred = dpp.gen_y_nnt(df['SPS_PREDICTED_LOS'])
-  model_eval.gen_confusion_matrix(true_nnt, surgeon_pred, globals.SURGEON, isTrain=True if Xtype == 'training' else False)
-
-  print(globals.SURGEON)
-  print("Accuracy (%s): " % Xtype, metrics.accuracy_score(true_nnt, surgeon_pred, normalize=True))
-  class_names = [str(i) for i in range(globals.MAX_NNT+1)] + ["%d+" % globals.MAX_NNT]
-  f1_sps = pd.DataFrame({"NNT class": class_names, "F-1 score": metrics.f1_score(true_nnt, surgeon_pred, average=None)})
-  rmse = np.sqrt(metrics.mean_squared_error(true_nnt, surgeon_pred))
-  print("F-1 score (%s): " % Xtype, f1_sps)
-  print("RMSE (%s)" % Xtype, rmse)
-
-  figs, axs = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
-  pltutil.plot_error_histogram(true_nnt, surgeon_pred, globals.SURGEON, Xtype=Xtype, yType="Number of nights", ax=axs[0],
-                                 groupby_outcome=False)
-  pltutil.plot_error_hist_pct(true_nnt, surgeon_pred, globals.SURGEON, Xtype=Xtype, yType="Number of nights", ax=axs[1])
-
-  # Binary cases
-  figs, axs = plt.subplots(nrows=2, ncols=4, figsize=(21, 10))
-  for cutoff in globals.NNT_CUTOFFS:
-    true_nnt_b = dpp.gen_y_nnt_binary(true_nnt, cutoff)
-    surgeon_pred_b = dpp.gen_y_nnt_binary(surgeon_pred, cutoff)
-    # Confusion matrix
-    print("\nCutoff = %d" % cutoff)
-    print("Accuracy (%s): " % Xtype, metrics.accuracy_score(true_nnt_b, surgeon_pred_b, normalize=True))
-    print("F1 score (%s): " % Xtype, metrics.f1_score(true_nnt_b, surgeon_pred_b))
-    confmat = metrics.confusion_matrix(true_nnt_b, surgeon_pred_b, labels=[0, 1], normalize='true')
-    class_names = ['< ' + str(cutoff), '%d+' % cutoff]
-
-    ax = axs[(cutoff-1) // 4][(cutoff-1) % 4]
-    sn.heatmap(confmat, fmt=".2%", cmap=sn.color_palette("ch:start=.2,rot=-.3") if Xtype == 'training' else 'rocket_r',
-               annot=True, annot_kws={"size": 16}, ax=ax, linecolor='white', linewidths=0.8)
-    ax.set_title("Cutoff =%d: Confusion matrix\n(%s - %s)" % (cutoff, globals.SURGEON, Xtype),
-                 y=1.01, fontsize=16)
-    ax.set_xlabel("Predicted Class", fontsize=15)
-    ax.set_ylabel("True Class", fontsize=15)
-    ax.set_xticks(np.arange(2) + 0.5)
-    ax.set_xticklabels(class_names, fontsize=14)
-    ax.set_yticks(np.arange(2) + 0.5)
-    ax.set_yticklabels(['< ' + str(cutoff), '%d+' % cutoff], fontsize=14)
-  figs.tight_layout()
-  figs.savefig("Surgeon binclf.png")
-  return f1_sps
 
 
-# if __name__ == "__main__":
-#   data_df = prepare_data(Path("../Data_new_all", "dashboard_data_18to21.csv"),
-#                          Path("../Data_new_all", "dtime_data_18to21.csv"))
-#
-#   gen_sps_data(data_df)
+if __name__ == "__main__":
+  data_df = prepare_data(Path("../Data_new_all", "dashboard_data_18to21.csv"),
+                         Path("../Data_new_all", "dtime_data_18to21.csv"))
+
+  gen_sps_data(data_df)

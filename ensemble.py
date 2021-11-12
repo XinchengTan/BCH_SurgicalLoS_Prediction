@@ -1,7 +1,7 @@
 """
 Definitions of ensemble models
 """
-from typing import Dict, List, NamedTuple
+from typing import Dict, List, AnyStr
 import numpy as np
 import pandas as pd
 from sklearn.utils.validation import check_is_fitted
@@ -29,11 +29,11 @@ class Ensemble(object):
   Assume input classifiers are already trained
   """
 
-  def __init__(self, tasks: List, md2clfs: Dict[Dict[List]], md_weights=None):
+  def __init__(self, tasks: List, md2clfs: Dict[AnyStr, Dict[AnyStr, List]], md_weights=None):
     self.tasks = tasks
     self.md2clfs = md2clfs  # {md: {task1: [clf1, clf2, ...], }, }
     self.md_weights = md_weights if md_weights is not None else {md: np.ones_like(tasks) for md in md2clfs.keys()}
-    self.md2taskpreds = {md: {tsk: [] for tsk in tasks} for md in md2clfs.keys()}
+    self.md2taskpreds = None
     self._votes_over_nnt = None
     self.check_args()
 
@@ -46,21 +46,33 @@ class Ensemble(object):
       for md, tsk2clfs in self.md2clfs.items():
         if md not in globals.ALL_MODELS:
           raise NotImplementedError("Model %s is not supported yet!" % md)
-        if tsk2clfs.get(tsk, None) is None or len(tsk2clfs[tsk]) == 0:
-          raise ValueError("Model %s is not trained on task %s" % (md, tsk))
+        if len(tsk2clfs) == 0:
+          raise ValueError("Model %s is not trained on any task!" % md)
+        # if tsk2clfs.get(tsk, None) is None or len(tsk2clfs[tsk]) == 0:
+        #   raise ValueError("Model %s is not trained on task %s" % (md, tsk))
         # try:
         #   check_is_fitted()
 
   def predict(self, X):
+    # TODO: assign md2taskpreds here!! Do NOT init in __init__
     N = X.shape[0]
+    md2taskpreds = {md: {tsk: [] for tsk in self.tasks} for md in self.md2clfs.keys()}
     for task in self.tasks:
       if task == globals.MULTI_CLF:
         for md, task2clfs in self.md2clfs.items():
-          self.md2taskpreds[md][task].append(task2clfs[task][0].predict(X))
+          print("Predicting with multiclf: %s" % md)
+          md2taskpreds[md][task].append(task2clfs[task][0].predict(X))
+
       elif task == globals.BIN_CLF:
         for md, task2clfs in self.md2clfs.items():
+          if len(task2clfs[task]) != len(globals.NNT_CUTOFFS):
+            print("Skip '%s' that does not have binary classfication" % md)
+            continue
+          print("Predicting with binclf: %s" % md)
           for nnt in globals.NNT_CUTOFFS:
-            self.md2taskpreds[md][task].append(task2clfs[task][nnt].predict(X))
+            pred = task2clfs[task][nnt].predict(X)
+            md2taskpreds[md][task].append(pred)
+    self.md2taskpreds = md2taskpreds
 
     # Ensemble Rule 1: Equal weights for each model
     self._votes_over_nnt = self._get_vote_counts(N, globals.NNT_CLASS_CNT, how='uniform')
@@ -98,7 +110,7 @@ class Ensemble(object):
       for md, task2preds in self.md2taskpreds.items():
         for task, preds in task2preds.items():
           if task == globals.MULTI_CLF:
-            votes_over_nnt[np.arange(n_samples), preds[0]] += 1
+            votes_over_nnt[np.arange(n_samples), preds[0].astype(int)] += 1
           elif task == globals.BIN_CLF:
             # If pred == 1 at cutoff=c, add vote count by 1 for all classes<=c
             for le_nnt in range(len(preds)):
