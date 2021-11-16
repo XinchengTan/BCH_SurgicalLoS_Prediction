@@ -1,6 +1,7 @@
 """
 This script contains helper functions to prepare the raw dataset pulled from DB.
 """
+from IPython.display import display
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,14 +23,17 @@ def gen_cols_with_nan(df):
   return res
 
 
-def print_df_info(df, dfname="Dashboard"):
+def print_df_info(df, dfname="Dashboard", other_cols=None):
   print("%s columns:\n" % dfname, df.keys())
-  print("Number of cases:", df['SURG_CASE_KEY'].nunique())
-  print("Number of NaNs in each column:\n", gen_cols_with_nan(df))
+  print("Number of cases: %d" % df['SURG_CASE_KEY'].nunique())
+  if other_cols:
+    for col_name in other_cols:
+      print("Number of unique, non-NaN values in '%s': %d" % (col_name, df[col_name].nunique(dropna=True)))
+  print("Number of NaNs in each column:\n%s" % gen_cols_with_nan(df))
   print("\n")
 
 
-def prepare_data(data_fp, dtime_fp, cpt_fp, cpt_grp_fp, exclude2021=True):
+def prepare_data(data_fp, dtime_fp, cpt_fp, cpt_grp_fp, diag_fp, exclude2021=True):
   """
   Prepares the patient LoS dataset, combining datetime and CPT related info
   """
@@ -67,19 +71,21 @@ def prepare_data(data_fp, dtime_fp, cpt_fp, cpt_grp_fp, exclude2021=True):
   cpt_df = cpt_df.join(cpt_grp_df.set_index('CPT_CODE'), on='CPT_CODE', how='inner')
   print_df_info(cpt_df, 'CPT with Group')
 
-  # debug:
-  tmp_df = dashb_df.join(cpt_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')
-  print("\nNumber of unique CPT groups in Dashboard dataset: ", tmp_df['CPT_GROUP'].nunique())
-  tmp_df = tmp_df.loc[tmp_df['DISCHARGE_DATE'].dt.year < 2021]
-  print("Number of unique CPT groups in dashboard dataset (exclude 2021)", tmp_df['CPT_GROUP'].nunique())
-  tmp_df = tmp_df.loc[tmp_df['SPS_PREDICTED_LOS'].notnull()]
-  print("Number of unique CPT groups in SPS dataset (exclude 2021): ", tmp_df['CPT_GROUP'].nunique())
+  # # debug:
+  # tmp_df = dashb_df.join(cpt_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')
+  # print("\nNumber of unique CPT groups in Dashboard dataset: ", tmp_df['CPT_GROUP'].nunique())
+  # tmp_df = tmp_df.loc[tmp_df['DISCHARGE_DATE'].dt.year < 2021]
+  # print("Number of unique CPT groups in dashboard dataset (exclude 2021)", tmp_df['CPT_GROUP'].nunique())
+  # tmp_df = tmp_df.loc[tmp_df['SPS_PREDICTED_LOS'].notnull()]
+  # print("Number of unique CPT groups in SPS dataset (exclude 2021): ", tmp_df['CPT_GROUP'].nunique())
 
-  cpt_df = cpt_df.groupby('SURG_CASE_KEY').agg({
+  cpt_df = cpt_df.groupby('SURG_CASE_KEY')\
+    .agg({
     'CPT_CODE': lambda x: list(x),
     'length_of_stay_decile': lambda x: list(x),
     'CPT_GROUP': lambda x: list(x)
-  }).reset_index()
+  })\
+    .reset_index()
   print("\nDiscarded %d cases whose CPT(s) are all unknown!\n" % (all_cases_cnt - cpt_df.shape[0]))
 
   # Join case to list of CPTs with the dashboard data
@@ -88,9 +94,21 @@ def prepare_data(data_fp, dtime_fp, cpt_fp, cpt_grp_fp, exclude2021=True):
              'length_of_stay_decile': 'CPT_DECILES',
              'CPT_GROUP': 'CPT_GROUPS'}
             )
-  print_df_info(dashb_df, dfname="Dashboard df with CPT info")
+  print_df_info(dashb_df, dfname="Dashboard DF with CPT info")
   # left join: 18654; inner join: 17269
 
+  # Join with CCSR df
+  diags_df = pd.read_csv(diag_fp)
+  print_df_info(diags_df, "Diagnosis DF", other_cols=['ccsr_1', 'icd10'])
+  diags_df = diags_df.drop(columns=['icd10'])\
+    .groupby('SURG_CASE_KEY')\
+    .agg({'ccsr_1': lambda x: [xi for xi in x if pd.notna(xi)]})\
+    .reset_index()\
+    .rename(columns={'ccsr_1': 'CCSRS'})
+
+  # Join with dashboard df
+  dashb_df = dashb_df.join(diags_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')
+  print_df_info(dashb_df, 'Dashboard DF with CCSR info')
 
   # Exclude 2021 data by request
   if exclude2021:

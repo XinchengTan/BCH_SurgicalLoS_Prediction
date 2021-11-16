@@ -17,11 +17,11 @@ FEATURE_COLS = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
                 'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
                 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
                 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
-                'CPT_GROUPS', 'PRIMARY_PROC']
+                'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS']
 
 SPS_LOS_FTR = 'SPS_PREDICTED_LOS'
 FEATURE_COLS_SPS = FEATURE_COLS + [SPS_LOS_FTR]
-NON_NUMERIC_COLS = ['SURG_CASE_KEY', 'CPT_GROUPS', 'PRIMARY_PROC']
+NON_NUMERIC_COLS = ['SURG_CASE_KEY', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS']
 
 
 DELTA = 1e-8
@@ -85,9 +85,10 @@ clf2name = {LGR: "Logistic Regression",
             DTCLF: "Decision Tree Classifier",
             RMFCLF: "Random Forest Classifier",
             GBCLF: "Gradient Boosting Classifier",
-            ORDCLF_LOGIT: "Ordinal Classifier - Logit",
-            ORDCLF_PROBIT: "Ordinal Classifier - Probit",
-            } # XGBCLF: "XGBoost Classifier"
+            }
+# XGBCLF: "XGBoost Classifier",
+# ORDCLF_LOGIT: "Ordinal Classifier - Logit",
+# ORDCLF_PROBIT: "Ordinal Classifier - Probit",
 
 
 binclf2name = {LGR: "Logistic Regression",

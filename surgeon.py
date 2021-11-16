@@ -38,6 +38,14 @@ def surgeon_models_both_wrong(dataset: dpp.Dataset, md2multiclf):
 
 
 def gen_surgeon_model_agree_df_and_Xydata(dataset: dpp.Dataset, md2multiclf, md, use_test=True):
+  return gen_surgeon_model_agree_or_not_df_and_Xydata(dataset, md2multiclf, md, use_test, agree=True)
+
+
+def gen_surgeon_model_disagree_df_and_Xydata(dataset: dpp.Dataset, md2multiclf, md, use_test=True):
+  return gen_surgeon_model_agree_or_not_df_and_Xydata(dataset, md2multiclf, md, use_test, agree=False)
+
+
+def gen_surgeon_model_agree_or_not_df_and_Xydata(dataset: dpp.Dataset, md2multiclf, md, use_test=True, agree=True):
 
   Xdata, ydata, dataset_df_idx = (dataset.Xtest, dataset.ytest, dataset.test_idx) if use_test \
     else (dataset.Xtrain, dataset.ytrain, dataset.train_idx)
@@ -48,7 +56,7 @@ def gen_surgeon_model_agree_df_and_Xydata(dataset: dpp.Dataset, md2multiclf, md,
   md_pred = clf.predict(Xdata)
 
   # ID all the cases where model prediction and surgeon estimation agree
-  ms_agree_data_idx = np.where(surgeon_pred == md_pred)[0]
+  ms_agree_data_idx = np.where(surgeon_pred == md_pred)[0] if agree else np.where(surgeon_pred != md_pred)[0]
   agree_Xdata = Xdata[ms_agree_data_idx, :]  # generate data matrix of all agreement cases
   agree_ydata = ydata[ms_agree_data_idx]
 
@@ -78,11 +86,11 @@ def gen_surgeon_model_both_wrong_df(dataset: dpp.Dataset, md2multiclf, md, disag
   ms_agree_df_index = dataset.test_idx[ms_agree_test_idx]
 
   # Hit Rate of the cohort
-  logging.info("Model & Surgeon Hit Rate: %.2f%%" %
+  print("Model & Surgeon Hit Rate: %.2f%%" %
         (100 * metrics.accuracy_score(true_nnt[ms_agree_test_idx], md_pred[ms_agree_test_idx])))
 
   # Percentage of mode-surgeon agreements
-  logging.info("\nSurgeon estimation and model prediction agrees in {:.2f}% among {x} cases".format(
+  print("\nSurgeon estimation and model prediction agrees in {:.2f}% among {x} cases".format(
     100 * len(ms_agree_test_idx) / len(true_nnt), x=len(true_nnt)))
 
   # When model and surgeon agrees, what's the percentage of the cases where both are wrong?
@@ -93,7 +101,7 @@ def gen_surgeon_model_both_wrong_df(dataset: dpp.Dataset, md2multiclf, md, disag
   err_ratio = len(wrong_by_ge_d_nnts_idx) / len(agree_true)
   wrong_by_ge_d_nnts_df_index = ms_agree_df_index[wrong_by_ge_d_nnts_idx]
 
-  logging.info("\nIn %d cases when surgeon and model agree, prediction is wrong by >= 2 NNTs for %d cases (%.2f%%)" % (
+  print("\nIn %d cases when surgeon and model agree, prediction is wrong by >= 2 NNTs for %d cases (%.2f%%)" % (
     len(agree_true), len(wrong_by_ge_d_nnts_idx), 100 * err_ratio))
   ret = dataset.df.iloc[wrong_by_ge_d_nnts_df_index].copy()
   ret['Error'] = err[wrong_by_ge_d_nnts_idx]

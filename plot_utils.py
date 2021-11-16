@@ -134,7 +134,8 @@ def plot_error_hist_pct(true_y, pred_y, md_name, Xtype=globals.XTRAIN, yType="Lo
     err = np.array(pred_y)[true_y == i] - np.array(true_y)[true_y == i]
     cnter = Counter(err)
     label = 'True NNT = %d' % i if i < globals.MAX_NNT + 1 else 'True NNT = %d+' % globals.MAX_NNT
-    ax.bar(bins+wd*(i - center_i), [100 * cnter[j] / outcome_cntr[i] for j in bins], width=0.1, label=label)
+    bar_ys = [100 * cnter[j] / outcome_cntr[i] if outcome_cntr[i] != 0 else 0 for j in bins]
+    ax.bar(bins+wd*(i - center_i), bar_ys, width=0.1, label=label)
 
   ax.set_title("Prediction Error Histogram (%s - %s)" % (md_name, Xtype), y=1.01, fontsize=18)
   ax.set_xlabel(yType, fontsize=16)

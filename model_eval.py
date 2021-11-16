@@ -2,10 +2,12 @@
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
+from IPython.display import display
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sn
+from tabulate import tabulate
 
 from sklearn import metrics
 from sklearn.calibration import calibration_curve
@@ -128,73 +130,76 @@ def scorer_1nnt_tol(ytrue, ypred):
   return acc_1nnt_tol
 
 
-def eval_multiclf_on_Xy(clf, X, y, md_name, XType, yType=globals.NNT):
+def rmse(g):
+  rmse = np.sqrt(metrics.mean_squared_error(g['NUM_OF_NIGHTS'], g['Predicted']))
+  return pd.Series(dict(rmse=rmse))
+
+
+def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT):
   pred_y = clf.predict(X)
+  Xdf = Xdf.copy(deep=True)
 
   # Numeric Metrics
   mse = metrics.mean_squared_error(y, pred_y)
   rmse = np.sqrt(mse)
   acc = metrics.accuracy_score(y, pred_y, normalize=True)
   acc_1nnt = scorer_1nnt_tol(y, pred_y)
-  f1s = pd.DataFrame({"NNT class": globals.NNT_CLASS_LABELS, "F-1 score": metrics.f1_score(y, pred_y, average=None)})
+  f1s = pd.DataFrame({"NNT class": globals.NNT_CLASS_LABELS,
+                      "F-1 score": metrics.f1_score(y, pred_y, labels=globals.NNT_CLASSES, average=None)})
   rsqr = clf.score(X, y) if ("Ordinal" not in md_name) and ("Ensemble" not in md_name) else np.nan
-
   model_perf = ModelPerf(XType, md_name, clf, acc, acc_1nnt, rmse, f1s, rsqr)
 
   # Confusion Matrix
   conf_mat = gen_confusion_matrix(y, pred_y, md_name, XType)
 
   # Error Histogram
-  figs, axs = plt.subplots(nrows=3, ncols=1, figsize=(18, 30))
+  figs, axs = plt.subplots(nrows=3, ncols=1, figsize=(14, 24))
   pltutil.plot_error_histogram(y, pred_y, md_name, XType, yType=yType, ax=axs[0])
   pltutil.plot_error_histogram(y, pred_y, md_name, XType, yType=yType, ax=axs[1], groupby_outcome=True)
   pltutil.plot_error_hist_pct(y, pred_y, md_name, XType, yType=yType, ax=axs[2])
 
+  # Error distribution among primary procedure
+  Xdf['Predicted'] = pred_y
+  if 'Error' not in Xdf.columns:
+    Xdf['Error'] = pred_y - y
+    Xdf['Abs Error'] = np.abs(pred_y - y)
+  #display(Xdf[['SURG_CASE_KEY', 'Predicted', 'Error', 'Abs Error']].head(30))
+  pproc_df = Xdf.groupby(by=['PRIMARY_PROC']).size().reset_index(name='Counts')
+  pproc_df['Count (%)'] = pproc_df['Counts'] / len(pred_y)
+
+  pproc_df = pproc_df\
+    .join((Xdf['Predicted'].eq(Xdf['NUM_OF_NIGHTS'])).groupby(Xdf['PRIMARY_PROC'], observed=True).mean()
+          .reset_index(name='Accuracy')
+          .set_index('PRIMARY_PROC'),
+          on='PRIMARY_PROC', how='left')\
+    .join(Xdf.groupby(by=['PRIMARY_PROC'], observed=True)['Abs Error'].max()
+          .reset_index(name='Max Abs Error')
+          .set_index('PRIMARY_PROC'),
+          on='PRIMARY_PROC', how='left'
+          )\
+    .join(Xdf.groupby(by=['PRIMARY_PROC'], observed=True)['Error'].std()
+          .reset_index(name='Error Std')
+          .set_index('PRIMARY_PROC'),
+          on='PRIMARY_PROC', how='left'
+          )\
+    .join(Xdf.groupby(by=['PRIMARY_PROC'])['Error'].apply(lambda x: x.pow(2).mean()**0.5)
+          .reset_index(name='RMSE')
+          .set_index('PRIMARY_PROC'),
+          on='PRIMARY_PROC', how='left'
+          )
+  pproc_df.sort_values(by=['Counts', 'Accuracy'], ascending=False, inplace=True)
+  pproc_df30 = pproc_df.head(30).style\
+      .set_table_attributes("style='display:inline'")\
+      .set_caption("Model Performance Grouped by Primary Procedure (%s cases)" % XType) \
+      .set_properties(**{'text-align': 'center'})\
+      .format("{:.2%}", subset=["Count (%)", "Accuracy"])\
+      .format("{:.2f}", subset=["Max Abs Error", "Error Std", "RMSE"])
+  display(pproc_df30)
+
+  # Error distribution among CPTs
+
+
   return model_perf
-
-
-# def eval_multi_clf(clf, dataset: Dataset, md_name):
-#   Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
-#
-#   pred_train, pred_val = clf.predict(Xtrain), clf.predict(Xtest)
-#   train_mse = metrics.mean_squared_error(ytrain, pred_train)
-#   val_mse = metrics.mean_squared_error(ytest, pred_val)
-#   print("%s:" % md_name)
-#   print("Accuracy (training): ", metrics.accuracy_score(ytrain, pred_train, normalize=True))
-#   print("Accuracy (test): ", metrics.accuracy_score(ytest, pred_val, normalize=True))
-#   class_names = [str(i) for i in range(globals.MAX_NNT+1)] + ["%d+" % globals.MAX_NNT]
-#   f1_train = pd.DataFrame({"NNT class": class_names, "F-1 score": metrics.f1_score(ytrain, pred_train, average=None)})
-#   f1_val = pd.DataFrame({"NNT class": class_names, "F-1 score": metrics.f1_score(ytest, pred_val, average=None)})
-#   print("F-1 score (training): ", f1_train)
-#   print("F-1 score (training): ", f1_val)
-#
-#   if ("Ordinal" not in md_name) and ("Ensemble" not in md_name):
-#     print("R-squared (training set): ", clf.score(Xtrain, ytrain))
-#     print("R-squared (test set): ", clf.score(Xtest, ytest))
-#     print("MSE (training set): ", train_mse, "RMSE: ", np.sqrt(train_mse))
-#     print("MSE (test set): ", val_mse, "RMSE: ", np.sqrt(val_mse))
-#
-#   # Confusion matrix
-#   labels = [str(i) for i in range(globals.MAX_NNT + 2)]
-#   labels[-1] = '%s+' % globals.MAX_NNT
-#   gen_confusion_matrix(ytrain, pred_train, md_name, isTrain=True)
-#   gen_confusion_matrix(ytest, pred_val, md_name, isTrain=False)
-#
-#   # Error histogram
-#   type_tr, type_tst, yType = 'train', 'test', 'Number of nights'
-#   figs, axs = plt.subplots(nrows=1, ncols=2, figsize=(18, 5))
-#   pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype=type_tr, yType=yType, ax=axs[0])
-#   pltutil.plot_error_histogram(ytest, pred_val, md_name, Xtype=type_tst, yType=yType, ax=axs[1])
-#
-#   figs2, axs2 = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
-#   pltutil.plot_error_histogram(ytrain, pred_train, md_name, Xtype=type_tr, yType=yType, ax=axs2[0], groupby_outcome=True)
-#   pltutil.plot_error_hist_pct(ytrain, pred_train, md_name, Xtype=type_tr, yType=yType, ax=axs2[1])
-#
-#   figs3, axs3 = plt.subplots(nrows=2, ncols=1, figsize=(18, 20))
-#   pltutil.plot_error_histogram(ytest, pred_val, md_name, Xtype=type_tst, yType=yType, ax=axs3[0], groupby_outcome=True)
-#   pltutil.plot_error_hist_pct(ytest, pred_val, md_name, Xtype=type_tst, yType=yType, ax=axs3[1])
-#
-#   return pred_train, pred_val, f1_train, f1_val
 
 
 def eval_binary_clf(clf, cutoff, dataset: Dataset, md_name, plot_calib_curve=True, plot_roc=True,

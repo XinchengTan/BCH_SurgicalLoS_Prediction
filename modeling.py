@@ -312,26 +312,34 @@ def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType):
   - ......
   """
   Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
+  df = dataset.df
   md2ModelPerf = defaultdict(lambda: defaultdict(lambda: None))
+  md2pproc_df = defaultdict(lambda: defaultdict(lambda: None))
   xtypes = [XType] if XType is not None else [globals.XTRAIN, globals.XTEST]
 
   for md, clf in model2trained_clf.items():
     if XType is None:  # evaluate both training and test set
-      md2ModelPerf[md][globals.XTRAIN] = model_eval.eval_multiclf_on_Xy(clf, Xtrain, ytrain, globals.clf2name[md], globals.XTRAIN)
-      md2ModelPerf[md][globals.XTEST] = model_eval.eval_multiclf_on_Xy(clf, Xtest, ytest, globals.clf2name[md], globals.XTEST)
+      md2ModelPerf[md][globals.XTRAIN] = model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.train_idx], Xtrain, ytrain,
+                                                                        globals.clf2name[md], globals.XTRAIN)
+      md2ModelPerf[md][globals.XTEST] = model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.test_idx], Xtest, ytest,
+                                                                       globals.clf2name[md], globals.XTEST)
 
     elif XType == globals.XTRAIN:
-      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, Xtrain, ytrain, globals.clf2name[md], XType)
+      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.train_idx], Xtrain, ytrain,
+                                                               globals.clf2name[md], XType)
 
     elif XType == globals.XTEST:
-      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, Xtest, ytest, globals.clf2name[md], XType)
+      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.test_idx], Xtest, ytest,
+                                                               globals.clf2name[md], XType)
 
     elif XType == globals.XAGREE:
-      _, Xdata, ydata = surgeon.gen_surgeon_model_agree_df_and_Xydata(dataset, model2trained_clf, md, use_test=True)
-      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, Xdata, ydata, globals.clf2name[md], XType)
+      data_df, Xdata, ydata = surgeon.gen_surgeon_model_agree_df_and_Xydata(dataset, model2trained_clf, md, use_test=True)
+      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, data_df, Xdata, ydata, globals.clf2name[md], XType)
 
     elif XType == globals.XDISAGREE:
-      raise NotImplementedError("XType '%s' is not implemented yet!" % XType)
+      data_df, Xdata, ydata = surgeon.gen_surgeon_model_disagree_df_and_Xydata(dataset, model2trained_clf, md,
+                                                                            use_test=True)
+      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, data_df, Xdata, ydata, globals.clf2name[md], XType)
 
     else:
       raise NotImplementedError("XType '%s' is not implemented yet!" % XType)

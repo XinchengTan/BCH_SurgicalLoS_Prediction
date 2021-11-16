@@ -1,4 +1,8 @@
-"""Helper functions to preprocess the data and generate data matrix with its corresponding labels"""
+"""
+Helper functions to preprocess the data and generate data matrix with its corresponding labels
+"""
+
+from IPython.display import display
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -58,13 +62,15 @@ def gen_Xy(df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None,
         dummies = pd.get_dummies(X[oh_col], prefix=oh_col)
       elif dtype == list:  # Need to expand list to (row_id, oh_col indicator) first
         s = X[oh_col].explode()
-        dummies = pd.crosstab(s.index, s)
+        dummies = pd.crosstab(s.index, s).add_prefix(oh_col[:-1]+'_')
+        ## Alternative:
+        # dummies = X[oh_col].apply(lambda x: pd.Series(1, x)).fillna(0)
+        # X = pd.concat([X.drop(columns=[oh_col]), dummies], axis=1)
       else:
         raise NotImplementedError
-      X = X.drop(columns=[oh_col]).join(dummies)
+      X = X.drop(columns=[oh_col]).join(dummies).fillna(0)
       feature_cols.remove(oh_col)
       feature_cols.extend(dummies.columns.to_list())
-  #dp.print_df_info(X, 'Data Matrix (pd DF)')
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_key = X['SURG_CASE_KEY'].to_numpy()
@@ -76,6 +82,7 @@ def gen_Xy(df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None,
   # Bucket SPS predicted LoS into 9 classes, if there such prediction exists
   if globals.SPS_LOS_FTR in cols:  # Assume SPS prediction are all integers?
     X.loc[X[globals.SPS_LOS_FTR] > globals.MAX_NNT] = globals.MAX_NNT + 1
+  display(X.head(20))
   X = X.to_numpy(dtype=np.float64)
 
   # Make response vector y
