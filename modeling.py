@@ -314,7 +314,6 @@ def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType):
   Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
   df = dataset.df
   md2ModelPerf = defaultdict(lambda: defaultdict(lambda: None))
-  md2pproc_df = defaultdict(lambda: defaultdict(lambda: None))
   xtypes = [XType] if XType is not None else [globals.XTRAIN, globals.XTEST]
 
   for md, clf in model2trained_clf.items():

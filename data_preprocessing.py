@@ -37,7 +37,6 @@ class Dataset(object):
     return res
 
 
-
 # TODO: add data cleaning, e.g. check for negative LoS and remove it
 # Generate data matrix X
 def gen_Xy(df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None):
@@ -51,10 +50,21 @@ def gen_Xy(df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None,
   :return:
   """
   # Make data matrix X
+  X, feature_cols, X_case_key = gen_X(df, cols, onehot_cols, onehot_dtypes)
+  X = X.to_numpy(dtype=np.float64)
+
+  # Get outcome vector
+  y = gen_y(df, outcome)
+  return X, y, feature_cols, X_case_key
+
+
+def gen_X(df, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None, remove_nonnumeric=True, verbose=False):
+  # Make data matrix X numeric
   X = df[cols]
   X.loc[(X.SEX_CODE != 'F'), 'SEX_CODE'] = 0.0
   X.loc[(X.SEX_CODE == 'F'), 'SEX_CODE'] = 1.0
   feature_cols = list(cols)
+
   if onehot_cols is not None:
     # Apply one-hot encoding to the designated columns
     for oh_col, dtype in zip(onehot_cols, onehot_dtypes):
@@ -62,10 +72,12 @@ def gen_Xy(df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None,
         dummies = pd.get_dummies(X[oh_col], prefix=oh_col)
       elif dtype == list:  # Need to expand list to (row_id, oh_col indicator) first
         s = X[oh_col].explode()
-        dummies = pd.crosstab(s.index, s).add_prefix(oh_col[:-1]+'_')
-        ## Alternative:
-        # dummies = X[oh_col].apply(lambda x: pd.Series(1, x)).fillna(0)
-        # X = pd.concat([X.drop(columns=[oh_col]), dummies], axis=1)
+        dummies = pd.crosstab(s.index, s).add_prefix(oh_col[:-1] + '_')
+        dummies[dummies > 1] = 1  # CCSR list contains duplicates...
+        print(dummies.describe())
+        # # Alternative:
+        # dummies = X[oh_col].apply(lambda x: pd.Series(1, x))
+        # X = pd.concat([X.drop(columns=[oh_col]), dummies.fillna(0)], axis=1)
       else:
         raise NotImplementedError
       X = X.drop(columns=[oh_col]).join(dummies).fillna(0)
@@ -74,33 +86,39 @@ def gen_Xy(df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None,
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_key = X['SURG_CASE_KEY'].to_numpy()
-  X.drop(columns=globals.NON_NUMERIC_COLS, inplace=True, errors='ignore')  #
-  for nnm_col in globals.NON_NUMERIC_COLS:
-    if nnm_col in feature_cols:
-      feature_cols.remove(nnm_col)
+  if remove_nonnumeric:
+    X.drop(columns=globals.NON_NUMERIC_COLS, inplace=True, errors='ignore')  #
+    for nnm_col in globals.NON_NUMERIC_COLS:
+      if nnm_col in feature_cols:
+        feature_cols.remove(nnm_col)
 
   # Bucket SPS predicted LoS into 9 classes, if there such prediction exists
   if globals.SPS_LOS_FTR in cols:  # Assume SPS prediction are all integers?
-    X.loc[X[globals.SPS_LOS_FTR] > globals.MAX_NNT] = globals.MAX_NNT + 1
-  display(X.head(20))
-  X = X.to_numpy(dtype=np.float64)
+    X.loc[(X[globals.SPS_LOS_FTR] > globals.MAX_NNT), globals.SPS_LOS_FTR] = globals.MAX_NNT + 1
+  if verbose:
+    display(X.head(20))
+  return X, feature_cols, X_case_key
 
-  # Make response vector y
+
+def gen_y(df, outcome):
+  # Generate an outcome vector y with shape: (n_samples, )
   y = np.array(df.LENGTH_OF_STAY.to_numpy())
   if outcome == globals.LOS:
-    return X, y
+    return y
   elif outcome == ">12h":
     y[y > 0.5] = 1
     y[y <= 0.5] = 0
   elif outcome == ">1d":
     y[y > 1] = 1
     y[y <= 1] = 0
-  elif outcome == "NNT":
-    y = gen_y_nnt(df['NUM_OF_NIGHTS'])
+  elif outcome == globals.NNT:
+    y = gen_y_nnt(df[globals.NNT])
   elif outcome.endswith("nnt"):
     cutoff = int(outcome.split("nnt")[0])
     y = gen_y_nnt_binary(y, cutoff)
-  return X, y, feature_cols, X_case_key
+  else:
+    raise NotImplementedError("Outcome type '%s' is not implemented yet!" % outcome)
+  return y
 
 
 def gen_y_nnt(dfcol):

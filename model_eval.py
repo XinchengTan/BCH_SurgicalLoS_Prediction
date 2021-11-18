@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sn
-from tabulate import tabulate
 
 from sklearn import metrics
 from sklearn.calibration import calibration_curve
@@ -168,7 +167,7 @@ def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT):
   pproc_df['Count (%)'] = pproc_df['Counts'] / len(pred_y)
 
   pproc_df = pproc_df\
-    .join((Xdf['Predicted'].eq(Xdf['NUM_OF_NIGHTS'])).groupby(Xdf['PRIMARY_PROC'], observed=True).mean()
+    .join((Xdf['Predicted'].eq(Xdf[yType])).groupby(Xdf['PRIMARY_PROC'], observed=True).mean()
           .reset_index(name='Accuracy')
           .set_index('PRIMARY_PROC'),
           on='PRIMARY_PROC', how='left')\
@@ -186,15 +185,22 @@ def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT):
           .reset_index(name='RMSE')
           .set_index('PRIMARY_PROC'),
           on='PRIMARY_PROC', how='left'
-          )
+          )\
+    .join(Xdf.groupby(by=['PRIMARY_PROC'])[yType].std()
+          .reset_index(name='True Outcome Std')
+          .set_index('PRIMARY_PROC'),
+          on='PRIMARY_PROC', how='left')
   pproc_df.sort_values(by=['Counts', 'Accuracy'], ascending=False, inplace=True)
-  pproc_df30 = pproc_df.head(30).style\
+  pproc_df_all = pproc_df.head(1000).style\
       .set_table_attributes("style='display:inline'")\
       .set_caption("Model Performance Grouped by Primary Procedure (%s cases)" % XType) \
       .set_properties(**{'text-align': 'center'})\
       .format("{:.2%}", subset=["Count (%)", "Accuracy"])\
-      .format("{:.2f}", subset=["Max Abs Error", "Error Std", "RMSE"])
-  display(pproc_df30)
+      .format("{:.2f}", subset=["Max Abs Error", "Error Std", "RMSE", "True Outcome Std"])
+  if md_name == globals.clf2name[globals.RMFCLF]:
+    pproc_df.to_csv('primary_procedures_error_cases(rmf-bal).csv')
+    pproc_df_all.to_csv('pproc_error.csv')
+  display(pproc_df_all)
 
   # Error distribution among CPTs
 

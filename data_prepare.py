@@ -55,7 +55,7 @@ def prepare_data(data_fp, dtime_fp, cpt_fp, cpt_grp_fp, diag_fp, exclude2021=Tru
 
   # Compute the number of nights
   admit_date, discharge_date = dtime_df['ADMIT_DATE'].dt.date, dtime_df['DISCHARGE_DATE'].dt.date
-  dtime_df['NUM_OF_NIGHTS'] = (discharge_date - admit_date) / np.timedelta64(1, 'D')
+  dtime_df[globals.NNT] = (discharge_date - admit_date) / np.timedelta64(1, 'D')
 
   # Combine with dashboard_df
   dashb_df = dashb_df.join(dtime_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')
