@@ -1,3 +1,5 @@
+from pathlib import Path
+
 diaglabels = ['Cardiovascular', 'Digestive', 'Endocrine',
                 'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
                 'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic',
@@ -17,18 +19,55 @@ FEATURE_COLS = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
                 'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
                 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
                 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
-                'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS']
+                'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
 
 FEATURE_COLS_NO_DECILE = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
                 'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
                 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
                 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
-                'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS']
+                'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
 
 SPS_LOS_FTR = 'SPS_PREDICTED_LOS'
 FEATURE_COLS_SPS = FEATURE_COLS + [SPS_LOS_FTR]
-NON_NUMERIC_COLS = ['SURG_CASE_KEY', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS']
+NON_NUMERIC_COLS = ['SURG_CASE_KEY', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
 
+COHORT_ALL = 'All Cases'
+COHORT_TONSIL = 'Tonsillectomy'
+COHORT_SPINE = 'Spinal Fusion'
+COHORT_HIP = 'Hip'
+
+COHORT_TO_PPROCS = {COHORT_TONSIL: {'TONSILLECTOMY WITH ADENOIDECTOMY, ORL', 'TONSILLOTOMY WITH ADENOIDECTOMY, ORL',
+                                    'TONSILLECTOMY, ORL', 'ADENOIDECTOMY, ORL', 'TONSILLOTOMY, ORL',
+                                    'TONSILLECTOMY, LINGUAL, ORL'},
+                    COHORT_SPINE: {'SPINE, FUSION, POSTERIOR, THORACIC, ORTH', 'SPINE, FUSION, POSTERIOR, THORACIC TO LU',
+                                   'SPINE, FUSION, POSTERIOR, THORACIC TO PE', 'SPINE, FUSION, POSTERIOR, LUMBAR TO SACR',
+                                   'SPINE FUSION POSTERIOR, LUMBAR TO SACRAL', 'SPINE, FUSION W/PLIF, ORTHO',
+                                   'SPINE, FUSION, POSTERIOR, CERVICAL TO TH', 'SPINE, FUSION, POSTERIOR, CERVICAL, ORTH',
+                                   'zzSPINE FUSION POSTERIOR, LUMBAR, ORTHO'}}
+
+COHORT_TO_CCSRS = {COHORT_TONSIL: {'Chronic respiratory insufficiency',
+                                   'Epilepsy',
+                                   'Malacia of trachea or larynx',
+                                   'Down syndrome',
+                                   'Austism spectrum disorder',
+                                   'Cerebral palsy',
+                                   'Esophageal reflux',
+                                   'Enterostomy',
+                                   'Neurodevelopmental disorder',
+                                   'Chronic rhinitis',
+                                   'Asthma',
+                                   'Obesity',
+                                   'Hearing loss'},
+                   COHORT_SPINE: {'Chronic respiratory insufficiency',
+                                  'Bladder dysfunction',
+                                  'Dysphagia',
+                                  'Anxiety disorder',
+                                  'Esophageal reflux',
+                                  'Enterostomy',
+                                  'Intellectual disability',
+                                  'Epilepsy',
+                                  'Asthma',
+                                  'Tracheostomy'}}
 
 DELTA = 1e-8
 SEED = 998
@@ -79,6 +118,7 @@ reg2name = {LR: "Linear Regression",
 
 LGR = 'lgr'
 SVC = 'svc'
+KNN = 'knn'
 DTCLF = 'dt-clf'
 RMFCLF = 'rmf-clf'
 GBCLF = 'gb-clf'
@@ -88,6 +128,7 @@ ORDCLF_PROBIT = 'ord-clf-probit'
 
 clf2name = {LGR: "Logistic Regression",
             SVC: "Support Vector Classifier",
+            KNN: "K Nearest Neighbor",
             DTCLF: "Decision Tree Classifier",
             RMFCLF: "Random Forest Classifier",
             GBCLF: "Gradient Boosting Classifier",
@@ -126,3 +167,13 @@ SCR_AUC = 'roc_auc'
 SCR_1NNT_TOL = 'Accuracy (tol = 1 NNT)'
 SCR_1NNT_TOL_ACC = 'Accuracy (Hit rate and tol=1NNT)'
 SCR_MULTI_ALL = 'multiple scorers (all)'
+
+
+# File path of evaluation results
+RESULTS = Path('./results')
+RES_SPS_DATA_ALL = RESULTS / 'sps_data_all'
+RES_SPS_DATA_AGREE = RESULTS / 'sps_data_agree'
+RES_SPS_DATA_DISAGREE = RESULTS / 'sps_data_disagree'
+RES_SPS_DATA_TONSIL = RESULTS / 'sps_data_tonsil'
+RES_SPS_DATA_SPINE = RESULTS / 'sps_data_spine'
+RES_SPS_DATA_HIP = RESULTS / 'sps_data_hip'

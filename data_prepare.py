@@ -92,19 +92,19 @@ def prepare_data(data_fp, dtime_fp, cpt_fp, cpt_grp_fp, diag_fp, exclude2021=Tru
   dashb_df = dashb_df.join(cpt_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')\
     .rename(columns={'CPT_CODE': 'CPTS',
              'length_of_stay_decile': 'CPT_DECILES',
-             'CPT_GROUP': 'CPT_GROUPS'}
-            )
+             'CPT_GROUP': 'CPT_GROUPS'})
   print_df_info(dashb_df, dfname="Dashboard DF with CPT info")
   # left join: 18654; inner join: 17269
 
   # Join with CCSR df
   diags_df = pd.read_csv(diag_fp)
   print_df_info(diags_df, "Diagnosis DF", other_cols=['ccsr_1', 'icd10'])
-  diags_df = diags_df.drop(columns=['icd10'])\
+  diags_df = diags_df.dropna(axis=0, how='any', subset=['ccsr_1', 'icd10'])\
     .groupby('SURG_CASE_KEY')\
-    .agg({'ccsr_1': lambda x: [xi for xi in x if pd.notna(xi)]})\
+    .agg({'ccsr_1': lambda x: list(x),
+          'icd10': lambda x: list(x)})\
     .reset_index()\
-    .rename(columns={'ccsr_1': 'CCSRS'})
+    .rename(columns={'ccsr_1': 'CCSRS', 'icd10': 'ICD10S'})
 
   # Join with dashboard df
   dashb_df = dashb_df.join(diags_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')
@@ -131,9 +131,8 @@ def gen_data_without_sps_pred(df):
 
 
 
-
-if __name__ == "__main__":
-  data_df = prepare_data(Path("../Data_new_all", "dashboard_data_18to21.csv"),
-                         Path("../Data_new_all", "dtime_data_18to21.csv"))
-
-  gen_sps_data(data_df)
+# if __name__ == "__main__":
+#   data_df = prepare_data(Path("../Data_new_all", "dashboard_data_18to21.csv"),
+#                          Path("../Data_new_all", "dtime_data_18to21.csv"))
+#
+#   gen_sps_data(data_df)

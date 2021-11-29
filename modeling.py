@@ -27,7 +27,7 @@ Evaluation:
 Analysis:
 - feature importance (Shapley value)
 """
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -42,6 +42,7 @@ from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_sp
 
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, RidgeCV
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC, SVR
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, GradientBoostingClassifier, GradientBoostingRegressor
@@ -171,10 +172,13 @@ def run_classifier(Xtrain, ytrain, model, cls_weight=None, calibrate_method=None
     clf = LogisticRegression(random_state=0, class_weight=cls_weight, max_iter=300).fit(Xtrain, ytrain)
   elif model == globals.SVC:
     clf =SVC(gamma='auto', class_weight=cls_weight, probability=True).fit(Xtrain, ytrain)
+  elif model == globals.KNN:
+    clf = KNeighborsClassifier(n_neighbors=10).fit(Xtrain, ytrain)
   elif model == globals.DTCLF:
     clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight=cls_weight).fit(Xtrain, ytrain)
   elif model == globals.RMFCLF:
-    clf = RandomForestClassifier(max_features=130, random_state=0, class_weight=cls_weight).fit(Xtrain, ytrain)
+    max_ftr = 130 if Xtrain.shape[1] > 130 else None
+    clf = RandomForestClassifier(max_features=max_ftr, random_state=0, class_weight=cls_weight).fit(Xtrain, ytrain)
   elif model == globals.GBCLF:
     clf = GradientBoostingClassifier(random_state=0, max_depth=2).fit(Xtrain, ytrain)  # TODO: imbalanced class issue here!
   elif model == globals.XGBCLF:
@@ -195,43 +199,81 @@ def run_classifier(Xtrain, ytrain, model, cls_weight=None, calibrate_method=None
   return clf
 
 
+def minority_class_size(y):
+  return min(Counter(y).values())
+
+
 def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
   n_frts = X.shape[1]
+  minority_size = minority_class_size(y)
   if md == globals.SVC:
-    pass
-  elif md == globals.DTCLF:
-    pass
-  elif md == globals.RMFCLF:
-    #     'oob_score': False
-    #     'min_impurity_decrease': 0.0,
-    #     'min_impurity_split': None,
-    #     'criterion': ['gini', 'entropy'],
-    #     'bootstrap': True
-    clf = RandomForestClassifier(random_state=globals.SEED, class_weight=class_weight)
+    clf = SVC(random_state=globals.SEED, class_weight=class_weight, probability=False)  # if probability=True, will be slow
+    param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10],
+                   'gamma': sorted([1 / n_frts] + [1, 0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001]),
+                   'kernel': ['rbf', 'poly', 'sigmoid'],
+                   'degree': [2, 3, 4]}
+  elif md == globals.KNN:
+    clf = KNeighborsClassifier()
     param_space = {
-      'max_depth': [None, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
-      'max_features': np.arange(2, 1 + n_frts // 2, 10),
+      'algorithm': ['ball_tree', 'kd_tree', 'brute'],
+      'leaf_size': list(range(20, minority_size, 10)),
+      'metric': ['minkowski'],
+      'n_neighbors': list(range(5, minority_size + 1, minority_size//10 + 1)),
+      'p': [1, 2, 3],
+      'weights': ['uniform', 'distance']
+    }
+  elif md == globals.DTCLF:
+    # 'ccp_alpha': 0.0
+    # 'min_impurity_decrease': 0.0,
+    # 'min_impurity_split': None,
+    # 'criterion': ['gini', 'entropy'],
+    clf = DecisionTreeClassifier(random_state=globals.SEED, class_weight=class_weight)
+    param_space = {
+      'max_depth': [None] + list(range(2, 21, 2)),
+      'max_features': list(range(2, 1 + n_frts // 2, 10)) + [n_frts],
       'max_leaf_nodes': [None] + list(range(5, 101, 5)),
       'max_samples': np.arange(0.1, 1, 0.1),
       'min_samples_leaf': [1] + [i for i in range(2, 17, 2)],
-      'min_samples_split': np.arange(2, 65, 4),
+      'min_samples_split': list(range(2, int(minority_size * (1 - 1. / kfold)), 3)),
+      'splitter': ['best', 'random']
+    }
+  elif md == globals.RMFCLF:
+    # 'oob_score': False
+    # 'min_impurity_decrease': 0.0,
+    # 'min_impurity_split': None,
+    # 'criterion': ['gini', 'entropy'],
+    # 'bootstrap': True
+    clf = RandomForestClassifier(random_state=globals.SEED, class_weight=class_weight)
+    param_space = {
+      'max_depth': [None] + list(range(2, 21, 2)),
+      'max_features': sorted(set(list(range(2, n_frts // 2 + 1, n_frts//20 + 1)) + [int(np.sqrt(n_frts))])),
+      'max_leaf_nodes': [None] + list(range(5, 101, 5)),
+      'max_samples': np.arange(0.1, 1, 0.1),
+      'min_samples_leaf': [1] + [i for i in range(2, 17, 2)],
+      'min_samples_split': list(range(2, int(minority_size * (1 - 1. / kfold)), 3)),
       'n_estimators': [20, 30, 40, 50, 80, 100, 200, 300, 400]
     }
+    if not param_space['min_samples_split']:
+      raise ValueError("min_samples_split cannot < 2!")
   elif md == globals.GBCLF:
-    clf = GradientBoostingClassifier(random_state=globals.SEED, class_weight=class_weight)
+    # 'min_impurity_decrease': 0.0,
+    # 'min_impurity_split': None,
+    # 'min_weight_fraction_leaf': 0.0,
+    # 'ccp_alpha': 0.0
+    clf = GradientBoostingClassifier(random_state=globals.SEED, class_weight=class_weight,
+                                     validation_fraction=0.15, n_iter_no_change=3)
     param_space = {
       'learning_rate': [0.001, 0.03, 0.01, 0.3, 0.1, 0.3],
       'loss': 'deviance',
-      'max_depth': np.arange(3, 10),
-      'max_features': np.arange(2, n_frts+1, 2),
-      'max_leaf_nodes': None,
-      #'min_impurity_decrease': 0.0,
-      #'min_impurity_split': None,
-      # 'min_weight_fraction_leaf': 0.0,
-      'min_samples_leaf': 1,
-      'min_samples_split': 2,
+      'max_depth': [None] + list(range(2, 21, 2)),
+      'max_features': [None] + list(range(2, 1 + n_frts // 2, 2)),
+      'max_leaf_nodes': None + list(range(5, )),
+      'min_samples_leaf': [1, 2, 3, 4, 5],
+      'min_samples_split': list(range(2, int(minority_size * (1 - 1. / kfold)), 3)),
       'n_estimators': [20, 30, 40, 50, 80, 100, 200, 300, 400]
     }
+    if not param_space['min_samples_split']:
+      raise ValueError("min_samples_split cannot < 2!")
   else:
     raise NotImplementedError("Model %s is not supported!" % md)
 
@@ -300,7 +342,7 @@ def predict_nnt_multi_clf(dataset: Dataset, model=None, cls_weight=None, evaluat
   return model2trained
 
 
-def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType):
+def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType, cohort=globals.COHORT_ALL):
   """
   A high-level function that iterates through all trained multi-class classifiers and evaluate
   the performance of each on test or test and training set.
@@ -312,33 +354,34 @@ def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType):
   - ......
   """
   Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
-  df = dataset.df
+  df = dataset.cohort_df
   md2ModelPerf = defaultdict(lambda: defaultdict(lambda: None))
   xtypes = [XType] if XType is not None else [globals.XTRAIN, globals.XTEST]
 
   for md, clf in model2trained_clf.items():
+
     if XType is None:  # evaluate both training and test set
       md2ModelPerf[md][globals.XTRAIN] = model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.train_idx], Xtrain, ytrain,
-                                                                        globals.clf2name[md], globals.XTRAIN)
+                                                                        globals.clf2name[md], globals.XTRAIN, cohort=cohort)
       md2ModelPerf[md][globals.XTEST] = model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.test_idx], Xtest, ytest,
-                                                                       globals.clf2name[md], globals.XTEST)
+                                                                       globals.clf2name[md], globals.XTEST, cohort=cohort)
 
     elif XType == globals.XTRAIN:
       md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.train_idx], Xtrain, ytrain,
-                                                               globals.clf2name[md], XType)
+                                                               globals.clf2name[md], XType, cohort=cohort)
 
     elif XType == globals.XTEST:
       md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.test_idx], Xtest, ytest,
-                                                               globals.clf2name[md], XType)
+                                                               globals.clf2name[md], XType, cohort=cohort)
 
     elif XType == globals.XAGREE:
       data_df, Xdata, ydata = surgeon.gen_surgeon_model_agree_df_and_Xydata(dataset, model2trained_clf, md, use_test=True)
-      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, data_df, Xdata, ydata, globals.clf2name[md], XType)
+      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, data_df, Xdata, ydata, globals.clf2name[md], XType, cohort=cohort)
 
     elif XType == globals.XDISAGREE:
       data_df, Xdata, ydata = surgeon.gen_surgeon_model_disagree_df_and_Xydata(dataset, model2trained_clf, md,
                                                                             use_test=True)
-      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, data_df, Xdata, ydata, globals.clf2name[md], XType)
+      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, data_df, Xdata, ydata, globals.clf2name[md], XType, cohort=cohort)
 
     else:
       raise NotImplementedError("XType '%s' is not implemented yet!" % XType)

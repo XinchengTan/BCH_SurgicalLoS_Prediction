@@ -31,7 +31,7 @@ def surgeon_models_both_wrong(dataset: dpp.Dataset, md2multiclf):
   err_intersection_idx = sorted(list(err_intersection))
 
   print("\n\nNumber of cases that all models failed: %d" % len(err_intersection_idx))
-  err_intersection_df = dataset.df.loc[err_intersection_idx].copy()
+  err_intersection_df = dataset.cohort_df.iloc[err_intersection_idx].copy()
   err_intersection_df['Error'] = err_intersection_df['SPS_PREDICTED_LOS'] - err_intersection_df['NUM_OF_NIGHTS']
   err_intersection_df = err_intersection_df.sort_values(by=['Error'])
   return md2err_df, err_intersection_df
@@ -51,7 +51,7 @@ def gen_surgeon_model_agree_or_not_df_and_Xydata(dataset: dpp.Dataset, md2multic
     else (dataset.Xtrain, dataset.ytrain, dataset.train_idx)
 
   # Fetch surgeon and model prediction
-  surgeon_pred = dpp.gen_y_nnt(dataset.df.iloc[dataset_df_idx]['SPS_PREDICTED_LOS'])
+  surgeon_pred = dpp.gen_y_nnt(dataset.cohort_df.iloc[dataset_df_idx]['SPS_PREDICTED_LOS'])
   clf = md2multiclf[md]
   md_pred = clf.predict(Xdata)
 
@@ -62,7 +62,7 @@ def gen_surgeon_model_agree_or_not_df_and_Xydata(dataset: dpp.Dataset, md2multic
 
   # Generate dataframe of all agreement cases
   ms_agree_df_index = dataset_df_idx[ms_agree_data_idx]
-  agree_df = dataset.df.iloc[ms_agree_df_index] # .copy()
+  agree_df = dataset.cohort_df.iloc[ms_agree_df_index]  # .copy()
 
   return agree_df, agree_Xdata, agree_ydata
 
@@ -77,7 +77,7 @@ def gen_surgeon_model_both_wrong_df(dataset: dpp.Dataset, md2multiclf, md, disag
   :return:
   """
   true_nnt = dataset.ytest
-  surgeon_pred = dpp.gen_y_nnt(dataset.df.iloc[dataset.test_idx]['SPS_PREDICTED_LOS'])
+  surgeon_pred = dpp.gen_y_nnt(dataset.cohort_df.iloc[dataset.test_idx]['SPS_PREDICTED_LOS'])
   clf = md2multiclf[md]
   md_pred = clf.predict(dataset.Xtest)
 
@@ -103,7 +103,7 @@ def gen_surgeon_model_both_wrong_df(dataset: dpp.Dataset, md2multiclf, md, disag
 
   print("\nIn %d cases when surgeon and model agree, prediction is wrong by >= 2 NNTs for %d cases (%.2f%%)" % (
     len(agree_true), len(wrong_by_ge_d_nnts_idx), 100 * err_ratio))
-  ret = dataset.df.iloc[wrong_by_ge_d_nnts_df_index].copy()
+  ret = dataset.cohort_df.iloc[wrong_by_ge_d_nnts_df_index].copy()
   ret['Error'] = err[wrong_by_ge_d_nnts_idx]
   ret = ret.sort_values(by=['Error'])
 

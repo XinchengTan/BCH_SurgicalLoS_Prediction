@@ -134,7 +134,7 @@ def rmse(g):
   return pd.Series(dict(rmse=rmse))
 
 
-def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT):
+def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT, cohort=globals.COHORT_ALL):
   pred_y = clf.predict(X)
   Xdf = Xdf.copy(deep=True)
 
@@ -191,15 +191,23 @@ def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT):
           .set_index('PRIMARY_PROC'),
           on='PRIMARY_PROC', how='left')
   pproc_df.sort_values(by=['Counts', 'Accuracy'], ascending=False, inplace=True)
-  pproc_df_all = pproc_df.head(1000).style\
+  if cohort != globals.COHORT_ALL:
+    pprocs = globals.COHORT_TO_PPROCS[cohort]
+    pproc_df = pproc_df.query("PRIMARY_PROC in @pprocs")
+    cohort_cnt = pproc_df['Counts'].sum()
+    pproc_df.loc[len(pproc_df.index)] = ['Cohort Total', cohort_cnt, 1.0,
+                                         (pproc_df['Counts'] * pproc_df['Accuracy']).sum() / cohort_cnt,
+                                          pproc_df['Max Abs Error'].max(), np.nan, np.nan, np.nan]
+
+  pproc_df_all = pproc_df.head(30).style\
       .set_table_attributes("style='display:inline'")\
       .set_caption("Model Performance Grouped by Primary Procedure (%s cases)" % XType) \
       .set_properties(**{'text-align': 'center'})\
       .format("{:.2%}", subset=["Count (%)", "Accuracy"])\
       .format("{:.2f}", subset=["Max Abs Error", "Error Std", "RMSE", "True Outcome Std"])
-  if md_name == globals.clf2name[globals.RMFCLF]:
-    pproc_df.to_csv('primary_procedures_error_cases(rmf-bal).csv')
-    pproc_df_all.to_csv('pproc_error.csv')
+  # if md_name == globals.clf2name[globals.RMFCLF]:
+  #   pproc_df.to_csv('primary_procedures_error_cases(rmf-bal).csv')
+  #   pproc_df_all.to_csv('pproc_error.csv')
   display(pproc_df_all)
 
   # Error distribution among CPTs
