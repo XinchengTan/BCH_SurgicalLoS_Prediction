@@ -3,7 +3,7 @@ Helper functions to preprocess the data and generate data matrix with its corres
 """
 
 from IPython.display import display
-from imblearn.over_sampling import SMOTE
+from imblearn.over_sampling import SMOTENC
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -114,6 +114,8 @@ def gen_X(df, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None, r
     X.loc[(X[globals.SPS_LOS_FTR] > globals.MAX_NNT), globals.SPS_LOS_FTR] = globals.MAX_NNT + 1
   if verbose:
     display(X.head(20))
+  assert X.shape[1] == len(feature_cols), 'Generated data matrix has %d features, but feature list has %d items' % \
+                                          (X.shape[1], len(feature_cols))
   return X, feature_cols, X_case_key
 
 
@@ -189,3 +191,9 @@ def standardize(X_train, X_test=None):
     return scaler.transform(X_train)
   return scaler.transform(X_test)
 
+
+def gen_smote_Xy(X, y, feature_names):
+  categ_ftrs = np.array([False if ftr in globals.CONTINUOUS_COLS else True for ftr in feature_names], dtype=bool)
+  sm = SMOTENC(categorical_features=categ_ftrs, random_state=globals.SEED)
+  X, y = sm.fit_resample(X, y)
+  return X, y

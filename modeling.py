@@ -29,12 +29,15 @@ Analysis:
 """
 from collections import defaultdict, Counter
 
+from imblearn.over_sampling import SMOTENC
+from imblearn.ensemble import BalancedBaggingClassifier, BalancedRandomForestClassifier
+from IPython.display import display
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sn
 
-from IPython.display import display
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 from sklearn.metrics import mean_squared_error, make_scorer, plot_roc_curve
@@ -187,6 +190,8 @@ def run_classifier(Xtrain, ytrain, model, cls_weight=None, calibrate_method=None
     clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True).fit(Xtrain, ytrain)
   elif model == globals.ORDCLF_PROBIT:
     clf = OrdinalClassifier(distr='probit', solver='bfgs', disp=True).fit(Xtrain, ytrain)
+  elif model == globals.BAL_BAGCLF:
+    clf = BalancedBaggingClassifier(random_state=globals.SEED).fit(Xtrain, ytrain)
   else:
     raise NotImplementedError("Model %s is not supported!" % model)
 
@@ -321,9 +326,12 @@ def predict_nnt_regression_rounding(dataset: Dataset, model=None):
   return model2trained
 
 
-def predict_nnt_multi_clf(dataset: Dataset, model=None, cls_weight=None, evaluate=True):
+def predict_nnt_multi_clf(dataset: Dataset, model=None, cls_weight=None, evaluate=True, smote=False):
   """ Predict number of nights via a multi-class classfier"""
   Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
+  if smote:
+    Xtrain, ytrain = dpp.gen_smote_Xy(Xtrain, ytrain, dataset.feature_names)
+
   model2trained = {}
   if model is None:
     for md, md_name in globals.clf2name.items():
@@ -404,16 +412,17 @@ def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType, cohor
 
 
 def predict_nnt_binary_clf(dataset: Dataset, cutoffs, metric=None, model=None, cls_weight=None, eval=True,
-                           calibrate_method=None, calibrate_on_val=True):
+                           calibrate_method=None, calibrate_on_val=False, smote=False):
   """
   Predict number of nights via a series of binary classifiers, given a list of integer cutoffs.
   e.g. [1, 2] means two classifiers: one for if NNT < 1 or >= 1, the other for if NNT < 2 or >= 2
   """
   Xtrain, Xtest = dataset.Xtrain, dataset.Xtest
   ytrain, ytest = np.copy(dataset.ytrain), np.copy(dataset.ytest)
+  if smote:
+    Xtrain, ytrain = dpp.gen_smote_Xy(Xtrain, ytrain, dataset.feature_names)
 
   model2binclfs = {}
-
   if model is None:
     # fit multiple binary classifiers independently
     # assume classifier_cutoffs is an increasing list of integers, each represent a cutoff value
@@ -428,10 +437,13 @@ def predict_nnt_binary_clf(dataset: Dataset, cutoffs, metric=None, model=None, c
       model2binclfs[md] = cutoff2clf  # save models
 
     if eval:
-      run_all_eval_binclf(dataset, cutoffs, model2binclfs, metric)
+      plot_calib = (calibrate_method != None)
+      run_all_eval_binclf(dataset, cutoffs, model2binclfs, metric, plot_calibrate=plot_calib) if not smote \
+        else run_all_eval_binclf(dataset, cutoffs, model2binclfs, metric, plot_calibrate=plot_calib,
+                                 smoteXytrain=(Xtrain, ytrain))
 
   else:
-    # When running each model individually, always evaluate
+    # Always evaluate when running each model individually
     cutoff2clf = {}
     figs, axs = plt.subplots(nrows=4, ncols=4, figsize=(21, 21))
     for cutoff in cutoffs:
@@ -455,13 +467,28 @@ def predict_nnt_binary_clf(dataset: Dataset, cutoffs, metric=None, model=None, c
   return model2binclfs
 
 
-def run_all_eval_binclf(dataset, clf_cutoffs, model2binclfs, metric=None):
-  Xtrain, Xtest = dataset.Xtrain, dataset.Xtest
-  ytrain, ytest = np.copy(dataset.ytrain), np.copy(dataset.ytest)
+def performance_eval_binclf(dataset: Dataset, model2trained_binclf, XType, cohort=globals.COHORT_ALL):
+
+  return
+
+
+def run_all_eval_binclf(dataset, clf_cutoffs, model2binclfs, metric=None, plot_calibrate=False, smoteXytrain=None):
+  # Input data matrix and response vector
+  original_Xtest, original_ytest = dataset.Xtest, np.copy(dataset.ytest)
+  original_Xtrain, original_ytrain = np.copy(dataset.Xtrain), np.copy(dataset.ytrain)
+
+  # Actual data matrix and response vector used by the models
+  Xtest, ytest = dataset.Xtest, np.copy(dataset.ytest)
+  if smoteXytrain is None:
+    Xtrain, ytrain = dataset.Xtrain, np.copy(dataset.ytrain)
+  else:
+    Xtrain, ytrain = smoteXytrain
+    dataset.Xtrain = Xtrain
 
   for cutoff in clf_cutoffs:
     figs, axs = plt.subplots(ncols=2, nrows=1, figsize=(20, 7))  # ROC curves
-    figs2, axs2 = plt.subplots(ncols=2, nrows=1, figsize=(20, 7))  # Calibration curves
+    if plot_calibrate:
+      figs2, axs2 = plt.subplots(ncols=2, nrows=1, figsize=(20, 7))  # Calibration curves
     for md, md_name in globals.binclf2name.items():
       clf = model2binclfs[md][cutoff]
       dataset.ytrain = dpp.gen_y_nnt_binary(ytrain, cutoff)
@@ -482,19 +509,23 @@ def run_all_eval_binclf(dataset, clf_cutoffs, model2binclfs, metric=None):
         continue
 
       # Plot calibration curve  TODO: decision_function() or predict_proba() ?
-      prob_class1_train, prob_class1_test = clf.predict_proba(Xtrain)[:, 1], clf.predict_proba(Xtest)[:, 1]
-      fop_train, mpv_train = calibration_curve(dataset.ytrain, prob_class1_train, n_bins=10, normalize=True)
-      fop_test, mpv_test = calibration_curve(dataset.ytest, prob_class1_test, n_bins=10, normalize=True)
-      # TODO: add probability distribution hist/bar plot
-
-      axs2[0].plot(mpv_train, fop_train, marker='.', label=md_name)
-      axs2[1].plot(mpv_test, fop_test, marker='.', label=md_name)
+      if plot_calibrate:
+        prob_class1_train, prob_class1_test = clf.predict_proba(Xtrain)[:, 1], clf.predict_proba(Xtest)[:, 1]
+        fop_train, mpv_train = calibration_curve(dataset.ytrain, prob_class1_train, n_bins=10, normalize=True)
+        fop_test, mpv_test = calibration_curve(dataset.ytest, prob_class1_test, n_bins=10, normalize=True)
+        # TODO: add probability distribution hist/bar plot
+        axs2[0].plot(mpv_train, fop_train, marker='.', label=md_name)
+        axs2[1].plot(mpv_test, fop_test, marker='.', label=md_name)
 
     pltutil.plot_roc_basics(axs[0], cutoff, 'training')
     pltutil.plot_roc_basics(axs[1], cutoff, 'test')
-    pltutil.plot_calibration_basics(axs2[0], cutoff, 'training')
-    pltutil.plot_calibration_basics(axs2[1], cutoff, 'test')
+    if plot_calibrate:
+      pltutil.plot_calibration_basics(axs2[0], cutoff, 'training')
+      pltutil.plot_calibration_basics(axs2[1], cutoff, 'test')
     plt.show()
 
-  dataset.ytrain = ytrain
-  dataset.ytest = ytest
+  # TODO: refactor this into a method in Dataset class
+  dataset.Xtrain = original_Xtrain
+  dataset.ytrain = original_ytrain
+  dataset.ytest = original_ytest
+

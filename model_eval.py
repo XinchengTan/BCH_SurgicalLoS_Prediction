@@ -53,6 +53,41 @@ class ModelPerf:
     return ("Accuracy", "Accuracy (tol = 1 NNT)", "RMSE", "R-squared")
 
 
+@dataclass
+class BinaryModelPerf:
+  """Class for saving evaluated stats of a binary classifier"""
+  XType: str
+  model_name: str
+  trained_md: object
+  task: str
+  majority_pct: float
+  acc: float
+  prec: float
+  recall: float
+  f1: float
+
+  def __str__(self):
+    perf_str = "Model: %s\n" \
+               "X type: %s\n" \
+               "Task: %s\n" \
+               "Majority Percentage: %.2f\n" \
+               "Accuracy: %.2f\n" \
+               "Precision: %.2f\n" \
+               "Recall: %.2f\n" \
+               "F1 score: %.2f\n" % \
+               (self.model_name, self.XType, self.task, self.majority_pct, self.acc, self.prec, self.recall, self.f1)
+    return perf_str
+
+  @classmethod
+  def get_metrics_formatter(cls):
+    return {"Majority Percentage": "{:.2%}".format, "Accuracy": "{:.2%}".format, "Precision": "{:.2f}".format,
+            "Recall": "{:.2f}".format, "F1": "{:.2f}".format}
+
+  @classmethod
+  def get_perf_metrics(cls):
+    return ("Majority Percentage", "Accuracy", "Precision", "Recall", "F1")
+
+
 Xtype_to_conf_style = {globals.XTRAIN: sn.color_palette("ch:start=.2,rot=-.3"),
                        globals.XTEST: 'rocket_r'}
 Xtype_to_conf_style = defaultdict(lambda: 'rocket_r', Xtype_to_conf_style)
@@ -216,6 +251,40 @@ def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT, cohor
   return model_perf
 
 
+# TODO: Replace eval_binary_clf() with this function that yields better format
+def eval_binary_clf_on_Xy(clf, cutoff, Xdf, X, y, md_name, XType, yType=globals.NNT, cohort=globals.COHORT_ALL,
+                          confmat_ax=None):
+  upper_ratio_pct = np.sum(y) / len(y)
+  majority_pct = max(1.0 - upper_ratio_pct, upper_ratio_pct)
+
+  pred = clf.predict(X)
+  acc = metrics.accuracy_score(y, pred, normalize=True)
+  prec = metrics.precision_score(y, pred)
+  recall = metrics.recall_score(y, pred)
+  f1 = metrics.f1_score(y, pred)
+  bin_model_perf = BinaryModelPerf(XType, md_name, clf, "%s <= %d" % (yType, cutoff), majority_pct,
+                                   acc, prec, recall, f1)
+
+  # Confusion Matrix
+  confmat = metrics.confusion_matrix(y, pred, labels=[0, 1], normalize='true')
+  class_names = ['<= ' + str(cutoff), '%d+' % cutoff]
+
+  if confmat_ax is None:
+    fig, confmat_ax = plt.subplots(1, 1, figsize=(6, 5))
+  sn.heatmap(confmat, fmt=".2%", cmap=Xtype_to_conf_style[XType], square=True,
+             annot=True, annot_kws={"size": 18, "weight": "bold"}, ax=confmat_ax, linecolor='white', linewidths=0.8)
+  confmat_ax.set_title("Cutoff =%d: Confusion matrix\n(%s - training)" % (cutoff, md_name),
+                   y=1.01, fontsize=17)
+  confmat_ax.set_xlabel("Predicted Class", fontsize=16)
+  confmat_ax.set_ylabel("True Class", fontsize=16)
+  confmat_ax.set_xticks(np.arange(2) + 0.5)
+  confmat_ax.set_xticklabels(class_names, fontsize=15)
+  confmat_ax.set_yticks(np.arange(2) + 0.5)
+  confmat_ax.set_yticklabels(['< ' + str(cutoff), '%d+' % cutoff], fontsize=15)
+
+  return bin_model_perf
+
+
 def eval_binary_clf(clf, cutoff, dataset: Dataset, md_name, plot_calib_curve=True, plot_roc=True,
                     metric=None, axs=None):
   """If built-in pred = False, optimize for geometric mean of trp & 1-fpr"""
@@ -224,7 +293,7 @@ def eval_binary_clf(clf, cutoff, dataset: Dataset, md_name, plot_calib_curve=Tru
   upper_ratio_train, upper_ratio_test = np.sum(ytrain) / len(ytrain), np.sum(ytest) / len(ytest)
   print("\n%s:" % md_name)
   print("Naive guess accuracy (training): ", max(1.0 - upper_ratio_train, upper_ratio_train))
-  print("Naive guess accuracy (validation): ", max(1.0 - upper_ratio_test, upper_ratio_test))
+  print("Naive guess accuracy (test): ", max(1.0 - upper_ratio_test, upper_ratio_test))
 
   if metric is None:
     pred_train, pred_val = clf.predict(Xtrain), clf.predict(Xtest)
@@ -250,17 +319,17 @@ def eval_binary_clf(clf, cutoff, dataset: Dataset, md_name, plot_calib_curve=Tru
   # Acc, precision, sensitivity, F-1 score
   print("Accuracy (training): ", metrics.accuracy_score(ytrain, pred_train, normalize=True))
   print("Accuracy (test): ", metrics.accuracy_score(ytest, pred_val, normalize=True))
-  print("F1 score (test): ", metrics.f1_score(ytrain, pred_train))
+  print("F1 score (training): ", metrics.f1_score(ytrain, pred_train))
   print("F1 score (test): ", metrics.f1_score(ytest, pred_val))
 
   # Confusion matrix
-  confmat_train = metrics.confusion_matrix(ytrain, pred_train, labels=[0, 1])# normalize='true'
-  confmat_val = metrics.confusion_matrix(ytest, pred_val, labels=[0, 1]) #normalize='true'
-  class_names = ['< ' + str(cutoff), '%d+' % cutoff]
+  confmat_train = metrics.confusion_matrix(ytrain, pred_train, labels=[0, 1], normalize='true')# normalize='true'
+  confmat_val = metrics.confusion_matrix(ytest, pred_val, labels=[0, 1], normalize='true') #normalize='true'
+  class_names = ['<= ' + str(cutoff), '%d+' % cutoff]
 
   if axs is None:
     figs, axs = plt.subplots(1, 2, figsize=(13, 5)) #fmt=".2%",
-  sn.heatmap(confmat_train, cmap=sn.color_palette("ch:start=.2,rot=-.3"), square=True,
+  sn.heatmap(confmat_train, fmt=".2%", cmap=sn.color_palette("ch:start=.2,rot=-.3"), square=True,
              annot=True, annot_kws={"size": 18, "weight": "bold"}, ax=axs[0], linecolor='white', linewidths=0.8)
   axs[0].set_title("Cutoff =%d: Confusion matrix\n(%s - training)" % (cutoff, md_name),
                    y=1.01, fontsize=17)
@@ -271,8 +340,8 @@ def eval_binary_clf(clf, cutoff, dataset: Dataset, md_name, plot_calib_curve=Tru
   axs[0].set_yticks(np.arange(2) + 0.5)
   axs[0].set_yticklabels(['< ' + str(cutoff), '%d+' % cutoff], fontsize=15)
 
-  sn.heatmap(confmat_val, cmap='rocket_r', square=True, linecolor='white', linewidths=0.8,
-             annot=True, annot_kws={"size": 18, "weight": "bold"}, ax=axs[1]) #fmt=".2%",
+  sn.heatmap(confmat_val, fmt=".2%", cmap='rocket_r', square=True, linecolor='white', linewidths=0.8,
+             annot=True, annot_kws={"size": 18, "weight": "bold"}, ax=axs[1]) #
   axs[1].set_title("Cutoff =%d: Confusion matrix\n(%s - validation)" % (cutoff, md_name),
                    y=1.01, fontsize=17)
   axs[1].set_xlabel("Predicted Class", fontsize=16)

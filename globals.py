@@ -30,6 +30,7 @@ FEATURE_COLS_NO_DECILE = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGH
 SPS_LOS_FTR = 'SPS_PREDICTED_LOS'
 FEATURE_COLS_SPS = FEATURE_COLS + [SPS_LOS_FTR]
 NON_NUMERIC_COLS = ['SURG_CASE_KEY', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
+CONTINUOUS_COLS = ['AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE']
 
 COHORT_ALL = 'All Cases'
 COHORT_TONSIL = 'Tonsillectomy'
@@ -125,6 +126,7 @@ GBCLF = 'gb-clf'
 XGBCLF = 'xgb-clf'
 ORDCLF_LOGIT = 'ord-clf-logit'
 ORDCLF_PROBIT = 'ord-clf-probit'
+BAL_BAGCLF = 'bal-bagging'
 
 clf2name = {LGR: "Logistic Regression",
             SVC: "Support Vector Classifier",
@@ -132,6 +134,7 @@ clf2name = {LGR: "Logistic Regression",
             DTCLF: "Decision Tree Classifier",
             RMFCLF: "Random Forest Classifier",
             GBCLF: "Gradient Boosting Classifier",
+            BAL_BAGCLF: "Balanced Bagging Classifier"
             }
 # XGBCLF: "XGBoost Classifier",
 # ORDCLF_LOGIT: "Ordinal Classifier - Logit",
@@ -143,6 +146,7 @@ binclf2name = {LGR: "Logistic Regression",
             DTCLF: "Decision Tree Classifier",
             RMFCLF: "Random Forest Classifier",
             GBCLF: "Gradient Boosting Classifier",
+            BAL_BAGCLF: "Balanced Bagging Classifier"
             } # XGBCLF: "XGBoost Classifier"
 
 ALL_MODELS = set(clf2name.keys()).union(binclf2name.keys())
