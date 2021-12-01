@@ -28,7 +28,11 @@ class Dataset(object):
       self.cohort_df = df
 
     X, y, feature_cols, case_keys = gen_Xy(self.cohort_df, outcome, cols, onehot_cols, onehot_dtypes, trimmed_ccsr)
-    self.Xtrain, self.Xtest, self.ytrain, self.ytest, self.train_idx, self.test_idx = gen_train_test(X, y, test_pct)
+    if test_pct > 0:
+      self.Xtrain, self.Xtest, self.ytrain, self.ytest, self.train_idx, self.test_idx = gen_train_test(X, y, test_pct)
+    else:
+      self.Xtrain, self.ytrain, self.train_idx = X, y, np.arange(X.shape[0])
+      self.Xtest, self.ytest, self.test_idx = np.array([]), np.array([]), np.array([])
     self.feature_names = feature_cols
     self.case_keys = case_keys
     self.sps_preds = df[globals.SPS_LOS_FTR].to_numpy()  # Might contain NaN
@@ -115,8 +119,12 @@ def gen_X(df, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None, r
     X.loc[(X[globals.SPS_LOS_FTR] > globals.MAX_NNT), globals.SPS_LOS_FTR] = globals.MAX_NNT + 1
   if verbose:
     display(X.head(20))
+
+  # Basic sanity check
   assert X.shape[1] == len(feature_cols), 'Generated data matrix has %d features, but feature list has %d items' % \
                                           (X.shape[1], len(feature_cols))
+  assert len(set(feature_cols)) == len(feature_cols), "Generated data matrix contains duplicated feature names!"
+
   return X, feature_cols, X_case_key
 
 

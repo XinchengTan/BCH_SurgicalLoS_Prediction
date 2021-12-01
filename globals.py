@@ -30,7 +30,6 @@ FEATURE_COLS_NO_DECILE = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGH
 FEATURE_COLS_NO_OS = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
                       'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
 
-
 SPS_LOS_FTR = 'SPS_PREDICTED_LOS'
 FEATURE_COLS_SPS = FEATURE_COLS + [SPS_LOS_FTR]
 NON_NUMERIC_COLS = ['SURG_CASE_KEY', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
@@ -81,6 +80,8 @@ CCSRS_SPINE = {'Chronic respiratory insufficiency',
 COHORT_TO_CCSRS = {COHORT_TONSIL: CCSRS_TONSIL,
                    COHORT_SPINE: CCSRS_SPINE}
 
+AGE_BINS = [0, 1, 2, 3, 6, 9, 12, 15, 18, float('inf')]  # according to CDC definition: https://www.cdc.gov/ncbddd/childdevelopment/positiveparenting/infants.html
+
 DELTA = 1e-8
 SEED = 998
 
@@ -110,6 +111,8 @@ XTEST = 'test'
 XVAL = 'val'
 XAGREE = 'model & surgeon agree'
 XDISAGREE = 'model & surgeon disagree' # can define anything reasonable
+XALL_ONE2ONE = 'one-to-one (all)'  # TODO: denoise training data to include only one-to-one cases
+XMAJ_ONE2ONE = 'one-to-one w/ majority filter'
 
 
 SURGEON = 'SPS Surgeon'
