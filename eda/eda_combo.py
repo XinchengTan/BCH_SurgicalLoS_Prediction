@@ -9,14 +9,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from .globals import diaglabels
-from . import plot_utils
+from globals import diaglabels
+from .. import utils_plot
 
 
 def gen_cooccurrence_graph(dashboard_df, diagcode_type='OS', threshold=500):
   # Plot a connectivity graph of pairwise cooccurrence (darker edge color means higher cooccurrences)
   A, _ = gen_cooccurrence_matrix(dashboard_df, diagcode_type=diagcode_type)
-  plot_utils.plot_connectivity_graph(A, threshold=threshold)
+  utils_plot.plot_connectivity_graph(A, threshold=threshold)
 
 
 def cooccurrence_los_eda(dashboard_df, diagcode_type='OS', order=2, K=30):
