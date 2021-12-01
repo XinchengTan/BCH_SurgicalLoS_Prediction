@@ -5,9 +5,9 @@ import pandas as pd
 import seaborn as sn
 from sklearn import metrics
 
-from . import data_preprocessing as dpp
-from . import plot_utils as pltutil
-from . import globals, model_eval
+from . import c1_data_preprocessing as dpp
+from . import utils_plot as pltutil
+from . import globals, c4_model_eval
 
 
 def surgeon_model_agree_cases_eval(dataset: dpp.Dataset, md2multiclf, md, disagree_nnt_diff):
@@ -118,7 +118,7 @@ def eval_surgeon_perf(df, idxs=None, Xtype='all'):
   # Evaluate SPS surgeon estimation performance
   true_nnt = dpp.gen_y_nnt(df['NUM_OF_NIGHTS'])
   surgeon_pred = dpp.gen_y_nnt(df['SPS_PREDICTED_LOS'])
-  model_eval.gen_confusion_matrix(true_nnt, surgeon_pred, globals.SURGEON, Xtype=Xtype)
+  c4_model_eval.gen_confusion_matrix(true_nnt, surgeon_pred, globals.SURGEON, Xtype=Xtype)
 
   print(globals.SURGEON)
   print("Accuracy (%s): " % Xtype, metrics.accuracy_score(true_nnt, surgeon_pred, normalize=True))

@@ -52,11 +52,11 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, Grad
 from statsmodels.miscmodels.ordinal_model import OrderedModel
 from xgboost import XGBClassifier
 
-from . import globals, model_eval, surgeon
-from . import data_preprocessing as dpp
-from .data_preprocessing import Dataset
-from .model_eval import ModelPerf
-from . import plot_utils as pltutil
+from . import globals, c4_model_eval, c6_surgeon
+from . import c1_data_preprocessing as dpp
+from .c1_data_preprocessing import Dataset
+from .c4_model_eval import ModelPerf
+from . import utils_plot as pltutil
 
 
 class AllModels(object):
@@ -285,14 +285,14 @@ def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
   # Define scorer
   refit = True
   if scorer == globals.SCR_1NNT_TOL:
-    scorer = make_scorer(model_eval.scorer_1nnt_tol, greater_is_better=True)
+    scorer = make_scorer(c4_model_eval.scorer_1nnt_tol, greater_is_better=True)
   elif scorer == globals.SCR_1NNT_TOL_ACC:
     scorer = {globals.SCR_ACC: globals.SCR_ACC,
-              globals.SCR_1NNT_TOL: make_scorer(model_eval.scorer_1nnt_tol, greater_is_better=True)}
+              globals.SCR_1NNT_TOL: make_scorer(c4_model_eval.scorer_1nnt_tol, greater_is_better=True)}
     refit = globals.SCR_1NNT_TOL
   elif scorer == globals.SCR_MULTI_ALL:
     scorer = {globals.SCR_ACC: globals.SCR_ACC, globals.SCR_AUC: globals.SCR_AUC,
-              globals.SCR_1NNT_TOL: make_scorer(model_eval.scorer_1nnt_tol, greater_is_better=True)}
+              globals.SCR_1NNT_TOL: make_scorer(c4_model_eval.scorer_1nnt_tol, greater_is_better=True)}
     refit = globals.SCR_AUC
 
   # For each parameter, iterate through its param grid
@@ -317,11 +317,11 @@ def predict_nnt_regression_rounding(dataset: Dataset, model=None):
     for md, md_name in globals.reg2name.items():
       reg = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=md, eval=True)
       model2trained[md] = reg
-      model_eval.eval_nnt_regressor(reg, dataset, md_name)
+      c4_model_eval.eval_nnt_regressor(reg, dataset, md_name)
   else:
     reg = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=model)
     model2trained[model] = reg
-    model_eval.eval_nnt_regressor(reg, dataset, md_name=globals.reg2name[model])
+    c4_model_eval.eval_nnt_regressor(reg, dataset, md_name=globals.reg2name[model])
 
   return model2trained
 
@@ -369,27 +369,27 @@ def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType, cohor
   for md, clf in model2trained_clf.items():
 
     if XType is None:  # evaluate both training and test set
-      md2ModelPerf[md][globals.XTRAIN] = model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.train_idx], Xtrain, ytrain,
-                                                                        globals.clf2name[md], globals.XTRAIN, cohort=cohort)
-      md2ModelPerf[md][globals.XTEST] = model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.test_idx], Xtest, ytest,
-                                                                       globals.clf2name[md], globals.XTEST, cohort=cohort)
+      md2ModelPerf[md][globals.XTRAIN] = c4_model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.train_idx], Xtrain, ytrain,
+                                                                           globals.clf2name[md], globals.XTRAIN, cohort=cohort)
+      md2ModelPerf[md][globals.XTEST] = c4_model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.test_idx], Xtest, ytest,
+                                                                          globals.clf2name[md], globals.XTEST, cohort=cohort)
 
     elif XType == globals.XTRAIN:
-      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.train_idx], Xtrain, ytrain,
-                                                               globals.clf2name[md], XType, cohort=cohort)
+      md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.train_idx], Xtrain, ytrain,
+                                                                  globals.clf2name[md], XType, cohort=cohort)
 
     elif XType == globals.XTEST:
-      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.test_idx], Xtest, ytest,
-                                                               globals.clf2name[md], XType, cohort=cohort)
+      md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.test_idx], Xtest, ytest,
+                                                                  globals.clf2name[md], XType, cohort=cohort)
 
     elif XType == globals.XAGREE:
-      data_df, Xdata, ydata = surgeon.gen_surgeon_model_agree_df_and_Xydata(dataset, model2trained_clf, md, use_test=True)
-      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, data_df, Xdata, ydata, globals.clf2name[md], XType, cohort=cohort)
+      data_df, Xdata, ydata = c6_surgeon.gen_surgeon_model_agree_df_and_Xydata(dataset, model2trained_clf, md, use_test=True)
+      md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(clf, data_df, Xdata, ydata, globals.clf2name[md], XType, cohort=cohort)
 
     elif XType == globals.XDISAGREE:
-      data_df, Xdata, ydata = surgeon.gen_surgeon_model_disagree_df_and_Xydata(dataset, model2trained_clf, md,
-                                                                            use_test=True)
-      md2ModelPerf[md][XType] = model_eval.eval_multiclf_on_Xy(clf, data_df, Xdata, ydata, globals.clf2name[md], XType, cohort=cohort)
+      data_df, Xdata, ydata = c6_surgeon.gen_surgeon_model_disagree_df_and_Xydata(dataset, model2trained_clf, md,
+                                                                                  use_test=True)
+      md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(clf, data_df, Xdata, ydata, globals.clf2name[md], XType, cohort=cohort)
 
     else:
       raise NotImplementedError("XType '%s' is not implemented yet!" % XType)
@@ -417,10 +417,19 @@ def predict_nnt_binary_clf(dataset: Dataset, cutoffs, metric=None, model=None, c
   Predict number of nights via a series of binary classifiers, given a list of integer cutoffs.
   e.g. [1, 2] means two classifiers: one for if NNT < 1 or >= 1, the other for if NNT < 2 or >= 2
   """
-  Xtrain, Xtest = dataset.Xtrain, dataset.Xtest
-  ytrain, ytest = np.copy(dataset.ytrain), np.copy(dataset.ytest)
+  original_Xtrain, Xtest = dataset.Xtrain, dataset.Xtest
+  original_ytrain, ytest = np.copy(dataset.ytrain), np.copy(dataset.ytest)
+
+  cutoff2smoteXy = None
   if smote:
-    Xtrain, ytrain = dpp.gen_smote_Xy(Xtrain, ytrain, dataset.feature_names)
+    cutoff2smoteXy = {}
+    for ct in cutoffs:
+      bin_ytrain = dpp.gen_y_nnt_binary(dataset.ytrain, ct)
+      ones = sum(bin_ytrain)
+      if min(ones, len(bin_ytrain) - ones) < 6:
+        cutoff2smoteXy[ct] = None
+      else:
+        cutoff2smoteXy[ct] = dpp.gen_smote_Xy(dataset.Xtrain, bin_ytrain, dataset.feature_names)
 
   model2binclfs = {}
   if model is None:
@@ -430,8 +439,17 @@ def predict_nnt_binary_clf(dataset: Dataset, cutoffs, metric=None, model=None, c
       print("Fitting binary classifiers %s" % md_name)
       cutoff2clf = {}
       for cutoff in cutoffs:
+        if smote:
+          if cutoff2smoteXy[cutoff] is not None:
+            Xtrain, bin_ytrain = cutoff2smoteXy[cutoff]
+          else:
+            cutoff2clf[cutoff] = None
+            continue
+        else:
+          Xtrain, bin_ytrain = original_Xtrain, dpp.gen_y_nnt_binary(original_ytrain, cutoff)
+
         # Train classifier
-        clf = run_classifier(Xtrain, dpp.gen_y_nnt_binary(ytrain, cutoff), model=md, cls_weight=cls_weight,
+        clf = run_classifier(Xtrain, bin_ytrain, model=md, cls_weight=cls_weight,
                              calibrate_method=calibrate_method, calibrate_on_val=calibrate_on_val)
         cutoff2clf[cutoff] = clf
       model2binclfs[md] = cutoff2clf  # save models
@@ -440,29 +458,29 @@ def predict_nnt_binary_clf(dataset: Dataset, cutoffs, metric=None, model=None, c
       plot_calib = (calibrate_method != None)
       run_all_eval_binclf(dataset, cutoffs, model2binclfs, metric, plot_calibrate=plot_calib) if not smote \
         else run_all_eval_binclf(dataset, cutoffs, model2binclfs, metric, plot_calibrate=plot_calib,
-                                 smoteXytrain=(Xtrain, ytrain))
+                                 smoteXytrain=cutoff2smoteXy)
 
   else:
     # Always evaluate when running each model individually
     cutoff2clf = {}
     figs, axs = plt.subplots(nrows=4, ncols=4, figsize=(21, 21))
     for cutoff in cutoffs:
-      dataset.ytrain = dpp.gen_y_nnt_binary(ytrain, cutoff)
+      dataset.ytrain = dpp.gen_y_nnt_binary(original_ytrain, cutoff)
       dataset.ytest = dpp.gen_y_nnt_binary(ytest, cutoff)
       # Train classifier
-      clf = run_classifier(Xtrain, dataset.ytrain, model=model, cls_weight=cls_weight, calibrate_method=calibrate_method)
+      clf = run_classifier(original_Xtrain, dataset.ytrain, model=model, cls_weight=cls_weight, calibrate_method=calibrate_method)
       cutoff2clf[cutoff] = clf
 
       # Evaluate model
-      model_eval.eval_binary_clf(clf, cutoff, dataset, globals.binclf2name[model], metric=metric,
-                                 plot_roc=False, axs=[axs[(cutoff-1)//4][(cutoff-1)%4], axs[2+(cutoff-1)//4][(cutoff-1)%4]])
+      c4_model_eval.eval_binary_clf(clf, cutoff, dataset, globals.binclf2name[model], metric=metric,
+                                    plot_roc=False, axs=[axs[(cutoff-1)//4][(cutoff-1)%4], axs[2+(cutoff-1)//4][(cutoff-1)%4]])
 
       # Generate feature importance
       #model_eval.gen_feature_importance_bin_clf(clf, model, Xval, yval_b, cutoff=cutoff)
     model2binclfs[model] = cutoff2clf
     figs.tight_layout()
     figs.savefig("%s (val-%s) binclf.png" % (model, str(cls_weight)))
-    dataset.ytrain = ytrain
+    dataset.ytrain = original_ytrain
     dataset.ytest = ytest
   return model2binclfs
 
@@ -479,23 +497,28 @@ def run_all_eval_binclf(dataset, clf_cutoffs, model2binclfs, metric=None, plot_c
 
   # Actual data matrix and response vector used by the models
   Xtest, ytest = dataset.Xtest, np.copy(dataset.ytest)
-  if smoteXytrain is None:
-    Xtrain, ytrain = dataset.Xtrain, np.copy(dataset.ytrain)
-  else:
-    Xtrain, ytrain = smoteXytrain
-    dataset.Xtrain = Xtrain
+  Xtrain, ytrain = dataset.Xtrain, np.copy(dataset.ytrain)
 
+  md2confaxs = {md: plt.subplots(nrows=4, ncols=4, figsize=(21, 21)) for md in globals.binclf2name.keys()}
   for cutoff in clf_cutoffs:
+    print("\nCutoff = %d" % cutoff)
     figs, axs = plt.subplots(ncols=2, nrows=1, figsize=(20, 7))  # ROC curves
     if plot_calibrate:
       figs2, axs2 = plt.subplots(ncols=2, nrows=1, figsize=(20, 7))  # Calibration curves
     for md, md_name in globals.binclf2name.items():
       clf = model2binclfs[md][cutoff]
-      dataset.ytrain = dpp.gen_y_nnt_binary(ytrain, cutoff)
+      if clf is None:
+        continue
+      if smoteXytrain is not None:
+        Xtrain, dataset.ytrain = smoteXytrain[cutoff]
+        dataset.Xtrain = Xtrain
+      else:
+        dataset.ytrain = dpp.gen_y_nnt_binary(ytrain, cutoff)
       dataset.ytest = dpp.gen_y_nnt_binary(ytest, cutoff)
       # Evaluate model
-      pred_train, pred_test, ix = model_eval.eval_binary_clf(clf, cutoff, dataset, md_name,
-                                                             metric=metric, plot_roc=False)
+      confmat_axs = [md2confaxs[md][1][cutoff//4][cutoff%4], md2confaxs[md][1][2+cutoff//4][cutoff%4]]
+      pred_train, pred_test, ix = c4_model_eval.eval_binary_clf(clf, cutoff, dataset, md_name,
+                                                                metric=metric, plot_roc=False, axs=confmat_axs)
       # # Generate feature importance
       # model_eval.gen_feature_importance_bin_clf(clf, md, Xtest, dataset.ytest, cutoff=cutoff)
 
@@ -522,7 +545,12 @@ def run_all_eval_binclf(dataset, clf_cutoffs, model2binclfs, metric=None, plot_c
     if plot_calibrate:
       pltutil.plot_calibration_basics(axs2[0], cutoff, 'training')
       pltutil.plot_calibration_basics(axs2[1], cutoff, 'test')
-    plt.show()
+      figs2.show()
+    figs.show()
+
+  for md in globals.binclf2name.keys():
+    md2confaxs[md][0].tight_layout()
+  plt.show()
 
   # TODO: refactor this into a method in Dataset class
   dataset.Xtrain = original_Xtrain

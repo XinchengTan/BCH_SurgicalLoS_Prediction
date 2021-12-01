@@ -4,12 +4,12 @@ These functions makes predictions of all input trained models on the given datas
 
 import numpy as np
 import pandas as pd
-from . import data_preprocessing as dpp
-from . import modeling
+from . import c1_data_preprocessing as dpp
+from . import c2_modeling
 from . import globals
 
 
-def gen_all_model_predictions(dataset: dpp.Dataset, all_models: modeling.AllModels, from_train=False, subset_size=30):
+def gen_all_model_predictions(dataset: dpp.Dataset, all_models: c2_modeling.AllModels, from_train=False, subset_size=30):
   """
   Makes prediction for a subset of cases from using all models.
 

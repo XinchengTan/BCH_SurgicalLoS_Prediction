@@ -13,8 +13,8 @@ from sklearn.calibration import calibration_curve
 from sklearn.inspection import permutation_importance
 
 from . import globals
-from . import plot_utils as pltutil
-from .data_preprocessing import Dataset
+from . import utils_plot as pltutil
+from .c1_data_preprocessing import Dataset
 
 
 @dataclass

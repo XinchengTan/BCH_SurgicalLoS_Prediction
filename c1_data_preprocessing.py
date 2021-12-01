@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 from . import globals
-from . import data_prepare as dp
+from . import c0_data_prepare as dp
 
 
 class Dataset(object):
@@ -42,7 +42,7 @@ class Dataset(object):
     return res
 
 
-# TODO: add data cleaning, e.g. check for negative LoS and remove it
+# TODO: add data cleaning, e.g. 1. check for negative LoS and remove; 2. check identical rows with different outcome
 # Generate data matrix X
 def gen_Xy(df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None, trimmed_ccsr=None):
   """
@@ -70,18 +70,19 @@ def gen_X(df, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None, r
   X.loc[(X.SEX_CODE == 'F'), 'SEX_CODE'] = 1.0
 
   feature_cols = list(cols)
-  if trimmed_ccsr and 'CCSRS' in onehot_cols:  # add a column with only the target set of CCSRs
-    #trimmed_ccsr_wPrefix = {'CCSR_' + c for c in trimmed_ccsr}
-    X['Trimmed_CCSRS'] = X['CCSRS'].apply(lambda row: [cc for cc in row if cc in trimmed_ccsr])
-    onehot_cols = [col if col != 'CCSRS' else 'Trimmed_CCSRS' for col in onehot_cols]
-    feature_cols = [col if col != 'CCSRS' else 'Trimmed_CCSRS' for col in feature_cols]
-    # add a column with only the ICD10 of the target CCSR set
+  if trimmed_ccsr:
+    # add a column with only the target set of CCSRs
+    if 'CCSRS' in onehot_cols:
+      X['Trimmed_CCSRS'] = X['CCSRS'].apply(lambda row: [cc for cc in row if cc in trimmed_ccsr])
+      onehot_cols = list(map(lambda item: item.replace('CCSRS', 'Trimmed_CCSRS'), onehot_cols))
+      feature_cols = list(map(lambda item: item.replace('CCSRS', 'Trimmed_CCSRS'), feature_cols))
+    # add a column with only the ICD10s of the target CCSR set
     if 'ICD10S' in onehot_cols:
       X['Trimmed_ICD10S'] = X[['CCSRS', 'ICD10S']].apply(lambda row: [row['ICD10S'][i]
                                                                       for i in range(len(row['ICD10S']))
                                                                       if row['CCSRS'][i] in trimmed_ccsr], axis=1)
-      onehot_cols = [col if col != 'ICD10S' else 'Trimmed_ICD10S' for col in onehot_cols]
-      feature_cols = [col if col != 'ICD10S' else 'Trimmed_ICD10S' for col in feature_cols]
+      onehot_cols = list(map(lambda item: item.replace('ICD10S', 'Trimmed_ICD10S'), onehot_cols))
+      feature_cols = list(map(lambda item: item.replace('ICD10S', 'Trimmed_ICD10S'), feature_cols))
 
   if onehot_cols is not None:
     # Apply one-hot encoding to the designated columns

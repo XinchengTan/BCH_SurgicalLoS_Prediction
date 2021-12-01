@@ -10,9 +10,9 @@ import seaborn as sn
 from pathlib import Path
 from sklearn import metrics
 
-from . import globals, model_eval
-from . import data_preprocessing as dpp
-from . import plot_utils as pltutil
+from . import globals, c4_model_eval
+from . import c1_data_preprocessing as dpp
+from . import utils_plot as pltutil
 
 
 pd.set_option('display.max_columns', 50)

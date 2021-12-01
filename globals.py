@@ -27,6 +27,10 @@ FEATURE_COLS_NO_DECILE = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGH
                 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
                 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
 
+FEATURE_COLS_NO_OS = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
+                      'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
+
+
 SPS_LOS_FTR = 'SPS_PREDICTED_LOS'
 FEATURE_COLS_SPS = FEATURE_COLS + [SPS_LOS_FTR]
 NON_NUMERIC_COLS = ['SURG_CASE_KEY', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
@@ -36,6 +40,9 @@ COHORT_ALL = 'All Cases'
 COHORT_TONSIL = 'Tonsillectomy'
 COHORT_SPINE = 'Spinal Fusion'
 COHORT_HIP = 'Hip'
+COHORT_NEUROLOGIC = 'Spinal Fusion - Neurologic'
+COHORT_NON_NEUROLOGIC = 'Spinal Fusion - non-Neurologic'
+
 
 COHORT_TO_PPROCS = {COHORT_TONSIL: {'TONSILLECTOMY WITH ADENOIDECTOMY, ORL', 'TONSILLOTOMY WITH ADENOIDECTOMY, ORL',
                                     'TONSILLECTOMY, ORL', 'ADENOIDECTOMY, ORL', 'TONSILLOTOMY, ORL',
@@ -46,7 +53,7 @@ COHORT_TO_PPROCS = {COHORT_TONSIL: {'TONSILLECTOMY WITH ADENOIDECTOMY, ORL', 'TO
                                    'SPINE, FUSION, POSTERIOR, CERVICAL TO TH', 'SPINE, FUSION, POSTERIOR, CERVICAL, ORTH',
                                    'zzSPINE FUSION POSTERIOR, LUMBAR, ORTHO'}}
 
-COHORT_TO_CCSRS = {COHORT_TONSIL: {'Chronic respiratory insufficiency',
+CCSRS_TONSIL = {'Chronic respiratory insufficiency',
                                    'Epilepsy',
                                    'Malacia of trachea or larynx',
                                    'Down syndrome',
@@ -58,8 +65,9 @@ COHORT_TO_CCSRS = {COHORT_TONSIL: {'Chronic respiratory insufficiency',
                                    'Chronic rhinitis',
                                    'Asthma',
                                    'Obesity',
-                                   'Hearing loss'},
-                   COHORT_SPINE: {'Chronic respiratory insufficiency',
+                                   'Hearing loss'}
+
+CCSRS_SPINE = {'Chronic respiratory insufficiency',
                                   'Bladder dysfunction',
                                   'Dysphagia',
                                   'Anxiety disorder',
@@ -68,7 +76,10 @@ COHORT_TO_CCSRS = {COHORT_TONSIL: {'Chronic respiratory insufficiency',
                                   'Intellectual disability',
                                   'Epilepsy',
                                   'Asthma',
-                                  'Tracheostomy'}}
+                                  'Tracheostomy'}
+
+COHORT_TO_CCSRS = {COHORT_TONSIL: CCSRS_TONSIL,
+                   COHORT_SPINE: CCSRS_SPINE}
 
 DELTA = 1e-8
 SEED = 998
