@@ -9,14 +9,14 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-from . import globals
+from . import globals, utils
 from . import c0_data_prepare as dp
 
 
 class Dataset(object):
 
   def __init__(self, df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None,
-               test_pct=0.2, cohort=globals.COHORT_ALL, trimmed_ccsr=None):
+               test_pct=0.2, cohort=globals.COHORT_ALL, trimmed_ccsr=None, discretize_cols=None, remove_dups=None):
     if (onehot_cols is not None) and (onehot_dtypes is not None):
       assert len(onehot_cols) == len(onehot_dtypes), "One-hot Encoding columns and dtypes must match!"
     self.df = df
@@ -27,12 +27,14 @@ class Dataset(object):
     else:
       self.cohort_df = df
 
-    X, y, feature_cols, case_keys = gen_Xy(self.cohort_df, outcome, cols, onehot_cols, onehot_dtypes, trimmed_ccsr)
+    X, y, feature_cols, case_keys = gen_Xy(self.cohort_df, outcome, cols, onehot_cols, onehot_dtypes, trimmed_ccsr,
+                                           discretize_cols)
     if test_pct > 0:
       self.Xtrain, self.Xtest, self.ytrain, self.ytest, self.train_idx, self.test_idx = gen_train_test(X, y, test_pct)
     else:
       self.Xtrain, self.ytrain, self.train_idx = X, y, np.arange(X.shape[0])
       self.Xtest, self.ytest, self.test_idx = np.array([]), np.array([]), np.array([])
+    # TODO: Add o2m removal here (can specify whether to remove only from train or test or entire X); remember to update cohort df, given the set of rows are changed!!!!
     self.feature_names = feature_cols
     self.case_keys = case_keys
     self.sps_preds = df[globals.SPS_LOS_FTR].to_numpy()  # Might contain NaN
@@ -48,7 +50,8 @@ class Dataset(object):
 
 # TODO: add data cleaning, e.g. 1. check for negative LoS and remove; 2. check identical rows with different outcome
 # Generate data matrix X
-def gen_Xy(df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None, trimmed_ccsr=None):
+def gen_Xy(df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None, trimmed_ccsr=None,
+           discretize_cols=None):
   """
   Generate X, y for downstream modeling
 
@@ -59,7 +62,8 @@ def gen_Xy(df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None,
   :return:
   """
   # Make data matrix X
-  X, feature_cols, X_case_key = gen_X(df, cols, onehot_cols, onehot_dtypes, trimmed_ccsr=trimmed_ccsr)
+  X, feature_cols, X_case_key = gen_X(df, cols, onehot_cols, onehot_dtypes, trimmed_ccsr=trimmed_ccsr,
+                                      discretize_cols=discretize_cols)
   X = X.to_numpy(dtype=np.float64)
 
   # Get outcome vector
@@ -67,7 +71,8 @@ def gen_Xy(df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None,
   return X, y, feature_cols, X_case_key
 
 
-def gen_X(df, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None, remove_nonnumeric=True, verbose=False, trimmed_ccsr=None):
+def gen_X(df, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None, remove_nonnumeric=True, verbose=False,
+          trimmed_ccsr=None, discretize_cols=None):
   # Make data matrix X numeric
   X = df[cols]
   X.loc[(X.SEX_CODE != 'F'), 'SEX_CODE'] = 0.0
@@ -117,6 +122,11 @@ def gen_X(df, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None, r
   # Bucket SPS predicted LoS into 9 classes, if there such prediction exists
   if globals.SPS_LOS_FTR in cols:  # Assume SPS prediction are all integers?
     X.loc[(X[globals.SPS_LOS_FTR] > globals.MAX_NNT), globals.SPS_LOS_FTR] = globals.MAX_NNT + 1
+
+  # Discretize certain continuous columns by request
+  if discretize_cols:
+    utils.discretize_columns(X, feature_cols, discretize_cols, inplace=True)
+
   if verbose:
     display(X.head(20))
 

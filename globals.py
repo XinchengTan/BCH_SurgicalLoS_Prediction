@@ -1,10 +1,10 @@
 from pathlib import Path
 
 diaglabels = ['Cardiovascular', 'Digestive', 'Endocrine',
-                'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
-                'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic',
-                'Nutrition', 'Optic', 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin',
-                'Uncategorized', 'Urogenital']
+              'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
+              'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic',
+              'Nutrition', 'Optic', 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin',
+              'Uncategorized', 'Urogenital']
 
 DASHDATA_COLS = ['SURG_CASE_KEY', 'LENGTH_OF_STAY', 'SPS_PREDICTED_LOS', 'BOOKING_DATE',
                  'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE', 'PROC_DECILE',
@@ -19,16 +19,16 @@ FEATURE_COLS = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
                 'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
                 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
                 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
-                'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
+                'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
 
 FEATURE_COLS_NO_DECILE = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
                 'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
                 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
                 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
-                'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
+                'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
 
 FEATURE_COLS_NO_OS = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
-                      'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
+                      'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
 
 SPS_LOS_FTR = 'SPS_PREDICTED_LOS'
 FEATURE_COLS_SPS = FEATURE_COLS + [SPS_LOS_FTR]
