@@ -1,6 +1,7 @@
 """
 Helper functions to preprocess the data and generate data matrix with its corresponding labels
 """
+from collections import Counter
 
 from IPython.display import display
 from imblearn.over_sampling import SMOTENC
@@ -16,7 +17,8 @@ from . import c0_data_prepare as dp
 class Dataset(object):
 
   def __init__(self, df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None,
-               test_pct=0.2, cohort=globals.COHORT_ALL, trimmed_ccsr=None, discretize_cols=None, remove_dups=None):
+               test_pct=0.2, cohort=globals.COHORT_ALL, trimmed_ccsr=None, discretize_cols=None,
+               denoise_what=None, denoise_how=None):
     if (onehot_cols is not None) and (onehot_dtypes is not None):
       assert len(onehot_cols) == len(onehot_dtypes), "One-hot Encoding columns and dtypes must match!"
     self.df = df
@@ -34,11 +36,70 @@ class Dataset(object):
     else:
       self.Xtrain, self.ytrain, self.train_idx = X, y, np.arange(X.shape[0])
       self.Xtest, self.ytest, self.test_idx = np.array([]), np.array([]), np.array([])
-    # TODO: Add o2m removal here (can specify whether to remove only from train or test or entire X); remember to update cohort df, given the set of rows are changed!!!!
     self.feature_names = feature_cols
+
+    # TODO: keep the count of the original cohort df
+    self.noisy_cases_df = None
+    if (denoise_what != None) and (denoise_how != None):
+      self.denoise(denoise_what, denoise_how)
+
     self.case_keys = case_keys
     self.sps_preds = df[globals.SPS_LOS_FTR].to_numpy()  # Might contain NaN
     self.cpt_groups = df['CPT_GROUPS'].to_numpy()
+
+  def denoise(self, denoise_what, denoise_how):
+    # TODO: Consider whether we need to update cohort df, given the set of rows are changed. -- I vote for no update for now
+
+    if denoise_what == globals.DENOISE_ONLY_TRAIN:
+      self._denoise_train(denoise_how)
+    elif denoise_what == globals.DENOISE_TRAIN_TEST0:  # denoise train, and then denoise test from noise in train
+      self._denoise_test_from_train(denoise_how)
+    elif denoise_what == globals.DENOISE_TRAIN_TEST1:
+      self._denoise_train(denoise_how)
+      self._denoise_test_from_train(denoise_how)
+    else:
+      raise Warning("Skipping denoise because %s is not implemented yet!" % denoise_what)
+
+  def _denoise_train(self, how):
+    clean_Xytrain_df, cleaned_noisy_cases_df = denoise(self.Xtrain, self.ytrain, self.feature_names, how=how)
+    self.Xtrain = clean_Xytrain_df[self.feature_names]
+    self.ytrain = clean_Xytrain_df['Outcome']
+    self.train_idx = clean_Xytrain_df.index
+    self.noisy_cases_df = cleaned_noisy_cases_df
+
+  def _denoise_test_from_train(self, how):
+    if how == globals.DENOISE_ALL:
+      # clean_Xytrain_df, o2m_noise = denoise(self.Xtrain, self.ytrain, self.feature_names, self.noisy_cases_df, globals.DENOISE_O2M)
+      # TODO: double check correctness
+      self._denoise_test_from_train(how=globals.DENOISE_O2M)
+      o2m_noise_df = self.noisy_cases_df.copy()
+      self._denoise_test_from_train(how=globals.DENOISE_PURE_DUP)
+      self.noisy_cases_df = pd.concat([o2m_noise_df, self.noisy_cases_df])
+    else:
+      self._denoise_train(how)
+      clean_Xytest_df, _ = denoise(self.Xtest, self.ytest, self.feature_names, self.noisy_cases_df, how)
+      self.Xtest = clean_Xytest_df[self.feature_names]
+      self.ytest = clean_Xytest_df['Outcome']
+      self.test_idx = clean_Xytest_df.index
+    # keep_idx_mask = np.ones_like(self.ytest, dtype=bool)
+    # for i, row in enumerate(self.Xtest):
+    #   for ns_idx, ns_row in self.noisy_cases_df.iterrows():
+    #     if np.array_equal(ns_row[self.feature_names], row) and ns_row['Outcome'] != self.ytest[i]:
+    #       keep_idx_mask[i] = False
+    #
+    # self._filter_X_by_index(globals.XTEST, keep_idx_mask)
+    #
+    # # TODO: this is DENOISE_TRAIN_TEST1, need 0
+    # _, keep_idx = np.unique(self.Xtest, return_index=True, axis=0)
+    # self._filter_X_by_index(globals.XTEST, keep_idx)
+
+  def _filter_X_by_index(self, Xtype, keep_idxs):
+    if Xtype == globals.XTEST:
+      self.Xtest = self.Xtest[keep_idxs, :]
+      self.ytest = self.ytest[keep_idxs]
+      self.test_idx = self.test_idx[keep_idxs]
+    else:
+      raise NotImplementedError
 
   def __str__(self):
     res = "Training set size: %d\n" \
@@ -64,7 +125,6 @@ def gen_Xy(df, outcome=globals.NNT, cols=globals.FEATURE_COLS, onehot_cols=None,
   # Make data matrix X
   X, feature_cols, X_case_key = gen_X(df, cols, onehot_cols, onehot_dtypes, trimmed_ccsr=trimmed_ccsr,
                                       discretize_cols=discretize_cols)
-  X = X.to_numpy(dtype=np.float64)
 
   # Get outcome vector
   y = gen_y(df, outcome)
@@ -124,11 +184,12 @@ def gen_X(df, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None, r
     X.loc[(X[globals.SPS_LOS_FTR] > globals.MAX_NNT), globals.SPS_LOS_FTR] = globals.MAX_NNT + 1
 
   # Discretize certain continuous columns by request
+  X = X.to_numpy(dtype=np.float64)
   if discretize_cols:
     utils.discretize_columns(X, feature_cols, discretize_cols, inplace=True)
 
   if verbose:
-    display(X.head(20))
+    display(pd.DataFrame(X, columns=feature_cols).head(20))
 
   # Basic sanity check
   assert X.shape[1] == len(feature_cols), 'Generated data matrix has %d features, but feature list has %d items' % \
@@ -192,7 +253,7 @@ def gen_train_test(X, y, test_pct=0.2):
   # print("min index, max index: ", min(X.index), max(X.index))
   # print("train - min, max: ", min(X_train.index), max(X_train.index))
   # print("test - min, max: ", min(X_test.index), max(X_test.index))
-  return X_train.to_numpy(), X_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy(), X_train.index, X_test.index
+  return X_train.to_numpy(), X_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy(), X_train.index.to_numpy(), X_test.index.to_numpy()
 
 
 # train-validation-test split
@@ -216,3 +277,100 @@ def gen_smote_Xy(X, y, feature_names):
   sm = SMOTENC(categorical_features=categ_ftrs, random_state=globals.SEED)
   X, y = sm.fit_resample(X, y)
   return X, y
+
+
+def denoise(X, y, features, noisy_cases_df=None, how='all'):
+  """
+  Denoise dataset (X, y) by removing pure duplicates,
+  or coalescing one-to-many cases to one case with its majority outcome,
+  or doing both operations.
+
+  :param X:
+  :param y:
+  :param noisy_cases: If not None, denoise these cases from X
+  :param how:
+  :return: A dataframe of X, y, with the index of the original X preserved
+  """
+  # Make Xydf_dup and Xydf_nodup
+  Xydf = pd.DataFrame(X, columns=features)
+  Xydf['Outcome'] = y
+  dup_mask = Xydf.duplicated(subset=features, keep=False)
+  Xydf_dup = Xydf[dup_mask]
+
+  Xydf_clean = Xydf.drop_duplicates(subset=features, keep=False)
+
+  o2m_keep_df = remove_o2m_cases(Xydf_dup, features, noisy_cases_df)
+  pure_dup_keep_df = remove_pure_dups(Xydf_dup, features, noisy_cases_df)
+
+  if how == globals.DENOISE_ALL:
+    cleaned_cases_df = pd.concat([o2m_keep_df, pure_dup_keep_df])
+    Xydf_clean = pd.concat([Xydf_clean, cleaned_cases_df])
+  elif how == globals.DENOISE_O2M:
+    cleaned_cases_df = o2m_keep_df
+    kept_noise_df = pd.merge(Xydf_dup, pure_dup_keep_df, on=features, how='left', indicator=True).loc[
+      lambda x: x['_merge'] != 'both']
+    Xydf_clean = pd.concat([Xydf_clean, cleaned_cases_df, kept_noise_df[features + ['Outcome']]])
+  elif how == globals.DENOISE_PURE_DUP:
+    cleaned_cases_df = pure_dup_keep_df
+    kept_noise_df = pd.merge(Xydf_dup, o2m_keep_df, on=features, how='left', indicator=True).loc[
+      lambda x: x['_merge'] != 'both']
+    Xydf_clean = pd.concat([Xydf_clean, cleaned_cases_df, kept_noise_df[features + ['Outcome']]])
+  else:
+    raise NotImplementedError
+
+  assert len(Xydf_clean.columns) == len(features) + 1, "Clean Xy df has wrong number of columns!"
+  #   assert True not in Xydf_clean.duplicated(subset=features), "Clean Xy df still has cases with duplications!"
+
+  return Xydf_clean, cleaned_cases_df
+
+
+def remove_o2m_cases(Xydup_df, features, noisy_cases_df=None):
+  # o2m_df = Xydup_df.groupby(by=features)\
+  #   .filter(lambda x: len(x.value_counts().index) > 1)
+  #   .groupby(by=features)['Outcome'].count().sort_values('pos').groupby(level=len(features)-1).tail(1)
+
+  o2m_grp2idxs = Xydup_df.groupby(by=features).groups
+  o2m_keep_X, y, indices = [], [], []
+  if noisy_cases_df == None:
+    for ftr, idxs in o2m_grp2idxs.items():
+      outcomes = Xydup_df.loc[idxs]['Outcome'].to_list()
+      outcome_counter = Counter(outcomes)
+      if len(outcome_counter) > 1:
+        o2m_keep_X.append(ftr)
+        cur_y = max(outcome_counter, key=outcome_counter.get)
+        y.append(cur_y)
+        indices.append(idxs[outcomes.index(cur_y)])
+  else:
+    for ftr, idxs in o2m_grp2idxs:
+      noisy_case_match = noisy_cases_df[(noisy_cases_df[features] == ftr).all(1)]
+      if len(noisy_case_match) > 0:
+        outcomes = Xydup_df.loc[idxs]['Outcome']
+        selected_y = noisy_case_match['Outcome'][0]
+        if selected_y in outcomes:
+          o2m_keep_X.append(ftr)
+          y.append(selected_y)
+          indices.append(idxs[outcomes.index(selected_y)])
+
+  o2m_keep_df = pd.DataFrame(o2m_keep_X, columns=features, index=indices)
+  o2m_keep_df['Outcome'] = y
+  return o2m_keep_df
+
+
+def remove_pure_dups(Xydup_df, features, noisy_cases_df=None):
+  if noisy_cases_df is None:
+    pure_dup_keep_df = Xydup_df.groupby(by=features)\
+      .filter(lambda x: len(x.value_counts().index) == 1)\
+      .drop_duplicates(subset=features, keep='first')
+  else:
+    pure_dup_keep_df = Xydup_df.groupby(by=features) \
+      .filter(lambda x: len(x.value_counts().index) == 1)
+    join_df = pd.merge(pure_dup_keep_df, noisy_cases_df, on=features, how='left', suffixes=('_l', '_r'), indicator='Exists')
+    pure_dup_keep_df = join_df[join_df['Exists'] == 'left_only'].drop('Exists', axis=1, inplace=True)
+    overlap = join_df[join_df['Exists'] == 'both']\
+      .drop_duplicates(subset=features+['Outcome_l'], keep='first')\
+      .rename(columns={'Outcome_l': 'Outcome'}, inplace=True)\
+      .drop(['Outcome_r', 'Exists'], axis=1, inplace=True)
+    pure_dup_keep_df = pd.concat([pure_dup_keep_df, overlap])
+
+  return pure_dup_keep_df
+

@@ -115,6 +115,17 @@ XALL_ONE2ONE = 'one-to-one (all)'  # TODO: denoise training data to include only
 XMAJ_ONE2ONE = 'one-to-one w/ majority filter'
 
 
+# Denoise options
+DENOISE_ONLY_TRAIN = 'denoise-only-train'
+DENOISE_TRAIN_TEST0 = 'denoise-train-test0'  # denoise train, and denoise test from noise in train
+DENOISE_TRAIN_TEST1 = 'denoise-train-test1'  # DENOISE_TRAIN_TEST0 and then further denoise test
+
+
+DENOISE_ALL = 'all'
+DENOISE_O2M = 'o2m'
+DENOISE_PURE_DUP = 'pure-dups'
+
+
 SURGEON = 'SPS Surgeon'
 
 # Model types

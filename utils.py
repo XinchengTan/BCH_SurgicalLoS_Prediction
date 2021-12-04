@@ -42,7 +42,6 @@ def gen_md2AllClfs(md2reg=None, md2multiclf=None, md2binclfs=None):
   return md2allclfs
 
 
-
 # Outputs groups of rows that are identical in feature values, but different outcomes
 def check_one_to_many_in_X_updated(dataset: Dataset, discretize_cols=None, check_train=True, verbose=True):
   """
@@ -55,9 +54,11 @@ def check_one_to_many_in_X_updated(dataset: Dataset, discretize_cols=None, check
   else:
     X, y, feature_names = np.copy(dataset.Xtest), np.copy(dataset.ytest), dataset.feature_names
   N = np.shape(X)[0]
+  print('Total number of cases: ', N)
 
   # Modify data matrix with discretized columns by request
-  discretize_columns(X, feature_names, discretize_cols, inplace=True)
+  if discretize_cols:
+    discretize_columns(X, feature_names, discretize_cols, inplace=True)
 
   # Get duplicated feature rows with corresponding outcome
   start = time()
@@ -72,11 +73,30 @@ def check_one_to_many_in_X_updated(dataset: Dataset, discretize_cols=None, check
   # Groupby all features, filter by group size (keep those > 1)
   start = time()
   Xydf_dup_group = Xydf_dup.groupby(by=feature_names)
+  print("[INFO] Groupby all features took %.2f sec" % (time() - start))
   o2m_df = Xydf_dup_group.filter(lambda x: len(x.value_counts().index) > 1)
   pure_dup_df = Xydf_dup_group.filter(lambda x: len(x.value_counts().index) == 1)
   print("[INFO] Get pure duplicates and one-to-many cases took %.2f sec" % (time() - start))
   print("Number of one-to-many cases: ", len(o2m_df))
   print("Number of pure duplicates: ", len(pure_dup_df))
+
+  # TODO: groupby sort by count
+  if verbose:
+    toTuple_ftrs = ['CPTS', 'ICD10S', 'CCSRS', 'CPT_GROUPS']
+    sort_by_ftrs = ['PRIMARY_PROC', 'CPTS', 'ICD10S']
+    grouby_ftrs = [f for f in globals.FEATURE_COLS_NO_OS if f != 'SURG_CASE_KEY']
+    o2m_df_view = dataset.cohort_df[globals.FEATURE_COLS_NO_OS+['LENGTH_OF_STAY']].iloc[o2m_df.index].copy()
+    o2m_df_view['LENGTH_OF_STAY'] = o2m_df_view['LENGTH_OF_STAY'].apply(lambda x: min(globals.MAX_NNT+1, int(x)))
+    o2m_df_view[toTuple_ftrs] = o2m_df_view[toTuple_ftrs].applymap(lambda x: tuple(sorted(x)))
+    o2m_df_view = o2m_df_view.groupby(by=grouby_ftrs).size().reset_index(name='Counts')  # TODO: why are there count == 1??? - age, weight
+
+    pure_dup_df_view = dataset.cohort_df[globals.FEATURE_COLS_NO_OS+['LENGTH_OF_STAY']].iloc[pure_dup_df.index].copy()
+    pure_dup_df_view['LENGTH_OF_STAY'] = pure_dup_df_view['LENGTH_OF_STAY'].apply(lambda x: min(globals.MAX_NNT+1, int(x)))
+    pure_dup_df_view[toTuple_ftrs] = pure_dup_df_view[toTuple_ftrs].applymap(lambda x: tuple(sorted(x)))
+
+
+    display(o2m_df_view.sort_values(by=sort_by_ftrs).head(30))
+    display(pure_dup_df_view.sort_values(by=sort_by_ftrs).head(30))
 
   return o2m_df, pure_dup_df
 
@@ -95,7 +115,8 @@ def check_one_to_many_in_X(dataset: Dataset, discretize_cols=None, check_train=T
   N = np.shape(X)[0]
 
   # Modify data matrix with discretized columns by request
-  discretize_columns(X, feature_names, discretize_cols, inplace=True)
+  if discretize_cols:
+    discretize_columns(X, feature_names, discretize_cols, inplace=True)
 
   start = time()
   # Track indices of feature-value duplicate rows
