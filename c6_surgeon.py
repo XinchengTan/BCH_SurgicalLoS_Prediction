@@ -10,7 +10,8 @@ from . import utils_plot as pltutil
 from . import globals, c4_model_eval
 
 
-def surgeon_model_agree_cases_eval(dataset: dpp.Dataset, md2multiclf, md, disagree_nnt_diff):
+def surgeon_model_agree_cases_eval(dataset: dpp.Dataset, md2multiclf, md, agree_nnt_diff):
+
   pass
 
 
@@ -37,26 +38,41 @@ def surgeon_models_both_wrong(dataset: dpp.Dataset, md2multiclf):
   return md2err_df, err_intersection_df
 
 
-def gen_surgeon_model_agree_df_and_Xydata(dataset: dpp.Dataset, md2multiclf, md, use_test=True):
-  return gen_surgeon_model_agree_or_not_df_and_Xydata(dataset, md2multiclf, md, use_test, agree=True)
+def gen_surgeon_model_agree_df_and_Xydata(dataset: dpp.Dataset, clf, use_test=True):
+  return gen_surgeon_model_agree_or_not_df_and_Xydata(dataset, clf, use_test, agree=True)
 
 
-def gen_surgeon_model_disagree_df_and_Xydata(dataset: dpp.Dataset, md2multiclf, md, use_test=True):
-  return gen_surgeon_model_agree_or_not_df_and_Xydata(dataset, md2multiclf, md, use_test, agree=False)
+def gen_surgeon_model_disagree_df_and_Xydata(dataset: dpp.Dataset, clf, use_test=True, diff=None):
+  return gen_surgeon_model_agree_or_not_df_and_Xydata(dataset, clf, use_test, agree=False, diff=diff)
 
 
-def gen_surgeon_model_agree_or_not_df_and_Xydata(dataset: dpp.Dataset, md2multiclf, md, use_test=True, agree=True):
+def gen_surgeon_model_agree_or_not_df_and_Xydata(dataset: dpp.Dataset, clf, use_test=True, agree=True, diff=None):
 
   Xdata, ydata, dataset_df_idx = (dataset.Xtest, dataset.ytest, dataset.test_idx) if use_test \
     else (dataset.Xtrain, dataset.ytrain, dataset.train_idx)
 
   # Fetch surgeon and model prediction
   surgeon_pred = dpp.gen_y_nnt(dataset.cohort_df.iloc[dataset_df_idx]['SPS_PREDICTED_LOS'])
-  clf = md2multiclf[md]
-  md_pred = clf.predict(Xdata)
+  md_pred = clf.predict(Xdata) if clf != None else surgeon_pred  # If clf == None, we are evaluating surgeon prediction
 
   # ID all the cases where model prediction and surgeon estimation agree
-  ms_agree_data_idx = np.where(surgeon_pred == md_pred)[0] if agree else np.where(surgeon_pred != md_pred)[0]
+  if agree:
+    ms_agree_data_idx = np.where(surgeon_pred == md_pred)[0]
+  else:
+    if diff == None:
+      ms_agree_data_idx = np.where(surgeon_pred != md_pred)[0]
+    elif type(diff) == int:
+      ms_agree_data_idx = np.where(np.abs(surgeon_pred - md_pred) == diff)[0]
+    elif type(diff) == tuple:  # a tuple of comparison operator and diff value e.g. (">", 2)
+      if diff[0] == '>':
+        ms_agree_data_idx = np.where(np.abs(surgeon_pred - md_pred) > diff[1])[0]
+      elif diff[0] == '>=':
+        ms_agree_data_idx = np.where(np.abs(surgeon_pred - md_pred) >= diff[1])[0]
+      else:
+        raise NotImplementedError()
+    else:
+      raise NotImplementedError()
+
   agree_Xdata = Xdata[ms_agree_data_idx, :]  # generate data matrix of all agreement cases
   agree_ydata = ydata[ms_agree_data_idx]
 

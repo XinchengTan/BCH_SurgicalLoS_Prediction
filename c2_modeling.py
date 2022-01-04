@@ -52,10 +52,11 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, Grad
 from statsmodels.miscmodels.ordinal_model import OrderedModel
 from xgboost import XGBClassifier
 
-from . import globals, c4_model_eval, c6_surgeon
+from . import globals, c4_model_eval, c6_surgeon, utils
 from . import c1_data_preprocessing as dpp
 from .c1_data_preprocessing import Dataset
 from .c4_model_eval import ModelPerf
+from .c3_ensemble import Ensemble
 from . import utils_plot as pltutil
 
 
@@ -233,6 +234,7 @@ def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
     # 'min_impurity_split': None,
     # 'criterion': ['gini', 'entropy'],
     clf = DecisionTreeClassifier(random_state=globals.SEED, class_weight=class_weight)
+    clf.score()
     param_space = {
       'max_depth': [None] + list(range(2, 21, 2)),
       'max_features': list(range(2, 1 + n_frts // 2, 10)) + [n_frts],
@@ -350,7 +352,7 @@ def predict_nnt_multi_clf(dataset: Dataset, model=None, cls_weight=None, evaluat
   return model2trained
 
 
-def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType, cohort=globals.COHORT_ALL):
+def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType, cohort=globals.COHORT_ALL, eval_surgeon=False):
   """
   A high-level function that iterates through all trained multi-class classifiers and evaluate
   the performance of each on test or test and training set.
@@ -361,51 +363,144 @@ def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType, cohor
   - confusion matrix (normalized by true class counts)
   - ......
   """
+  model2trained_clf = dict(model2trained_clf)
   Xtrain, ytrain, Xtest, ytest = dataset.Xtrain, dataset.ytrain, dataset.Xtest, dataset.ytest
   df = dataset.cohort_df
   md2ModelPerf = defaultdict(lambda: defaultdict(lambda: None))
   xtypes = [XType] if XType is not None else [globals.XTRAIN, globals.XTEST]
 
+  # A majority-vote based Ensemble model that equally weighs each clf and outputs the majority prediction
+  ensemble_md = Ensemble([globals.MULTI_CLF], utils.gen_md2AllClfs(md2multiclf=model2trained_clf))
+  model2trained_clf[globals.ENSEMBLE_MAJ_EQ] = ensemble_md
+
+  # Treat surgeon as a model and evaluate
+  if eval_surgeon:
+    df_sps = df.join(dataset.df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner', rsuffix='_full')
+    if not df_sps[globals.SPS_LOS_FTR].isnull().any():
+      df = df_sps
+      model2trained_clf[globals.SURGEON] = None
+    else:
+      raise Warning("Skipping surgeon prediction evaluation, since some cases have missing SPS prediction")
+
+  xtype2diff = {globals.XDISAGREE: None, globals.XDISAGREE1: 1, globals.XDISAGREE2: 2,
+                globals.XDISAGREE_GT2: ('>', 2)}
+  md2SurgeonPerf_disagree = defaultdict(lambda: defaultdict(lambda: None))
   for md, clf in model2trained_clf.items():
 
     if XType is None:  # evaluate both training and test set
       md2ModelPerf[md][globals.XTRAIN] = c4_model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.train_idx], Xtrain, ytrain,
-                                                                           globals.clf2name[md], globals.XTRAIN, cohort=cohort)
+                                                                           globals.clf2name_eval[md], globals.XTRAIN, cohort=cohort)
       md2ModelPerf[md][globals.XTEST] = c4_model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.test_idx], Xtest, ytest,
-                                                                          globals.clf2name[md], globals.XTEST, cohort=cohort)
+                                                                          globals.clf2name_eval[md], globals.XTEST, cohort=cohort)
 
     elif XType == globals.XTRAIN:
       md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.train_idx], Xtrain, ytrain,
-                                                                  globals.clf2name[md], XType, cohort=cohort)
+                                                                  globals.clf2name_eval[md], XType, cohort=cohort)
 
     elif XType == globals.XTEST:
       md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(clf, df.iloc[dataset.test_idx], Xtest, ytest,
-                                                                  globals.clf2name[md], XType, cohort=cohort)
+                                                                  globals.clf2name_eval[md], XType, cohort=cohort)
 
     elif XType == globals.XAGREE:
-      data_df, Xdata, ydata = c6_surgeon.gen_surgeon_model_agree_df_and_Xydata(dataset, model2trained_clf, md, use_test=True)
-      md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(clf, data_df, Xdata, ydata, globals.clf2name[md], XType, cohort=cohort)
+      N = dataset.Xtest.shape[0]
+      if md != globals.SURGEON:
+        data_df, Xdata, ydata = c6_surgeon.gen_surgeon_model_agree_df_and_Xydata(dataset, clf, use_test=True)
+      else:
+        data_df, Xdata, ydata = df.iloc[dataset.test_idx], Xtest, ytest
+      md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+        clf, data_df, Xdata, ydata, globals.clf2name_eval[md], XType, cohort=cohort, pop_size=N)
 
-    elif XType == globals.XDISAGREE:
-      data_df, Xdata, ydata = c6_surgeon.gen_surgeon_model_disagree_df_and_Xydata(dataset, model2trained_clf, md,
-                                                                                  use_test=True)
-      md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(clf, data_df, Xdata, ydata, globals.clf2name[md], XType, cohort=cohort)
+    else:  # focus on the sample where surgeon and model disagree
+      if XType in xtype2diff.keys():
+        N = dataset.Xtest.shape[0]
+        if md != globals.SURGEON:
+          data_df, Xdata, ydata = c6_surgeon.gen_surgeon_model_disagree_df_and_Xydata(
+            dataset, clf, use_test=True, diff=xtype2diff[XType])
+          md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+            clf, data_df, Xdata, ydata, globals.clf2name_eval[md], XType, cohort=cohort, pop_size=N)
+          md2SurgeonPerf_disagree[md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+            None, data_df, Xdata, ydata, globals.clf2name_eval[globals.SURGEON], XType, cohort=cohort, pop_size=N)
+      else:
+        raise NotImplementedError("XType '%s' is not implemented yet!" % XType)
 
-    else:
-      raise NotImplementedError("XType '%s' is not implemented yet!" % XType)
+    # if XType == globals.XDISAGREE:
+    #   N = dataset.Xtest.shape[0]
+    #   if md != globals.SURGEON:
+    #     data_df, Xdata, ydata = c6_surgeon.gen_surgeon_model_disagree_df_and_Xydata(dataset, clf, use_test=True)
+    #     md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+    #       clf, data_df, Xdata, ydata, globals.clf2name_eval[md], XType, cohort=cohort, pop_size=N)
+    #     md2ModelPerf[globals.SURGEON + " (%s)" % md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+    #       None, data_df, Xdata, ydata, globals.clf2name_eval[globals.SURGEON], XType, cohort=cohort, pop_size=N)
+    #
+    # elif XType == globals.XDISAGREE1:
+    #   N = dataset.Xtest.shape[0]
+    #   if md != globals.SURGEON:
+    #     data_df, Xdata, ydata = c6_surgeon.gen_surgeon_model_disagree_df_and_Xydata(dataset, clf, use_test=True, diff=1)
+    #     md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+    #       clf, data_df, Xdata, ydata, globals.clf2name_eval[md], XType, cohort=cohort, pop_size=N)
+    #     md2ModelPerf[globals.SURGEON + " (%s)" % md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+    #       None, data_df, Xdata, ydata, globals.clf2name_eval[globals.SURGEON], XType, cohort=cohort, pop_size=N)
+    #
+    # elif XType == globals.XDISAGREE2:
+    #   N = dataset.Xtest.shape[0]
+    #   if md != globals.SURGEON:
+    #     data_df, Xdata, ydata = c6_surgeon.gen_surgeon_model_disagree_df_and_Xydata(dataset, clf, use_test=True, diff=2)
+    #     md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+    #       clf, data_df, Xdata, ydata, globals.clf2name_eval[md], XType, cohort=cohort, pop_size=N)
+    #     md2ModelPerf[globals.SURGEON + " (%s)" % md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+    #       None, data_df, Xdata, ydata, globals.clf2name_eval[globals.SURGEON], XType, cohort=cohort, pop_size=N)
+    #
+    # elif XType == globals.XDISAGREE_GT2:
+    #   N = dataset.Xtest.shape[0]
+    #   if md != globals.SURGEON:
+    #     data_df, Xdata, ydata = c6_surgeon.gen_surgeon_model_disagree_df_and_Xydata(dataset, clf, use_test=True, diff=('>', 2))
+    #     md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+    #       clf, data_df, Xdata, ydata, globals.clf2name_eval[md], XType, cohort=cohort, pop_size=N)
+    #     md2ModelPerf[globals.SURGEON + " (%s)" % md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+    #       None, data_df, Xdata, ydata, globals.clf2name_eval[globals.SURGEON], XType, cohort=cohort, pop_size=N)
+    #
+    # else:
+    #   raise NotImplementedError("XType '%s' is not implemented yet!" % XType)
+
+  if globals.SURGEON in md2ModelPerf.keys() and XType == globals.XDISAGREE:
+    md2ModelPerf.pop(globals.SURGEON)
 
   # Create a dataframe table to present model performance along all the evaluation metrics
   eval_dfs = []
   for xtype in xtypes:
     # create a data table from a dict
-    md2MP_xtype_dict = {globals.clf2name[md]: md2ModelPerf[md][xtype].get_perf_as_dict() for md in md2ModelPerf}
-    df = pd.DataFrame.from_dict(md2MP_xtype_dict, orient='index').sort_values(by=["Accuracy"], ascending=False)
-    df.index.name = 'Model'
-    df = df.style\
-      .set_table_attributes("style='display:inline'")\
-      .set_caption("Model Performance (%s cases)" % xtype)\
-      .format(ModelPerf.get_metrics_formatter())\
-      .set_properties(**{'text-align': 'center'})
+    if not xtype in xtype2diff.keys():
+      md2MP_xtype_dict = {globals.clf2name_eval.get(md, md): md2ModelPerf[md][xtype].get_perf_as_dict() for md in md2ModelPerf}
+      df = pd.DataFrame.from_dict(md2MP_xtype_dict, orient='index').sort_values(by=["Accuracy"], ascending=False)
+      df.index.name = 'Model'
+      df = df.style \
+        .set_table_attributes("style='display:inline'") \
+        .set_caption("Model Performance (%s cases)" % xtype) \
+        .format(ModelPerf.get_metrics_formatter()) \
+        .set_properties(**{'text-align': 'center',
+                           'white-space': 'pre-wrap'})
+
+    else:
+      md2MP_xtype_dict = dict(sorted({(globals.clf2name_eval.get(md, md), 'Model'): md2ModelPerf[md][xtype].get_perf_as_dict() for md in
+                          md2ModelPerf}.items(), key=lambda item: item[1]['Accuracy'], reverse=True))
+      md2SP_xtype_dict = {(globals.clf2name_eval.get(md, md), 'Surgeon'): md2SurgeonPerf_disagree[md][xtype].get_perf_as_dict() for md in
+                          md2SurgeonPerf_disagree}
+      md2Perf_xtype_dict = {**md2MP_xtype_dict, **md2SP_xtype_dict}
+      df = pd.DataFrame.from_dict(md2Perf_xtype_dict, orient='index')
+      df.index.names = ['Model', 'Predictor']
+      df = df.sort_values(by=["Accuracy"], ascending=False).sort_index(level='Model', sort_remaining=False)
+
+      df = df.style \
+        .set_table_attributes("style='display:inline'") \
+        .set_caption("Model Performance (%s cases)" % xtype) \
+        .format(ModelPerf.get_metrics_formatter()) \
+        .set_properties(**{'text-align': 'center',
+                           'white-space': 'pre-wrap'})
+      # s = df.style
+      # for idx, group_df in df.groupby('Model'):
+      #   s.set_table_styles({group_df.index[0]: [{'selector': '', 'props': 'border-top: 3px solid black;'}]},
+      #                      overwrite=False, axis=1)
+      # display(s)
     eval_dfs.append(df)
 
   return md2ModelPerf, eval_dfs

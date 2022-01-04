@@ -21,6 +21,12 @@ FEATURE_COLS = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
                 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
                 'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
 
+FEATURE_COLS_NO_WEIGHT = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'PROC_DECILE',
+                'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
+                'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
+                'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
+                'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
+
 FEATURE_COLS_NO_DECILE = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
                 'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
                 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
@@ -32,7 +38,8 @@ FEATURE_COLS_NO_OS = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZS
 
 SPS_LOS_FTR = 'SPS_PREDICTED_LOS'
 FEATURE_COLS_SPS = FEATURE_COLS + [SPS_LOS_FTR]
-NON_NUMERIC_COLS = ['SURG_CASE_KEY', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
+FEATURE_COLS_NO_OS_SPS = FEATURE_COLS_NO_OS + [SPS_LOS_FTR]
+NON_NUMERIC_COLS = ['SURG_CASE_KEY', 'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
 CONTINUOUS_COLS = ['AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE']
 
 COHORT_ALL = 'All Cases'
@@ -80,7 +87,8 @@ CCSRS_SPINE = {'Chronic respiratory insufficiency',
 COHORT_TO_CCSRS = {COHORT_TONSIL: CCSRS_TONSIL,
                    COHORT_SPINE: CCSRS_SPINE}
 
-AGE_BINS = [0, 1, 2, 3, 6, 9, 12, 15, 18, float('inf')]  # according to CDC definition: https://www.cdc.gov/ncbddd/childdevelopment/positiveparenting/infants.html
+# according to CDC definition: https://www.cdc.gov/ncbddd/childdevelopment/positiveparenting/infants.html
+AGE_BINS = [0, 0.25, 0.5, 1, 2, 3, 6, 9, 12, 15, 18, float('inf')]
 
 DELTA = 1e-8
 SEED = 998
@@ -99,7 +107,7 @@ NIGHT = "N"
 
 LOS = "LENGTH_OF_STAY"
 NNT = "NUM_OF_NIGHTS"
-MAX_NNT = 7
+MAX_NNT = 5
 NNT_CUTOFFS = list(range(MAX_NNT+1))
 NNT_CLASS_CNT = len(NNT_CUTOFFS) + 1
 NNT_CLASSES = list(range(MAX_NNT+2))
@@ -111,6 +119,9 @@ XTEST = 'test'
 XVAL = 'val'
 XAGREE = 'model & surgeon agree'
 XDISAGREE = 'model & surgeon disagree' # can define anything reasonable
+XDISAGREE1 = 'model & surgeon diagree by 1 night'
+XDISAGREE2 = 'model & surgeon disagree by 2 nights'
+XDISAGREE_GT2 = 'model & surgeon disagree by 2+ nights'
 XALL_ONE2ONE = 'one-to-one (all)'  # TODO: denoise training data to include only one-to-one cases
 XMAJ_ONE2ONE = 'one-to-one w/ majority filter'
 
@@ -124,6 +135,7 @@ DENOISE_TRAIN_TEST1 = 'denoise-train-test1'  # DENOISE_TRAIN_TEST0 and then furt
 DENOISE_ALL = 'all'
 DENOISE_O2M = 'o2m'
 DENOISE_PURE_DUP = 'pure-dups'
+DENOISE_DEL_O2M = 'remove o2m'
 
 
 SURGEON = 'SPS Surgeon'
@@ -152,6 +164,7 @@ XGBCLF = 'xgb-clf'
 ORDCLF_LOGIT = 'ord-clf-logit'
 ORDCLF_PROBIT = 'ord-clf-probit'
 BAL_BAGCLF = 'bal-bagging'
+ENSEMBLE_MAJ_EQ = 'ensemble-maj-eq'
 
 clf2name = {LGR: "Logistic Regression",
             SVC: "Support Vector Classifier",
@@ -161,6 +174,10 @@ clf2name = {LGR: "Logistic Regression",
             GBCLF: "Gradient Boosting Classifier",
             BAL_BAGCLF: "Balanced Bagging Classifier"
             }
+clf2name_eval = dict(clf2name)
+clf2name_eval[ENSEMBLE_MAJ_EQ] = "Ensemble Model (maj - eq)"
+clf2name_eval[SURGEON] = "Surgeon Prediction"
+
 # XGBCLF: "XGBoost Classifier",
 # ORDCLF_LOGIT: "Ordinal Classifier - Logit",
 # ORDCLF_PROBIT: "Ordinal Classifier - Probit",

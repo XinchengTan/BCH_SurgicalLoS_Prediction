@@ -33,15 +33,24 @@ def print_df_info(df, dfname="Dashboard", other_cols=None):
   print("\n")
 
 
-def prepare_data(data_fp, dtime_fp, cpt_fp, cpt_grp_fp, diag_fp, exclude2021=True):
+def prepare_data(data_fp, dtime_fp, cpt_fp, cpt_grp_fp, diag_fp, exclude2021=True, gen_no_weight=False):
   """
   Prepares the patient LoS dataset, combining datetime and CPT related info
   """
   # Load dashboard dataset
-  dashb_df = pd.read_csv(data_fp)
+  if type(data_fp) == str:
+    dashb_df = pd.read_csv(data_fp)
+  elif isinstance(data_fp, pd.DataFrame):
+    dashb_df = data_fp.copy()
+  else:
+    raise NotImplementedError("prepare data not implemented for this data_fp type")
   print_df_info(dashb_df, dfname='Dashboard')
 
   # Drop rows with NaN in weight z-score
+  if gen_no_weight:
+    dashb_df_no_weight = dashb_df[dashb_df['WEIGHT_ZSCORE'].isna()][globals.DASHDATA_COLS]
+    dashb_df_no_weight = prepare_data(dashb_df_no_weight, dtime_fp, cpt_fp, cpt_grp_fp, diag_fp, exclude2021, False)
+
   dashb_df = dashb_df[globals.DASHDATA_COLS].dropna(subset=['WEIGHT_ZSCORE'])
   print_df_info(dashb_df, dfname='Processed Dashboard')
 
@@ -71,14 +80,6 @@ def prepare_data(data_fp, dtime_fp, cpt_fp, cpt_grp_fp, diag_fp, exclude2021=Tru
   cpt_df = cpt_df.join(cpt_grp_df.set_index('CPT_CODE'), on='CPT_CODE', how='inner')
   print_df_info(cpt_df, 'CPT with Group')
 
-  # # debug:
-  # tmp_df = dashb_df.join(cpt_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')
-  # print("\nNumber of unique CPT groups in Dashboard dataset: ", tmp_df['CPT_GROUP'].nunique())
-  # tmp_df = tmp_df.loc[tmp_df['DISCHARGE_DATE'].dt.year < 2021]
-  # print("Number of unique CPT groups in dashboard dataset (exclude 2021)", tmp_df['CPT_GROUP'].nunique())
-  # tmp_df = tmp_df.loc[tmp_df['SPS_PREDICTED_LOS'].notnull()]
-  # print("Number of unique CPT groups in SPS dataset (exclude 2021): ", tmp_df['CPT_GROUP'].nunique())
-
   cpt_df = cpt_df.groupby('SURG_CASE_KEY')\
     .agg({
     'CPT_CODE': lambda x: list(x),
@@ -88,7 +89,7 @@ def prepare_data(data_fp, dtime_fp, cpt_fp, cpt_grp_fp, diag_fp, exclude2021=Tru
     .reset_index()
   print("\nDiscarded %d cases whose CPT(s) are all unknown!\n" % (all_cases_cnt - cpt_df.shape[0]))
 
-  # Join case to list of CPTs with the dashboard data
+  # Join case to list of CPTs with the dashboard data  TODO: What to do with cases without any CPTs? Is it normal?
   dashb_df = dashb_df.join(cpt_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')\
     .rename(columns={'CPT_CODE': 'CPTS',
              'length_of_stay_decile': 'CPT_DECILES',
@@ -107,15 +108,34 @@ def prepare_data(data_fp, dtime_fp, cpt_fp, cpt_grp_fp, diag_fp, exclude2021=Tru
     .rename(columns={'ccsr_1': 'CCSRS', 'icd10': 'ICD10S'})
 
   # Join with dashboard df
-  dashb_df = dashb_df.join(diags_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')
-  print_df_info(dashb_df, 'Dashboard DF with CCSR info')
+  # TODO: [BUG] Should be left join & replace NAN with [], since we still need the cases without any ICD10s?
+  dashb_df = dashb_df.join(diags_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='left')
+  dashb_df['CCSRS'] = dashb_df['CCSRS'].apply(lambda x: x if isinstance(x, list) else [])
+  dashb_df['ICD10S'] = dashb_df['ICD10S'].apply(lambda x: x if isinstance(x, list) else [])
+  print_df_info(dashb_df, 'Dashboard DF with chronic conditions')
+  # Inner join:
+  # Number of cases: 15748
+  # Number of NaNs in each column:
+  # SPS_PREDICTED_LOS      7697
+
+  # Left join:  # TODO: replace nan with empty list (pd.fillna() does not accept list??????)
+  # Number of cases: 17262
+  # Number of NaNs in each column:
+  # SPS_PREDICTED_LOS      8668
+  # ICD10S                 1514
+  # CCSRS                  1514
 
   # Exclude 2021 data by request
   if exclude2021:
     dashb_df = dashb_df[dashb_df['DISCHARGE_DATE'].dt.year < 2021]
     print_df_info(dashb_df, "Final Dashboard (2021 excluded)")
 
-  return dashb_df
+  return dashb_df if not gen_no_weight else dashb_df, dashb_df_no_weight
+
+
+def gen_data_without_weight(df):
+
+  return
 
 
 def gen_sps_data(df):

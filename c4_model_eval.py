@@ -14,6 +14,7 @@ from sklearn.inspection import permutation_importance
 
 from . import globals
 from . import utils_plot as pltutil
+from . import c1_data_preprocessing as dpp
 from .c1_data_preprocessing import Dataset
 
 
@@ -25,32 +26,71 @@ class ModelPerf:
   trained_md: object
   acc: float
   acc_1nnt_tol: float
+  acc_2nnt_tol: float
+  overpred_pct: float
+  underpred_pct: float
   rmse: float
   f1s: pd.DataFrame
   rsqr: float = np.nan
+  count: int = np.nan
+  count_pct: float = np.nan
 
   def __str__(self):
     perf_str = "Model: %s\n" \
                "X type: %s\n" \
                "Accuracy: %.2f\n" \
                "Accuracy (tol = 1 NNT): %.2f\n" \
+               "Accuracy (tol = 2 NNT): %.2f\n" \
+               "Over Prediction Rate: %.2f\n" \
+               "Under Prediction Rate: %.2f\n" \
                "RMSE: %.2f\n" \
                "R squared: %.2f\n" \
-               "F1 scores: %s\n" % \
-               (self.model_name, self.XType, self.acc, self.acc_1nnt_tol, self.rmse, self.rsqr, self.f1s.to_string())
+               "F1 scores: %s\n" \
+               "Case Count: %d\n" \
+               "Case Count Ratio: %.2f\n" % \
+               (self.model_name, self.XType, self.acc, self.acc_1nnt_tol, self.acc_2nnt_tol, self.overpred_pct,
+                self.underpred_pct, self.rmse, self.rsqr, self.f1s.to_string(), self.count, self.count_pct)
     return perf_str
 
   def get_perf_as_dict(self):  # TODO: f1 scores as a list
-    return {"Accuracy": self.acc, "Accuracy (tol = 1 NNT)": self.acc_1nnt_tol, "RMSE": self.rmse, "R-squared": self.rsqr}
+    return {"Accuracy": self.acc, "Accuracy\n(tol = 1 NNT)": self.acc_1nnt_tol, "Accuracy\n(tol = 2 NNT)": self.acc_2nnt_tol,
+            "Over Prediction Rate": self.overpred_pct, "Under Prediction Rate": self.underpred_pct, "RMSE": self.rmse,
+            "Case Count": self.count, "Case Count Ratio": self.count_pct}
 
   @classmethod
   def get_metrics_formatter(cls):
-    return {"Accuracy": "{:.2%}".format, "Accuracy (tol = 1 NNT)": "{:.2%}".format,
-            "RMSE": "{:.2f}".format, "R-squared": "{:.2f}".format}
+    return {"Accuracy": "{:.2%}".format, "Accuracy\n(tol = 1 NNT)": "{:.2%}".format, "Accuracy\n(tol = 2 NNT)": "{:.2%}".format,
+            "Over Prediction Rate": "{:.2%}".format, "Under Prediction Rate": "{:.2%}".format,
+            "RMSE": "{:.2f}".format, "Case Count": "{:d}".format, "Case Count Ratio": "{:.2%}".format}
 
   @classmethod
   def get_perf_metrics(cls):
-    return ("Accuracy", "Accuracy (tol = 1 NNT)", "RMSE", "R-squared")
+    return ("Accuracy", "Accuracy\n(tol = 1 NNT)", "Accuracy\n(tol = 2 NNT)", "Over Prediction Rate",
+            "Under Prediction Rate", "RMSE", "Case Count", "Case Count Ratio")
+
+
+# @dataclass
+# class ModelPerf_XDISAGREE:
+#   model_perf: ModelPerf
+#   sps_model_perf: ModelPerf
+#
+#   def get_perf_as_dict(self):  # TODO: f1 scores as a list
+#     return {"Accuracy": self.model_perf.acc, "Accuracy (tol = 1 NNT)": self.model_perf.acc_1nnt_tol,
+#             "Over Prediction Rate": self.model_perf.overpred_pct, "Under Prediction Rate": self.model_perf.underpred_pct,
+#             "RMSE": self.model_perf.rmse, "R-squared": self.model_perf.rsqr,
+#             }
+#
+#   @classmethod
+#   def get_metrics_formatter(cls):
+#     return {"Accuracy": "{:.2%}".format, "Accuracy (tol = 1 NNT)": "{:.2%}".format,
+#             "Over Prediction Rate": "{:.2%}".format, "Under Prediction Rate": "{:.2%}".format,
+#             "RMSE": "{:.2f}".format, "R-squared": "{:.2f}".format, "Surgeon Agreement Rate": "{:.2%}".format}
+#
+#   @classmethod
+#   def get_perf_metrics(cls):
+#     return ("Accuracy", "Accuracy (tol = 1 NNT)", "Over Prediction Rate", "Under Prediction Rate", "RMSE", "R-squared",
+#             "Surgeon Agreement Rate")
+
 
 
 @dataclass
@@ -164,13 +204,48 @@ def scorer_1nnt_tol(ytrue, ypred):
   return acc_1nnt_tol
 
 
+def scorer_2nnt_tol(ytrue, ypred):
+  # accuracy within +-1 nnt error tolerance
+  acc_1nnt_tol = len(np.where(np.abs(ytrue - ypred) <= 2)[0]) / len(ytrue)
+  return acc_1nnt_tol
+
+
+def scorer_overpred_pct(ytrue, ypred, diff=2):
+  overpred_pct = len(np.where((ypred - ytrue) > diff)[0]) / len(ytrue)
+  return overpred_pct
+
+
+def scorer_underpred_pct(ytrue, ypred, diff=2):
+  underpred_pct = len(np.where((ytrue - ypred) > diff)[0]) / len(ytrue)
+  return underpred_pct
+
+
 def rmse(g):
   rmse = np.sqrt(metrics.mean_squared_error(g['NUM_OF_NIGHTS'], g['Predicted']))
   return pd.Series(dict(rmse=rmse))
 
 
-def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT, cohort=globals.COHORT_ALL):
-  pred_y = clf.predict(X)
+def get_rsqr(clf, md_name, X, ytrue, ypred):
+  if ('Ordinal' in md_name) or ('Ensemble' in md_name) or ('Surgeon' in md_name):
+    return metrics.r2_score(ytrue, ypred)
+  else:
+    return clf.score(X, ytrue)
+
+
+def get_surgeon_agreed_pct(Xdf, ypred_md, population_size):
+  if globals.SPS_LOS_FTR not in Xdf.columns:
+    return np.nan
+  surgeon_pred = dpp.gen_y_nnt(Xdf[globals.SPS_LOS_FTR])
+  population_size = len(ypred_md) if population_size == None else population_size
+  agree_pct = len(np.where(surgeon_pred == ypred_md)[0]) / population_size
+  return agree_pct
+
+
+def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT, cohort=globals.COHORT_ALL, pop_size=None):
+  if md_name == globals.clf2name_eval[globals.SURGEON]:
+    pred_y = dpp.gen_y_nnt(Xdf[globals.SPS_LOS_FTR])
+  else:
+    pred_y = clf.predict(X)
   Xdf = Xdf.copy(deep=True)
 
   # Numeric Metrics
@@ -178,10 +253,16 @@ def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT, cohor
   rmse = np.sqrt(mse)
   acc = metrics.accuracy_score(y, pred_y, normalize=True)
   acc_1nnt = scorer_1nnt_tol(y, pred_y)
+  acc_2nnt = scorer_2nnt_tol(y, pred_y)
+  overpred_pct = scorer_overpred_pct(y, pred_y)
+  underpred_pct = scorer_underpred_pct(y, pred_y)
   f1s = pd.DataFrame({"NNT class": globals.NNT_CLASS_LABELS,
                       "F-1 score": metrics.f1_score(y, pred_y, labels=globals.NNT_CLASSES, average=None)})
-  rsqr = clf.score(X, y) if ("Ordinal" not in md_name) and ("Ensemble" not in md_name) else np.nan
-  model_perf = ModelPerf(XType, md_name, clf, acc, acc_1nnt, rmse, f1s, rsqr)
+  rsqr = metrics.r2_score(y, pred_y)
+  #surgeon_agree_pct = get_surgeon_agreed_pct(Xdf, pred_y, pop_size)
+  count_pct = 1.0 if pop_size is None else len(pred_y) / pop_size
+  model_perf = ModelPerf(XType, md_name, clf, acc, acc_1nnt, acc_2nnt, overpred_pct, underpred_pct, rmse, f1s, rsqr,
+                         len(pred_y), count_pct)
 
   # Confusion Matrix
   conf_mat = gen_confusion_matrix(y, pred_y, md_name, XType)

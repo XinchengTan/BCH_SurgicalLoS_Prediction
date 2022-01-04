@@ -138,3 +138,7 @@ class Ensemble(object):
     var = sum_squares / counts - mean**2
     return np.sqrt(var)
 
+  def __str__(self):
+    s = 'Ensemble Model\n' + str(self.md2clfs)
+    return s
+

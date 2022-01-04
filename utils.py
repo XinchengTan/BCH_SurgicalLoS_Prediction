@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from . import globals
-from .c1_data_preprocessing import Dataset
+from .c1_data_preprocessing import Dataset, discretize_columns
 
 
 # Drop outliers (i.e. patient who has an extremely long LOS)
@@ -174,20 +174,3 @@ def check_one_to_many_in_X(dataset: Dataset, discretize_cols=None, check_train=T
   print("Total Pure Duplicated cases: %d" % dup_cnt)
   return identical_cases2outcomes, one_to_many_cases, pure_duplicates, identical_cases2idxs
 
-
-def discretize_columns(X, feature_names, discretize_cols, inplace=False):
-  if not inplace:
-    X = np.copy(X)
-
-  # Modify data matrix with discretized columns by request
-  for dis_col in discretize_cols:
-    idx = feature_names.index(dis_col)
-    if dis_col == 'AGE_AT_PROC_YRS':
-      X[:, idx] = np.digitize(X[:, idx], globals.AGE_BINS)
-    elif dis_col == 'WEIGHT_ZSCORE':
-      weightz_bins = [float('-inf'), -4, -2, -1, 1, 2, 4, float('inf')]
-      print("Weight z-score bins: ", weightz_bins)
-      X[:, idx] = np.digitize(X[:, idx], weightz_bins)
-    else:
-      raise Warning("%s discretization is not available yet!" % dis_col)
-  return X
