@@ -3,8 +3,8 @@ Example script to execute the LoS prediction pipeline
 """
 from sklearn.metrics import accuracy_score
 
-import los_prediction_deployment_script as los_pred_pipeline
-from los_prediction_global_vars import *
+from deployment import los_prediction_deployment_script as los_pred_pipeline
+from deployment.los_prediction_global_vars import *
 
 
 if __name__ == "__main__":

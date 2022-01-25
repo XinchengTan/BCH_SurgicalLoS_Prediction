@@ -13,14 +13,8 @@ import pandas as pd
 from collections import defaultdict
 from typing import Dict
 
-from sklearn.linear_model import LogisticRegression
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.ensemble import GradientBoostingClassifier
-
-from los_prediction_global_vars import *
-from los_prediction_ensemble_model import Ensemble
+from deployment.los_prediction_global_vars import *
+from deployment.los_prediction_ensemble_model import Ensemble
 
 
 # Data prepare (filter out cases with missing information)
