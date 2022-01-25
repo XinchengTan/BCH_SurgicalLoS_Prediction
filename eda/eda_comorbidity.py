@@ -24,6 +24,20 @@ def pproc_cohort_ccsr_eda(ppcc_df, topK_ccsr=10, cohort=globals.COHORT_TO_PPROCS
   return cohort2df
 
 
+# Generates a dataframe mapping each medical code to its count and frequency
+def medical_code_hist(Xdf, code):
+  N = Xdf.shape[0]
+  if code not in ['PRIMARY_PROC', 'CPT', 'CCSR']:
+    raise NotImplementedError
+
+  cols = list(filter(lambda x: x.startswith(code + '_'), Xdf.columns.to_list()))
+  count = Xdf[cols].sum(axis=0)
+  hist_df = pd.DataFrame(count, index=cols, columns=['Count'])
+  hist_df['Count Ratio'] = hist_df['Count'] / N
+
+  return
+
+
 def primary_proc_assoc_ccsr_eda(df, topK_ccsr=10):
   """
   Generate a table of primary procedure and a list of its CCSRs sorted by frequency descendingly
@@ -64,7 +78,7 @@ def primary_proc_assoc_ccsr_eda(df, topK_ccsr=10):
                 for pp in pproc2ccsr_stats.keys()
                 for cc in list(pproc2ccsr_stats[pp].keys())[:topK_ccsr+1]}  # Pick the top K most frequent CCSR for each pproc
   ret_df = pd.DataFrame.from_dict(ppcc2stats, orient='index')
-  ret_df.index.set_names(['Primary Procedure', 'CCSR'], inplace=True)
+  #ret_df.index.set_names(names=['Primary Procedure', 'CCSR'], inplace=True)
 
   return ret_df, pproc2count, pproc2ccsr_stats, pproc2ccsr_nnts
 

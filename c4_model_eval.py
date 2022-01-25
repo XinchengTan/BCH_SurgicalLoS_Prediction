@@ -61,7 +61,7 @@ class ModelPerf:
   def get_metrics_formatter(cls):
     return {"Accuracy": "{:.2%}".format, "Accuracy\n(tol = 1 NNT)": "{:.2%}".format, "Accuracy\n(tol = 2 NNT)": "{:.2%}".format,
             "Over Prediction Rate": "{:.2%}".format, "Under Prediction Rate": "{:.2%}".format,
-            "RMSE": "{:.2f}".format, "Case Count": "{:d}".format, "Case Count Ratio": "{:.2%}".format}
+            "RMSE": "{:.2f}".format, "Case Count": "{:.0f}".format, "Case Count Ratio": "{:.2%}".format}
 
   @classmethod
   def get_perf_metrics(cls):
@@ -241,7 +241,8 @@ def get_surgeon_agreed_pct(Xdf, ypred_md, population_size):
   return agree_pct
 
 
-def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT, cohort=globals.COHORT_ALL, pop_size=None):
+def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT, cohort=globals.COHORT_ALL, pop_size=None,
+                        plot=True):
   if md_name == globals.clf2name_eval[globals.SURGEON]:
     pred_y = dpp.gen_y_nnt(Xdf[globals.SPS_LOS_FTR])
   else:
@@ -264,70 +265,70 @@ def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT, cohor
   model_perf = ModelPerf(XType, md_name, clf, acc, acc_1nnt, acc_2nnt, overpred_pct, underpred_pct, rmse, f1s, rsqr,
                          len(pred_y), count_pct)
 
-  # Confusion Matrix
-  conf_mat = gen_confusion_matrix(y, pred_y, md_name, XType)
+  if plot:
+    # Confusion Matrix
+    # conf_mat = gen_confusion_matrix(y, pred_y, md_name, XType)
 
-  # Error Histogram
-  figs, axs = plt.subplots(nrows=3, ncols=1, figsize=(14, 24))
-  pltutil.plot_error_histogram(y, pred_y, md_name, XType, yType=yType, ax=axs[0])
-  pltutil.plot_error_histogram(y, pred_y, md_name, XType, yType=yType, ax=axs[1], groupby_outcome=True)
-  pltutil.plot_error_hist_pct(y, pred_y, md_name, XType, yType=yType, ax=axs[2])
+    # Error Histogram
+    figs, axs = plt.subplots(nrows=3, ncols=1, figsize=(14, 24))
+    pltutil.plot_error_histogram(y, pred_y, md_name, XType, yType=yType, ax=axs[0])
+    pltutil.plot_error_histogram(y, pred_y, md_name, XType, yType=yType, ax=axs[1], groupby_outcome=True)
+    pltutil.plot_error_hist_pct(y, pred_y, md_name, XType, yType=yType, ax=axs[2])
 
-  # Error distribution among primary procedure
-  Xdf['Predicted'] = pred_y
-  if 'Error' not in Xdf.columns:
-    Xdf['Error'] = pred_y - y
-    Xdf['Abs Error'] = np.abs(pred_y - y)
-  #display(Xdf[['SURG_CASE_KEY', 'Predicted', 'Error', 'Abs Error']].head(30))
-  pproc_df = Xdf.groupby(by=['PRIMARY_PROC']).size().reset_index(name='Counts')
-  pproc_df['Count (%)'] = pproc_df['Counts'] / len(pred_y)
+    # Error distribution among primary procedure
+    Xdf['Predicted'] = pred_y
+    if 'Error' not in Xdf.columns:
+      Xdf['Error'] = pred_y - y
+      Xdf['Abs Error'] = np.abs(pred_y - y)
+    #display(Xdf[['SURG_CASE_KEY', 'Predicted', 'Error', 'Abs Error']].head(30))
+    pproc_df = Xdf.groupby(by=['PRIMARY_PROC']).size().reset_index(name='Counts')
+    pproc_df['Count (%)'] = pproc_df['Counts'] / len(pred_y)
 
-  pproc_df = pproc_df\
-    .join((Xdf['Predicted'].eq(Xdf[yType])).groupby(Xdf['PRIMARY_PROC'], observed=True).mean()
-          .reset_index(name='Accuracy')
-          .set_index('PRIMARY_PROC'),
-          on='PRIMARY_PROC', how='left')\
-    .join(Xdf.groupby(by=['PRIMARY_PROC'], observed=True)['Abs Error'].max()
-          .reset_index(name='Max Abs Error')
-          .set_index('PRIMARY_PROC'),
-          on='PRIMARY_PROC', how='left'
-          )\
-    .join(Xdf.groupby(by=['PRIMARY_PROC'], observed=True)['Error'].std()
-          .reset_index(name='Error Std')
-          .set_index('PRIMARY_PROC'),
-          on='PRIMARY_PROC', how='left'
-          )\
-    .join(Xdf.groupby(by=['PRIMARY_PROC'])['Error'].apply(lambda x: x.pow(2).mean()**0.5)
-          .reset_index(name='RMSE')
-          .set_index('PRIMARY_PROC'),
-          on='PRIMARY_PROC', how='left'
-          )\
-    .join(Xdf.groupby(by=['PRIMARY_PROC'])[yType].std()
-          .reset_index(name='True Outcome Std')
-          .set_index('PRIMARY_PROC'),
-          on='PRIMARY_PROC', how='left')
-  pproc_df.sort_values(by=['Counts', 'Accuracy'], ascending=False, inplace=True)
-  if cohort != globals.COHORT_ALL:
-    pprocs = globals.COHORT_TO_PPROCS[cohort]
-    pproc_df = pproc_df.query("PRIMARY_PROC in @pprocs")
-    cohort_cnt = pproc_df['Counts'].sum()
-    pproc_df.loc[len(pproc_df.index)] = ['Cohort Total', cohort_cnt, 1.0,
-                                         (pproc_df['Counts'] * pproc_df['Accuracy']).sum() / cohort_cnt,
-                                          pproc_df['Max Abs Error'].max(), np.nan, np.nan, np.nan]
+    pproc_df = pproc_df\
+      .join((Xdf['Predicted'].eq(Xdf[yType])).groupby(Xdf['PRIMARY_PROC'], observed=True).mean()
+            .reset_index(name='Accuracy')
+            .set_index('PRIMARY_PROC'),
+            on='PRIMARY_PROC', how='left')\
+      .join(Xdf.groupby(by=['PRIMARY_PROC'], observed=True)['Abs Error'].max()
+            .reset_index(name='Max Abs Error')
+            .set_index('PRIMARY_PROC'),
+            on='PRIMARY_PROC', how='left'
+            )\
+      .join(Xdf.groupby(by=['PRIMARY_PROC'], observed=True)['Error'].std()
+            .reset_index(name='Error Std')
+            .set_index('PRIMARY_PROC'),
+            on='PRIMARY_PROC', how='left'
+            )\
+      .join(Xdf.groupby(by=['PRIMARY_PROC'])['Error'].apply(lambda x: x.pow(2).mean()**0.5)
+            .reset_index(name='RMSE')
+            .set_index('PRIMARY_PROC'),
+            on='PRIMARY_PROC', how='left'
+            )\
+      .join(Xdf.groupby(by=['PRIMARY_PROC'])[yType].std()
+            .reset_index(name='True Outcome Std')
+            .set_index('PRIMARY_PROC'),
+            on='PRIMARY_PROC', how='left')
+    pproc_df.sort_values(by=['Counts', 'Accuracy'], ascending=False, inplace=True)
+    if cohort != globals.COHORT_ALL:
+      pprocs = globals.COHORT_TO_PPROCS[cohort]
+      pproc_df = pproc_df.query("PRIMARY_PROC in @pprocs")
+      cohort_cnt = pproc_df['Counts'].sum()
+      pproc_df.loc[len(pproc_df.index)] = ['Cohort Total', cohort_cnt, 1.0,
+                                           (pproc_df['Counts'] * pproc_df['Accuracy']).sum() / cohort_cnt,
+                                            pproc_df['Max Abs Error'].max(), np.nan, np.nan, np.nan]
 
-  pproc_df_all = pproc_df.head(30).style\
-      .set_table_attributes("style='display:inline'")\
-      .set_caption("Model Performance Grouped by Primary Procedure (%s cases)" % XType) \
-      .set_properties(**{'text-align': 'center'})\
-      .format("{:.2%}", subset=["Count (%)", "Accuracy"])\
-      .format("{:.2f}", subset=["Max Abs Error", "Error Std", "RMSE", "True Outcome Std"])
-  # if md_name == globals.clf2name[globals.RMFCLF]:
-  #   pproc_df.to_csv('primary_procedures_error_cases(rmf-bal).csv')
-  #   pproc_df_all.to_csv('pproc_error.csv')
-  display(pproc_df_all)
+    pproc_df_all = pproc_df.head(30).style\
+        .set_table_attributes("style='display:inline'")\
+        .set_caption("Model Performance Grouped by Primary Procedure (%s cases)" % XType) \
+        .set_properties(**{'text-align': 'center'})\
+        .format("{:.2%}", subset=["Count (%)", "Accuracy"])\
+        .format("{:.2f}", subset=["Max Abs Error", "Error Std", "RMSE", "True Outcome Std"])
+    # if md_name == globals.clf2name[globals.RMFCLF]:
+    #   pproc_df.to_csv('primary_procedures_error_cases(rmf-bal).csv')
+    #   pproc_df_all.to_csv('pproc_error.csv')
+    display(pproc_df_all)
 
-  # Error distribution among CPTs
-
+    # Error distribution among CPTs
 
   return model_perf
 

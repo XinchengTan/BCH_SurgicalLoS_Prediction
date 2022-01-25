@@ -9,6 +9,7 @@ from . import c2_modeling
 from . import globals
 
 
+# TODO: Fix this with the updated Dataset object
 def gen_all_model_predictions(dataset: dpp.Dataset, all_models: c2_modeling.AllModels, from_train=False, subset_size=30):
   """
   Makes prediction for a subset of cases from using all models.

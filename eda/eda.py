@@ -2,15 +2,37 @@
 EDA on non-diagnosis features
 """
 
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from globals import diaglabels, DELTA
+from ..globals import diaglabels, DELTA
+from .. import globals
 from .. import utils_plot
 from .. import utils
+
+
+# -------------------------------------------- LOS --------------------------------------------
+def los_histogram(y, dataType='Training', ax=None):
+  if ax is None:
+    fig, ax = plt.subplots(1, 1, figsize=(8, 10))
+  outcome_cnter = Counter(y)
+  ax.barh(range(globals.MAX_NNT + 2), [outcome_cnter[i] for i in range(globals.MAX_NNT + 2)], align='center')
+  ax.set_xlabel("Number of surgical cases")
+  ax.invert_yaxis()
+  ax.set_yticks(range(globals.MAX_NNT + 2))
+  ax.set_yticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
+  ax.set_title("LoS Histogram (%s)" % dataType)
+  rects = ax.patches
+  total_cnt = len(y)
+  labels = ["{:.1%}".format(outcome_cnter[i] / total_cnt) for i in range(globals.MAX_NNT + 2)]
+  for rect, label in zip(rects, labels):
+    ht, wd = rect.get_height(), rect.get_width()
+    ax.text(wd + 2.5, rect.get_y() + ht / 2, label,
+                ha='left', va='center', fontsize=15)
+
 
 
 # ---------------------------------------- Gender & LOS ----------------------------------------

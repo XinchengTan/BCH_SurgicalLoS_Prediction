@@ -51,11 +51,19 @@ def gen_surgeon_model_agree_or_not_df_and_Xydata(dataset: dpp.Dataset, clf, use_
   Xdata, ydata, dataset_df_idx = (dataset.Xtest, dataset.ytest, dataset.test_idx) if use_test \
     else (dataset.Xtrain, dataset.ytrain, dataset.train_idx)
 
+  # Filter the selected dataset by keeping only those with SPS prediction
+  sps_pred = dataset.cohort_df.iloc[dataset_df_idx]['SPS_PREDICTED_LOS']
+  notnull_data_idx = np.where(~sps_pred.isnull())[0]
+  if len(notnull_data_idx) < len(dataset_df_idx):
+    dataset_df_idx = dataset_df_idx[notnull_data_idx]
+    Xdata, ydata = Xdata[notnull_data_idx, :], ydata[notnull_data_idx]
+    sps_pred = dataset.cohort_df.iloc[dataset_df_idx]['SPS_PREDICTED_LOS']
+
   # Fetch surgeon and model prediction
-  surgeon_pred = dpp.gen_y_nnt(dataset.cohort_df.iloc[dataset_df_idx]['SPS_PREDICTED_LOS'])
+  surgeon_pred = dpp.gen_y_nnt(sps_pred)
   md_pred = clf.predict(Xdata) if clf != None else surgeon_pred  # If clf == None, we are evaluating surgeon prediction
 
-  # ID all the cases where model prediction and surgeon estimation agree
+  # Identify all the cases where model prediction and surgeon estimation agree
   if agree:
     ms_agree_data_idx = np.where(surgeon_pred == md_pred)[0]
   else:

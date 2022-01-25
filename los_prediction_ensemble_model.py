@@ -3,28 +3,11 @@ Definitions of ensemble models
 """
 from typing import Dict, List, AnyStr
 import numpy as np
-import pandas as pd
-from sklearn.utils.validation import check_is_fitted
 from sklearn.metrics import accuracy_score
 
-#from . import globals
+import los_prediction_global_vars as globals
 
 
-# # This function tries to ensemble all binary classifiers into 1 prediction
-# def gen_binclfs_ensemble_pred(preds_mat, preds_proba=None, byMax=False):
-#   # pred_mat: (#cases, #bin_clfs)
-#   agg_preds = np.zeros(preds_mat.shape[0])
-#   if byMax:
-#     last1_coord = np.argwhere(preds_mat == 1)
-#     agg_preds[last1_coord[:, 0]] = last1_coord[:, 1]
-#     return agg_preds
-#   if preds_proba is not None:
-#     rowmax_idx = np.argmax(preds_proba, axis=1)
-#
-#     pass
-
-
-# TODO: In the future, need to allow other weighting schemes, e.g. by predict_proba, --> can create a separate class
 class Ensemble(object):
   """
   Assume input classifiers are already trained
@@ -45,7 +28,7 @@ class Ensemble(object):
       if tsk not in globals.ALL_TASKS:
         raise NotImplementedError("Task %s is not supported yet!" % tsk)
       for md, tsk2clfs in self.md2clfs.items():
-        if md not in globals.ALL_MODELS:
+        if md not in globals.ALL_CLFS:
           raise NotImplementedError("Model %s is not supported yet!" % md)
         if len(tsk2clfs) == 0:
           raise ValueError("Model %s is not trained on any task!" % md)
@@ -55,16 +38,15 @@ class Ensemble(object):
         #   check_is_fitted()
 
   def predict(self, X):
-    # TODO: assign md2taskpreds here!! Do NOT init in __init__
     N = X.shape[0]
     md2taskpreds = {md: {tsk: [] for tsk in self.tasks} for md in self.md2clfs.keys()}
     for task in self.tasks:
-      if task == globals.MULTI_CLF:
+      if task == globals.TASK_MULTI_CLF:
         for md, task2clfs in self.md2clfs.items():
           print("Predicting with multiclf: %s" % md)
           md2taskpreds[md][task].append(task2clfs[task][0].predict(X))
 
-      elif task == globals.BIN_CLF:
+      elif task == globals.TASK_BIN_CLF:
         for md, task2clfs in self.md2clfs.items():
           if len(task2clfs[task]) != len(globals.NNT_CUTOFFS):
             print("Skip '%s' that does not have binary classfication" % md)
@@ -81,9 +63,6 @@ class Ensemble(object):
     # Predict based on the counted votes for each class; Majority wins
     final_preds = self._predict_via_counted_votes()
 
-    # TODO: save probability somewhere for future extension
-    # TODO: analyze the proportion of tie-breaking
-    # TODO: other ensemble rules to try -- e.g. 1 * multi-clf pred + proba * bin
     return final_preds
 
   def predict_proba(self, X):
@@ -110,9 +89,9 @@ class Ensemble(object):
     if how == 'uniform':
       for md, task2preds in self.md2taskpreds.items():
         for task, preds in task2preds.items():
-          if task == globals.MULTI_CLF:
+          if task == globals.TASK_MULTI_CLF:
             votes_over_nnt[np.arange(n_samples), preds[0].astype(int)] += 1
-          elif task == globals.BIN_CLF:
+          elif task == globals.TASK_BIN_CLF:
             # If pred == 1 at cutoff=c, add vote count by 1 for all classes<=c
             for le_nnt in range(len(preds)):
               votes_over_nnt[preds[le_nnt] == 1, :le_nnt+1] += 1
@@ -125,19 +104,6 @@ class Ensemble(object):
   def _predict_via_counted_votes(self):
     majority_class = np.argmax(self._votes_over_nnt, axis=1)
     return majority_class
-
-
-  def get_votes_std(self, ytrue=None):
-    # generate the distribution of the votes for each class
-    if self._votes_over_nnt is None:
-      raise ValueError("This ensemble model hasn't counted votes yet!")
-    counts = np.sum(self._votes_over_nnt, axis=1)
-    bins = np.array(globals.NNT_CLASSES)
-    mean = np.sum(self._votes_over_nnt * bins, axis=1) / counts
-
-    sum_squares = np.sum(bins**2 * self._votes_over_nnt, axis=1)
-    var = sum_squares / counts - mean**2
-    return np.sqrt(var)
 
   def score(self, X, y):
     # Accuracy

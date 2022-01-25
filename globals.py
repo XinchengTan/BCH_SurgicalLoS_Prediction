@@ -166,8 +166,8 @@ ORDCLF_PROBIT = 'ord-clf-probit'
 BAL_BAGCLF = 'bal-bagging'
 ENSEMBLE_MAJ_EQ = 'ensemble-maj-eq'
 
+#             SVC: "Support Vector Classifier",
 clf2name = {LGR: "Logistic Regression",
-            SVC: "Support Vector Classifier",
             KNN: "K Nearest Neighbor",
             DTCLF: "Decision Tree Classifier",
             RMFCLF: "Random Forest Classifier",
