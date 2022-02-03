@@ -5,7 +5,7 @@ from typing import Dict, List, AnyStr
 import numpy as np
 from sklearn.metrics import accuracy_score
 
-from deployment import los_prediction_global_vars as globals
+from . import los_prediction_global_vars as globals
 
 
 class Ensemble(object):

@@ -235,7 +235,6 @@ def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
     # 'min_impurity_split': None,
     # 'criterion': ['gini', 'entropy'],
     clf = DecisionTreeClassifier(random_state=globals.SEED, class_weight=class_weight)
-    clf.score()
     param_space = {
       'max_depth': [None] + list(range(2, 21, 2)),
       'max_features': list(range(2, 1 + n_frts // 2, 10)) + [n_frts],
@@ -473,24 +472,6 @@ def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType, cohor
     eval_df_stylers.append(styler)
 
   return md2ModelPerf, eval_dfs, eval_df_stylers
-
-
-def gen_kfolds_datasets(df, kfold, features, onehot_cols=None, onehot_dtypes=None, discretize_cols=None,
-                        shuffle_df=True, remove_o2m=(True, True)):
-  if shuffle_df:
-    df = df.sample(frac=1).reset_index(drop=True)
-  else:
-    df = df.reset_index(drop=True)
-
-  N, test_pct = df.shape[0], 1.0 / kfold
-  datasets = []
-  for k in range(kfold):
-    test_idxs = np.arange(int(k * test_pct * N), int((k+1) * test_pct * N))
-    dataset_k = dpp.Dataset(df, globals.NNT, features, onehot_cols, onehot_dtypes, test_idxs=test_idxs,
-                          discretize_cols=discretize_cols, remove_o2m=remove_o2m)
-    datasets.append(dataset_k)
-
-  return datasets
 
 
 def performance_eval_multiclfs_cv(kfold_datasets):

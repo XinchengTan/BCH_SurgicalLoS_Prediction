@@ -1,41 +1,35 @@
 from pathlib import Path
 
-diaglabels = ['Cardiovascular', 'Digestive', 'Endocrine',
-              'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
-              'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic',
-              'Nutrition', 'Optic', 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin',
-              'Uncategorized', 'Urogenital']
+OS_CODES = ['Cardiovascular', 'Digestive', 'Endocrine',
+            'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
+            'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic',
+            'Nutrition', 'Optic', 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin',
+            'Uncategorized', 'Urogenital']
+diaglabels = OS_CODES
 
 DASHDATA_COLS = ['SURG_CASE_KEY', 'LENGTH_OF_STAY', 'SPS_PREDICTED_LOS', 'BOOKING_DATE',
-                 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE', 'PROC_DECILE',
-                 'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
-                 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
-                 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital']
+                 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE', 'PROC_DECILE'] + OS_CODES
 
 DATETIME_COLS = ['SURG_CASE_KEY', 'CARE_CLASS', 'ICU_BED_NEEDED', 'PRIMARY_PROC',
-                 'ADMIT_DATE', 'DISCHARGE_DATE', 'SURGEON_START_DT_TM', 'SURGERY_END_DT_TM']
-
-FEATURE_COLS = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE', 'PROC_DECILE',
-                'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
-                'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
-                'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
-                'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
+                 'ADMIT_DATE', 'DISCHARGE_DATE', 'SURGEON_START_DT_TM', 'SURGERY_END_DT_TM',
+                 'HAR_ADMIT_DATE', 'HAR_DISCHARGE_DATE']
 
 FEATURE_COLS_NO_WEIGHT = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'PROC_DECILE',
-                'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
-                'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
-                'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
-                'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
+                          'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS'] + OS_CODES  # , 'ICD10S'
+
+FEATURE_COLS = FEATURE_COLS_NO_WEIGHT + ['WEIGHT_ZSCORE'] # , 'ICD10S'
+
+FEATURE_COLS_PPROC_NO_WEIGHT_OLD = FEATURE_COLS_NO_WEIGHT + ['PPROC_DECILE'] # , 'ICD10S'
+
+FEATURE_COLS_PPROC_NO_WEIGHT = FEATURE_COLS_NO_WEIGHT + ['PPROC_DECILE', 'STATE_CODE', 'LANGUAGE_DESC'] # , 'ICD10S'
 
 FEATURE_COLS_NO_DECILE = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
-                'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
-                'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
-                'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
-                'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
+                          'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS'] + OS_CODES  # , 'ICD10S'
 
 FEATURE_COLS_NO_OS = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
-                      'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
+                      'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS']  # , 'ICD10S'
 
+MED1 = 'MED1'
 SPS_LOS_FTR = 'SPS_PREDICTED_LOS'
 FEATURE_COLS_SPS = FEATURE_COLS + [SPS_LOS_FTR]
 FEATURE_COLS_NO_OS_SPS = FEATURE_COLS_NO_OS + [SPS_LOS_FTR]
@@ -46,6 +40,7 @@ COHORT_ALL = 'All Cases'
 COHORT_TONSIL = 'Tonsillectomy'
 COHORT_SPINE = 'Spinal Fusion'
 COHORT_HIP = 'Hip'
+COHORT_ORTHO = 'Orthopedics'
 COHORT_NEUROLOGIC = 'Spinal Fusion - Neurologic'
 COHORT_NON_NEUROLOGIC = 'Spinal Fusion - non-Neurologic'
 
@@ -60,29 +55,29 @@ COHORT_TO_PPROCS = {COHORT_TONSIL: {'TONSILLECTOMY WITH ADENOIDECTOMY, ORL', 'TO
                                    'zzSPINE FUSION POSTERIOR, LUMBAR, ORTHO'}}
 
 CCSRS_TONSIL = {'Chronic respiratory insufficiency',
-                                   'Epilepsy',
-                                   'Malacia of trachea or larynx',
-                                   'Down syndrome',
-                                   'Austism spectrum disorder',
-                                   'Cerebral palsy',
-                                   'Esophageal reflux',
-                                   'Enterostomy',
-                                   'Neurodevelopmental disorder',
-                                   'Chronic rhinitis',
-                                   'Asthma',
-                                   'Obesity',
-                                   'Hearing loss'}
+               'Epilepsy',
+               'Malacia of trachea or larynx',
+               'Down syndrome',
+               'Austism spectrum disorder',
+               'Cerebral palsy',
+               'Esophageal reflux',
+               'Enterostomy',
+               'Neurodevelopmental disorder',
+               'Chronic rhinitis',
+               'Asthma',
+               'Obesity',
+               'Hearing loss'}
 
 CCSRS_SPINE = {'Chronic respiratory insufficiency',
-                                  'Bladder dysfunction',
-                                  'Dysphagia',
-                                  'Anxiety disorder',
-                                  'Esophageal reflux',
-                                  'Enterostomy',
-                                  'Intellectual disability',
-                                  'Epilepsy',
-                                  'Asthma',
-                                  'Tracheostomy'}
+              'Bladder dysfunction',
+              'Dysphagia',
+              'Anxiety disorder',
+              'Esophageal reflux',
+              'Enterostomy',
+              'Intellectual disability',
+              'Epilepsy',
+              'Asthma',
+              'Tracheostomy'}
 
 COHORT_TO_CCSRS = {COHORT_TONSIL: CCSRS_TONSIL,
                    COHORT_SPINE: CCSRS_SPINE}
@@ -155,6 +150,7 @@ reg2name = {LR: "Linear Regression",
             }
 
 LGR = 'lgr'
+PR = 'pr'
 SVC = 'svc'
 KNN = 'knn'
 DTCLF = 'dt-clf'
@@ -168,10 +164,12 @@ ENSEMBLE_MAJ_EQ = 'ensemble-maj-eq'
 
 #             SVC: "Support Vector Classifier",
 clf2name = {LGR: "Logistic Regression",
+            PR: "Poisson Regression",
             KNN: "K Nearest Neighbor",
             DTCLF: "Decision Tree Classifier",
             RMFCLF: "Random Forest Classifier",
             GBCLF: "Gradient Boosting Classifier",
+            XGBCLF: 'XGBoost',
             BAL_BAGCLF: "Balanced Bagging Classifier"
             }
 clf2name_eval = dict(clf2name)
@@ -184,12 +182,12 @@ clf2name_eval[SURGEON] = "Surgeon Prediction"
 
 
 binclf2name = {LGR: "Logistic Regression",
-            SVC: "Support Vector Classifier",
-            DTCLF: "Decision Tree Classifier",
-            RMFCLF: "Random Forest Classifier",
-            GBCLF: "Gradient Boosting Classifier",
-            BAL_BAGCLF: "Balanced Bagging Classifier"
-            } # XGBCLF: "XGBoost Classifier"
+               SVC: "Support Vector Classifier",
+               DTCLF: "Decision Tree Classifier",
+               RMFCLF: "Random Forest Classifier",
+               GBCLF: "Gradient Boosting Classifier",
+               BAL_BAGCLF: "Balanced Bagging Classifier"
+               }  # XGBCLF: "XGBoost Classifier"
 
 ALL_MODELS = set(clf2name.keys()).union(binclf2name.keys())
 

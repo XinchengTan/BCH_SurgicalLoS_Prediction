@@ -19,26 +19,25 @@ CCSRS = 'CCSRS'
 ICD10S = 'ICD10S'
 CPTS = 'CPTS'
 
+OS_CODES = ['Cardiovascular', 'Digestive', 'Endocrine',
+            'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
+            'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic',
+            'Nutrition', 'Optic', 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin',
+            'Uncategorized', 'Urogenital']
+
 # Macros of column list for different usages
 DASHDATA_COLS_DEPLOY_EVAL = ['SURG_CASE_KEY', 'LENGTH_OF_STAY', 'SPS_PREDICTED_LOS', 'PRIMARY_PROC',
                              'SEX_CODE', 'AGE_AT_PROC_YRS', 'PROC_DECILE',
-                             'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
-                             'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
-                             'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
-                             'HAR_ADMIT_DATE', 'HAR_DISCHARGE_DATE', 'CSN']  # 'WEIGHT_ZSCORE',
+                             'HAR_ADMIT_DATE', 'HAR_DISCHARGE_DATE', 'CSN'] + OS_CODES  # 'WEIGHT_ZSCORE',
 
 DASHDATA_COLS_PREDICT = ['SURG_CASE_KEY', 'SPS_PREDICTED_LOS', 'PRIMARY_PROC',
-                         'SEX_CODE', 'AGE_AT_PROC_YRS', 'PROC_DECILE',
-                         'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
-                         'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
-                         'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
-                         'CSN']  # 'WEIGHT_ZSCORE',
+                         'SEX_CODE', 'AGE_AT_PROC_YRS', 'PROC_DECILE', 'CSN'] + OS_CODES  # 'WEIGHT_ZSCORE',
 
-FEATURE_COLS_NO_WEIGHT = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'PROC_DECILE',
-                          'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious', 'Mental',
-                          'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic',
-                          'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital',
-                          CPTS, 'CPT_GROUPS', 'PRIMARY_PROC', CCSRS]
+FEATURE_COLS_NO_WEIGHT = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'PROC_DECILE', CPTS, 'CPT_GROUPS',
+                          'PRIMARY_PROC', CCSRS] + OS_CODES
+
+FEATURE_COLS_PPROC_NO_WEIGHT = FEATURE_COLS_NO_WEIGHT + ['PPROC_DECILE']
+
 
 NON_NUMERIC_COLS = ['SURG_CASE_KEY', CPTS, 'CPT_GROUPS', 'PRIMARY_PROC', CCSRS]  # non-numeric columns in feature_cols
 

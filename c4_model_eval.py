@@ -447,14 +447,24 @@ def eval_binary_clf(clf, cutoff, dataset: Dataset, md_name, plot_calib_curve=Tru
   return pred_train, pred_val, ix
 
 
-def gen_feature_importance(model, mdabbr, reg=True, ftrs=globals.FEATURE_COLS, pretty_print=False):
-  sorted_frts = [(x, y) for y, x in sorted(zip(model.feature_importances_, ftrs), reverse=True, key=lambda p: p[0])]
+def gen_feature_importance(model, mdabbr, reg=True, ftrs=globals.FEATURE_COLS, pretty_print=False, plot_top_K=15):
+  # ftrs must match the data matrix features exactly (same order)
+  sorted_frts = [(ftr, imp) for ftr, imp in sorted(zip(ftrs, model.feature_importances_), reverse=True, key=lambda i: i[1])]
+  # sorted_frts = [(x, y) for y, x in sorted(zip(model.feature_importances_, ftrs), reverse=True, key=lambda p: p[0])]
   if pretty_print:
     print("\n" + globals.reg2name[mdabbr] if reg else globals.clf2name[mdabbr] + ":")
     c = 1
     for x, y in sorted_frts:
       print("{c}.{ftr}:  {score}".format(c=c, ftr=x, score=round(y, 4)))
       c += 1
+  ftr_importance = sorted_frts[:plot_top_K]
+  fig, ax = plt.subplots(figsize=(8, 6))
+  ax.barh([x[0] for x in ftr_importance], [x[1] for x in ftr_importance])
+  ax.invert_yaxis()
+  ax.set_xlabel("Feature importance")
+  ax.set_ylabel("Features")
+  ax.set_title("Top %d most important features (%s)" % (plot_top_K, mdabbr))
+  plt.show()
   return sorted_frts
 
 
