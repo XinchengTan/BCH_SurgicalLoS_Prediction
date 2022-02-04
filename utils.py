@@ -10,34 +10,6 @@ from . import globals
 from .c1_data_preprocessing import Dataset, discretize_columns
 
 
-# Generate pproc sexile & other summary statistics
-def gen_pproc_decile(data_df, save_fp=None):
-  pproc_median = data_df[['PRIMARY_PROC', globals.LOS]].groupby(by=['PRIMARY_PROC'])[globals.LOS].median()\
-    .reset_index(name='PPROC_MedianLOS')
-  pproc_mean = data_df[['PRIMARY_PROC', globals.LOS]].groupby(by=['PRIMARY_PROC'])[globals.LOS].mean()\
-    .reset_index(name='PPROC_MeanLOS')
-  pproc_count = data_df[['PRIMARY_PROC', globals.LOS]].groupby(by=['PRIMARY_PROC']).size()\
-    .reset_index(name='PPROC_COUNT')
-  pproc_std = data_df[['PRIMARY_PROC', globals.LOS]].groupby(by=['PRIMARY_PROC'])[globals.LOS].std()\
-    .reset_index(name='PPROC_SD')
-  pproc_min = data_df[['PRIMARY_PROC', globals.LOS]].groupby(by=['PRIMARY_PROC'])[globals.LOS].min()\
-    .reset_index(name='PPROC_MinLOS')
-  pproc_max = data_df[['PRIMARY_PROC', globals.LOS]].groupby(by=['PRIMARY_PROC'])[globals.LOS].max()\
-    .reset_index(name='PPROC_MaxLOS')
-
-  pproc_decile = pproc_median\
-    .join(pproc_mean.set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left')\
-    .join(pproc_count.set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left')\
-    .join(pproc_std.set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left')\
-    .join(pproc_min.set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left')\
-    .join(pproc_max.set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left')
-
-  pproc_decile['PPROC_DECILE'] = pproc_decile['PPROC_MedianLOS'].apply(lambda x: float(min(round(x), globals.MAX_NNT + 1)))
-  pproc_decile.head()
-  pproc_decile.to_csv(save_fp, index=False)
-  return pproc_decile
-
-
 # Generate k dataset objects for k-fold cross validation
 def gen_kfolds_datasets(df, kfold, features, outcome=globals.NNT, onehot_cols=None, onehot_dtypes=None,
                         discretize_cols=None, shuffle_df=False, remove_o2m=(True, True)):

@@ -29,7 +29,7 @@ class Dataset(object):
 
   def __init__(self, df, outcome=globals.NNT, cols=globals.FEATURE_COLS, med_prefix=None,
                onehot_cols=None, onehot_dtypes=None, test_pct=0.2, test_idxs=None, cohort=globals.COHORT_ALL,
-               trimmed_ccsr=None, discretize_cols=None, basic_Xy=None, remove_o2m=(True, True)):
+               trimmed_ccsr=None, discretize_cols=None, target_features=None, remove_o2m=(True, True)):
     if (onehot_cols is not None) and (onehot_dtypes is not None):
       assert len(onehot_cols) == len(onehot_dtypes), "One-hot Encoding columns and dtypes must match!"
 
@@ -64,6 +64,8 @@ class Dataset(object):
     else:
       self.Xtrain, self.ytrain, self.train_case_keys = np.array([]), np.array([]), np.array([])
       self.train_cohort_df = train_df
+      assert target_features is not None, "target_features cannot be None if test_pct = 1!"
+      self.feature_names = target_features
 
     # 3. Preprocess test set, if it's not empty
     if test_df is not None:
@@ -116,8 +118,10 @@ def gen_Xy(df, outcome, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtyp
   :param cols:
   :return:
   """
-  # Preprocess outcome values in df
+  # Preprocess outcome values / SPS prediction in df
   df = preprocess_y(df, outcome)
+  if globals.SPS_LOS_FTR in df.columns.to_list():
+    df = preprocess_y(df, outcome, sps_y=True)
 
   # Generate a preprocessed data matrix X, and a response vector y
   o2m_df = None
@@ -136,30 +140,30 @@ def gen_Xy(df, outcome, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtyp
 def preprocess_Xtrain(df, outcome, feature_cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None,
                       remove_nonnumeric=True, verbose=False, trimmed_ccsr=None, discretize_cols=None, remove_o2m=True):
   # Make data matrix X numeric
-  X = df.copy()[feature_cols]
-  X = dummy_code_discrete_cols(X)
+  Xdf = df.copy()[feature_cols]
 
+  # Discard unwanted CCSRs
   if trimmed_ccsr:
-    X, onehot_cols = trim_ccsr_in_X(X, onehot_cols, trimmed_ccsr)
+    Xdf, onehot_cols = trim_ccsr_in_X(Xdf, onehot_cols, trimmed_ccsr)
 
-  if onehot_cols is not None:
-    X = onehot_encode_cols(X, onehot_cols, onehot_dtypes)
-
-  # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
-  X_case_keys = X['SURG_CASE_KEY'].to_numpy()
-  if remove_nonnumeric:
-    X.drop(columns=globals.NON_NUMERIC_COLS, inplace=True, errors='ignore')
-
-  # Bucket SPS predicted LoS into 9 classes, if there such prediction exists
-  if globals.SPS_LOS_FTR in feature_cols:  # Assume SPS prediction are all integers
-    X.loc[(X[globals.SPS_LOS_FTR] > globals.MAX_NNT), globals.SPS_LOS_FTR] = globals.MAX_NNT + 1
-
-  target_features = X.columns.to_list()
+  # Encode categorical variables
+  Xdf = dummy_code_discrete_cols(Xdf)
 
   # Discretize certain continuous columns by request
-  X = X.to_numpy(dtype=np.float64)
   if discretize_cols is not None:
-    discretize_columns(X, target_features, discretize_cols, inplace=True)
+    discretize_columns_df(Xdf, discretize_cols, inplace=True)
+
+  if onehot_cols is not None:
+    Xdf = onehot_encode_cols(Xdf, onehot_cols, onehot_dtypes)
+
+  # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
+  X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy()
+  if remove_nonnumeric:
+    Xdf.drop(columns=globals.NON_NUMERIC_COLS, inplace=True, errors='ignore')
+
+  # Convert dataframe to numerical numpy matrix and save the corresponding features' names
+  X = Xdf.to_numpy(dtype=np.float64)
+  target_features = Xdf.columns.to_list()
 
   # Remove cases that have multiple possible outcomes
   o2m_df, y = None, df[outcome].to_numpy()
@@ -186,32 +190,35 @@ def preprocess_Xtest(df, target_features, feature_cols, onehot_cols=None, onehot
   else:
     skip_cases_df = pd.read_csv(skip_cases_df_or_fp)
 
-  # Make data matrix X numeric
-  X = df.copy()[feature_cols]
-  X = dummy_code_discrete_cols(X)
+  Xdf = df.copy()[feature_cols]
 
   # Add a column of trimmed CCSRs with/without a column of the corresponding trimmed ICD10s
   if trimmed_ccsr is not None:
-    X, onehot_cols = trim_ccsr_in_X(X, onehot_cols, trimmed_ccsr)
+    Xdf, onehot_cols = trim_ccsr_in_X(Xdf, onehot_cols, trimmed_ccsr)
+
+  # Make data matrix X numeric
+  Xdf = dummy_code_discrete_cols(Xdf)
+
+  # Discretize certain continuous columns by request
+  if discretize_cols is not None:
+    Xdf = discretize_columns_df(Xdf, discretize_cols, inplace=True)
 
   if onehot_cols is not None:
     # One-hot encode the required columns according to a given historical set of features (e.g. CPT, CCSR etc.)
-    X = onehot_encode_cols(X, onehot_cols, onehot_dtypes)
+    Xdf = onehot_encode_cols(Xdf, onehot_cols, onehot_dtypes)
 
     # Match Xdf to the target features from the training data matrix (for now, only medical codes lead to such need)
-    X = match_Xdf_cols_to_target_features(X, target_features)
+    Xdf = match_Xdf_cols_to_target_features(Xdf, target_features)
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
-  X_case_key = X['SURG_CASE_KEY'].to_numpy()
-  X.drop(columns=globals.NON_NUMERIC_COLS, inplace=True, errors='ignore')
+  X_case_key = Xdf['SURG_CASE_KEY'].to_numpy()
+  Xdf.drop(columns=globals.NON_NUMERIC_COLS, inplace=True, errors='ignore')
 
   # Reorder columns such that it aligns with target_features
-  X = X[target_features]
+  Xdf = Xdf[target_features]
 
-  # Discretize certain continuous columns by request
-  X = X.to_numpy(dtype=np.float64)
-  if discretize_cols is not None:
-    discretize_columns(X, target_features, discretize_cols, inplace=True)
+  # Convert feature-engineered data matrix to numerical numpy array
+  X = Xdf.to_numpy(dtype=np.float64)
 
   # Remove cases identical to any in skip_cases, update X_case_keys correspondingly
   if (skip_cases_df is not None) and (not skip_cases_df.empty):
@@ -230,19 +237,26 @@ def dummy_code_discrete_cols(Xdf):
   Xdf.loc[(Xdf.SEX_CODE != 'F'), 'SEX_CODE'] = 0.0
   Xdf.loc[(Xdf.SEX_CODE == 'F'), 'SEX_CODE'] = 1.0
 
+  Xdf_cols = Xdf.columns.to_list()
+  # Interpreter need or not
+  if 'INTERPRETER_NEED' in Xdf_cols:
+    Xdf.loc[(Xdf.INTERPRETER_NEED == 'N'), 'INTERPRETER_NEED'] = 0.0
+    Xdf.loc[(Xdf.INTERPRETER_NEED == 'Y'), 'INTERPRETER_NEED'] = 1.0
+
   # State code
-  if 'STATE_CODE' in Xdf.columns.to_list():
+  if 'STATE_CODE' in Xdf_cols:
     Xdf[['IN_STATE', 'OUT_OF_STATE_US', 'FOREIGN']] = 0.0
     Xdf.loc[(Xdf.STATE_CODE == 'MA'), 'IN_STATE'] = 1.0
     Xdf.loc[(Xdf.STATE_CODE == 'Foreign'), 'FOREIGN'] = 1.0
     Xdf.loc[((Xdf.IN_STATE == 0.0) & (Xdf.FOREIGN == 0.0)), 'OUT_OF_STATE_US'] = 1.0
 
   # Language   TODO: Unable to Collect == all 0s or a separate col or discard??
-  if 'LANGUAGE_DESC' in Xdf.columns.to_list():
+  if 'LANGUAGE_DESC' in Xdf_cols:
     Xdf[['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE']] = 0.0
     Xdf.loc[(Xdf.LANGUAGE_DESC == 'English'), 'ENGLISH'] = 1.0
     Xdf.loc[(Xdf.LANGUAGE_DESC == 'Spanish'), 'SPANISH'] = 1.0
-    Xdf.loc[((Xdf.ENGLISH == 0.0) & (Xdf.SPANISH == 0.0) & (Xdf.LANGUAGE_DESC != 'Unable to Collect')), 'OTHER_LANGUAGE'] = 1.0
+    Xdf.loc[(Xdf.LANGUAGE_DESC == 'Unable to Collect'), 'UNKNOWN_LANGUAGE'] = 1.0
+    Xdf.loc[((Xdf.ENGLISH == 0.0) & (Xdf.SPANISH == 0.0) & (Xdf.UNKNOWN_LANGUAGE == 0.0)), 'OTHER_LANGUAGE'] = 1.0
 
     Xdf.drop(columns=['STATE_CODE', 'LANGUAGE_DESC'], inplace=True)
   return Xdf
@@ -310,6 +324,25 @@ def print_feature_match_details(feature_set, ftr_type='unseen'):
   print("#%s CCSRs: %d" % (ftr_type, len(list(filter(lambda x: x.startswith('CCSR'), feature_set)))))
 
 
+def discretize_columns_df(Xdf: pd.DataFrame, discretize_cols, inplace=False):
+  if not inplace:
+    Xdf = Xdf.copy()
+
+  # Modify data matrix with discretized columns by request
+  for dis_col in discretize_cols:
+    if dis_col not in Xdf.columns.to_list():
+      raise Warning("%s is not in Xdf columns!" % dis_col)
+    elif dis_col == 'AGE_AT_PROC_YRS':
+      Xdf[dis_col] = pd.cut(Xdf[dis_col], bins=globals.AGE_BINS, labels=False, right=False, include_lowest=True)
+    elif dis_col == 'WEIGHT_ZSCORE':
+      weightz_bins = [float('-inf'), -4, -2, -1, 1, 2, 4, float('inf')]
+      print("Weight z-score bins: ", weightz_bins)
+      Xdf[dis_col] = pd.cut(Xdf[dis_col], bins=weightz_bins, labels=False, right=False, include_lowest=True)
+    else:
+      raise Warning("%s discretization is not available yet!" % dis_col)
+  return Xdf
+
+
 def discretize_columns(X, feature_names, discretize_cols, inplace=False):
   if not inplace:
     X = np.copy(X)
@@ -328,7 +361,7 @@ def discretize_columns(X, feature_names, discretize_cols, inplace=False):
   return X
 
 
-def preprocess_y(df, outcome):
+def preprocess_y(df, outcome, sps_y=False):
   # Generate an outcome vector y with shape: (n_samples, )
   y = np.array(df.LENGTH_OF_STAY.to_numpy())
   if outcome == globals.LOS:
@@ -346,7 +379,12 @@ def preprocess_y(df, outcome):
     y = gen_y_nnt_binary(y, cutoff)
   else:
     raise NotImplementedError("Outcome type '%s' is not implemented yet!" % outcome)
-  df[outcome] = y
+
+  if sps_y:
+    df['SPS_PREDICTED_LOS'] = y
+  else:
+    df[outcome] = y
+
   return df
 
 
@@ -426,7 +464,7 @@ def discard_o2m_cases_from_historical_data(X, X_case_keys, skip_cases_df):
 
 # Removes cases that has multiple possible outcomes from input data
 def discard_o2m_cases_from_self(X, X_case_keys, y, features):
-  o2m_df = gen_o2m_cases(X, y, features, unique=False)
+  o2m_df = gen_o2m_cases(X, y, features, unique=False, X_case_keys=X_case_keys)
   o2m_idx = o2m_df.index.to_list()
   #print("One-to-many cases index: ", o2m_idx)
   print("#O2M cases: ", len(o2m_idx))
@@ -447,159 +485,18 @@ def gen_o2m_cases(X, y, features, unique=True, save_fp=None, X_case_keys=None):
 
   # Get cases with identical features but different outcomes
   o2m_df = Xydf_dup \
-    .groupby(by=features) \
-    .filter(lambda x: len(x.value_counts().index) > 1)
+    .groupby(by=features)\
+    .filter(lambda x: len(x['Outcome'].value_counts().index) > 1)
+  # o2m_df.groupby(by=features)\
+  #   .agg(lambda x: list(x))\
+  #   .to_csv('featureVector_to_o2m_case_keys2.csv', index=False)
   print("Covered %d o2m cases" % o2m_df.shape[0])
-  o2m_df.to_csv('./skip_cases_original.csv', index=False)
-  if save_fp and unique:
-    o2m_df.to_csv(save_fp.split('.csv')[0] + '_original.csv', index=False)
 
   if unique:
     o2m_df = o2m_df.drop_duplicates(subset=features)
     print("Contains %d unique o2m cases" % o2m_df.shape[0])
-  o2m_df.drop(columns=['Outcome'], inplace=True)
+  o2m_df.drop(columns=['Outcome', 'SURG_CASE_KEY'], inplace=True, errors='ignore')
 
   if save_fp:
     o2m_df.to_csv(save_fp, index=False)
   return o2m_df
-
-
-  # # Generate o2m cases from training set
-  # if skip_o2m_from_train:
-  #   skip_cases_df, X_train, y_train, train_idx = discard_o2m_cases_from_self(X_train, y_train, features)
-  #   X_test, test_idx = discard_o2m_cases_from_historical_data(X_test.to_numpy(), test_idx, skip_cases_df)
-  #   # TODO: drop unseen cols, add unobserved cols (train-test split before gen_feature_matrix???)
-  #   y_test = y_test[test_idx]
-  #   X_case_keys = ???
-
-
- # if test_idxs is not None:
-    #   self.test_idx, self.train_idx = np.array(test_idxs), np.array(list(set(range(df.shape[0])) - set(test_idxs)))
-    #   self.Xtrain, self.Xtest, self.ytrain, self.ytest = X[self.train_idx, :], X[self.test_idx, :], y[self.train_idx], y[self.test_idx]
-    # else:
-    #   if test_pct > 0:
-    #     self.Xtrain, self.Xtest, self.ytrain, self.ytest, self.train_idx, self.test_idx = gen_train_test(X, y, test_pct)
-    #   else:
-    #     self.Xtrain, self.ytrain, self.train_idx = X, y, np.arange(X.shape[0])
-    #     self.Xtest, self.ytest, self.test_idx = np.array([]), np.array([]), np.array([])
-
-
-# def gen_o2m_cases(X, y, features, drop_duplicates=False):
-#   Xydf = pd.DataFrame(X, columns=features)
-#   Xydf['Outcome'] = y
-#   dup_mask = Xydf.duplicated(subset=features, keep=False)
-#   Xydf_dup = Xydf[dup_mask]
-#
-#   # Get cases with identical features but different outcomes
-#   o2m_df = Xydf_dup.groupby(by=features)\
-#     .filter(lambda x: len(x.value_counts().index) > 1)
-#
-#   if drop_duplicates:
-#     return o2m_df.drop_duplicates(subset=features)
-#   return o2m_df
-
-
-
-
-# def denoise(X, y, features, how=globals.DENOISE_DEL_O2M):
-#   """
-#   Denoise dataset (X, y) by removing pure duplicates,
-#   or coalescing one-to-many cases to one case with its majority outcome,
-#   or doing both operations.
-#
-#   :param X:
-#   :param y:
-#   :param noisy_cases: If not None, denoise these cases from X
-#   :param how:
-#   :return: A dataframe of X, y, with the index of the original X preserved
-#   """
-#   # Make Xydf_dup and Xydf_nodup
-#   Xydf = pd.DataFrame(X, columns=features)
-#   Xydf['Outcome'] = y
-#   dup_mask = Xydf.duplicated(subset=features, keep=False)
-#   Xydf_dup = Xydf[dup_mask]
-#
-#   Xydf_clean = Xydf.drop_duplicates(subset=features, keep=False)
-#
-#   o2m_keep_df = remove_o2m_cases(Xydf_dup, features)
-#   pure_dup_keep_df = remove_pure_dups(Xydf_dup, features)
-#
-#   if how == globals.DENOISE_ALL:
-#     cleaned_cases_df = pd.concat([o2m_keep_df, pure_dup_keep_df])
-#     Xydf_clean = pd.concat([Xydf_clean, cleaned_cases_df])
-#   elif how == globals.DENOISE_O2M:
-#     cleaned_cases_df = o2m_keep_df
-#     #print("\n pure dup df: ", pure_dup_keep_df.columns)
-#     #print("\n Xydf: ", Xydf_dup.columns)
-#     kept_noise_df = pd.merge(Xydf_dup, pure_dup_keep_df, on=features, how='left', indicator=True, suffixes=('', '_r'))\
-#       .loc[lambda x: x['_merge'] != 'both']
-#     #print("\n kept noise df: ", kept_noise_df.columns)
-#     Xydf_clean = pd.concat([Xydf_clean, cleaned_cases_df, kept_noise_df[features + ['Outcome']]])
-#   elif how == globals.DENOISE_PURE_DUP:
-#     cleaned_cases_df = pure_dup_keep_df
-#     kept_noise_df = pd.merge(Xydf_dup, o2m_keep_df, on=features, how='left', indicator=True, suffixes=('', '_r'))\
-#       .loc[lambda x: x['_merge'] != 'both']
-#     Xydf_clean = pd.concat([Xydf_clean, cleaned_cases_df, kept_noise_df[features + ['Outcome']]])
-#
-#   else:
-#     raise NotImplementedError
-#
-#   assert len(Xydf_clean.columns) == len(features) + 1, "Clean Xy df has wrong number of columns!"
-#   #   assert True not in Xydf_clean.duplicated(subset=features), "Clean Xy df still has cases with duplications!"
-#
-#   return Xydf_clean, cleaned_cases_df
-#
-#
-# def remove_o2m_cases(Xydup_df, features, noisy_cases_df=None):
-#   # o2m_df = Xydup_df.groupby(by=features)\
-#   #   .filter(lambda x: len(x.value_counts().index) > 1)
-#   #   .groupby(by=features)['Outcome'].count().sort_values('pos').groupby(level=len(features)-1).tail(1)
-#   Xydup_df = Xydup_df.groupby(by=features).filter(lambda x: len(x.value_counts().index) > 1)  # o2m cases
-#   o2m_grp2idxs = Xydup_df.groupby(by=features).groups
-#   o2m_keep_X, y, indices = [], [], []
-#   if not isinstance(noisy_cases_df, pd.DataFrame):  # noisy_cases_df == None or its equivalent
-#     for ftr, idxs in o2m_grp2idxs.items():
-#       outcomes = Xydup_df.loc[idxs]['Outcome'].to_list()
-#       outcome_counter = Counter(outcomes)
-#       if len(outcome_counter) > 1:
-#         o2m_keep_X.append(ftr)
-#         cur_y = max(outcome_counter, key=outcome_counter.get)
-#         y.append(cur_y)
-#         indices.append(idxs[outcomes.index(cur_y)])
-#     o2m_keep_df = pd.DataFrame(o2m_keep_X, columns=features, index=indices)
-#     o2m_keep_df['Outcome'] = y
-#     return o2m_keep_df
-#   else:
-#     for ftr, idxs in o2m_grp2idxs.items():
-#       noisy_case_match = noisy_cases_df[(noisy_cases_df[features] == ftr).all(1)]
-#       if len(noisy_case_match) > 0:
-#         selected_y = noisy_case_match.iloc[0]['Outcome']
-#         ftr_matched_cases = Xydup_df.loc[idxs]
-#         outcome_dismatch_cases = ftr_matched_cases[ftr_matched_cases['Outcome'] != selected_y]
-#         Xydup_df.drop(index=outcome_dismatch_cases.index.to_list(), inplace=True)
-#     Xydup_df.drop_duplicates(keep='first', inplace=True)
-#     return Xydup_df
-#
-#
-# def remove_pure_dups(Xydup_df, features, noisy_cases_df=None):
-#   if not isinstance(noisy_cases_df, pd.DataFrame):  # noisy_cases_df == None
-#     pure_dup_keep_df = Xydup_df.groupby(by=features)\
-#       .filter(lambda x: len(x.value_counts().index) == 1)\
-#       .drop_duplicates(subset=features, keep='first')
-#   else:
-#     pure_dup_keep_df = Xydup_df.groupby(by=features) \
-#       .filter(lambda x: len(x.value_counts().index) == 1)
-#
-#
-#
-#     join_df = pd.merge(pure_dup_keep_df, noisy_cases_df, on=features, how='left', suffixes=('_l', '_r'), indicator=True)
-#     pure_dup_keep_df = join_df[join_df['_merge'] == 'left_only'].drop('_merge', axis=1, inplace=True)
-#     display(pure_dup_keep_df.head(5))
-#     overlap = join_df[join_df['_merge'] == 'both']\
-#       .drop_duplicates(subset=features+['Outcome_l'], keep='first')\
-#       .rename(columns={'Outcome_l': 'Outcome'}, inplace=True)\
-#       .drop(['Outcome_r', '_merge'], axis=1, inplace=True)
-#     pure_dup_keep_df = pd.concat([pure_dup_keep_df, overlap])
-#
-#   return pure_dup_keep_df
-#

@@ -18,21 +18,6 @@ from . import utils_plot as pltutil
 pd.set_option('display.max_columns', 50)
 
 
-def gen_cols_with_nan(df):
-  res = df.isnull().sum().sort_values(ascending=False).head(20)
-  return res
-
-
-def print_df_info(df, dfname="Dashboard", other_cols=None):
-  print("%s columns:\n" % dfname, df.keys())
-  print("Number of cases: %d" % df['SURG_CASE_KEY'].nunique())
-  if other_cols:
-    for col_name in other_cols:
-      print("Number of unique, non-NaN values in '%s': %d" % (col_name, df[col_name].nunique(dropna=True)))
-  print("Number of NaNs in each column:\n%s" % gen_cols_with_nan(df))
-  print("\n")
-
-
 def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=None, pproc_fp=None, exclude2021=True,
                  force_weight=False):
   """
@@ -61,9 +46,10 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=N
             on='PRIMARY_PROC', how='inner')
     print_df_info(dashb_df, dfname='Dashboard df with PProc decile')
 
-  # Medication data -- join by MRN
+  # Medication data -- join by surg case key
   if medication_fp is not None:
     med_df = pd.read_csv(medication_fp)
+    #dashb_df, _ = join_med_df_list_rep(med_df, dashb_df, levels=(1,2,3))
     oh_med_df = med_df[['SURG_CASE_KEY', 'HNA_ORDER_MNEMONIC', 'LEVEL1_DRUG_CLASS_NAME']]
     oh_med_df[globals.MED1 + '_DME'] = 0.0
     oh_med_df.loc[(oh_med_df.HNA_ORDER_MNEMONIC == 'DME Prescription'), 'DME'] = 1.0
@@ -76,7 +62,7 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=N
     dashb_df.fillna({mcol: 0.0 for mcol in oh_med_df.columns.to_list()}, inplace=True)
     print_df_info(dashb_df, dfname='Dashboard df with Medication')
 
-   # Load datetime dataset
+  # Load datetime dataset
   if dtime_fp is not None:
     dtime_df = pd.read_csv(dtime_fp, parse_dates=date_cols)
     print_df_info(dtime_df, dfname='Datetime DF')
@@ -104,8 +90,9 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=N
   print("All cases (CPT df): %d" % all_cases_cnt)
 
   # Join with CPT hierarchy group; discard cases if any of their CPT is not present in the existing hierarchy
-  cpt_df = cpt_df[cpt_df['CPT_CODE'].apply(lambda x: x.isnumeric())]  # discard rows with non-numeric cpt codes
-  cpt_df['CPT_CODE'] = cpt_df['CPT_CODE'].astype(int)
+  if cpt_df.dtypes['CPT_CODE'] == object:
+    cpt_df = cpt_df[cpt_df['CPT_CODE'].apply(lambda x: x.isnumeric())]  # discard rows with non-numeric cpt codes
+    cpt_df['CPT_CODE'] = cpt_df['CPT_CODE'].astype(int)
   cpt_df = cpt_df.join(cpt_grp_df.set_index('CPT_CODE'), on='CPT_CODE', how='inner')
   print_df_info(cpt_df, dfname='CPT with Group')
   # cpt_df = cpt_df.join(cpt_grp_df.set_index('CPT_CODE'), on='CPT_CODE', how='inner')
@@ -148,9 +135,34 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=N
   return dashb_df
 
 
-def gen_data_without_weight(df):
 
-  return
+def gen_cols_with_nan(df):
+  res = df.isnull().sum().sort_values(ascending=False).head(20)
+  return res
+
+
+def print_df_info(df, dfname="Dashboard", other_cols=None):
+  print("%s columns:\n" % dfname, df.keys())
+  print("Number of cases: %d" % df['SURG_CASE_KEY'].nunique())
+  if other_cols:
+    for col_name in other_cols:
+      print("Number of unique, non-NaN values in '%s': %d" % (col_name, df[col_name].nunique(dropna=True)))
+  print("Number of NaNs in each column:\n%s" % gen_cols_with_nan(df))
+  print("\n")
+
+
+def join_med_df_list_rep(med_df, dashb_df, levels=(1,)):
+
+  med_df = med_df[['SURG_CASE_KEY', 'HNA_ORDER_MNEMONIC'] + ['LEVEL%d_DRUG_CLASS_NAME' % l for l in levels]]
+  med_df = med_df.groupby(by='SURG_CASE_KEY')\
+    .agg({'LEVEL%d_DRUG_CLASS_NAME' % l: lambda x: list(x) for l in levels})\
+    .reset_index()
+  dashb_df = dashb_df.join(med_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='left')
+  for l in levels:
+    dashb_df['LEVEL%d_DRUG_CLASS_NAME' % l] = dashb_df['LEVEL%d_DRUG_CLASS_NAME' % l]\
+      .apply(lambda x: x if isinstance(x, list) else [])
+  # TODO: consider removing Nans in lists & Add DME prescription
+  return dashb_df, med_df
 
 
 def gen_sps_data(df):
