@@ -49,17 +49,7 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=N
   # Medication data -- join by surg case key
   if medication_fp is not None:
     med_df = pd.read_csv(medication_fp)
-    #dashb_df, _ = join_med_df_list_rep(med_df, dashb_df, levels=(1,2,3))
-    oh_med_df = med_df[['SURG_CASE_KEY', 'HNA_ORDER_MNEMONIC', 'LEVEL1_DRUG_CLASS_NAME']]
-    oh_med_df[globals.MED1 + '_DME'] = 0.0
-    oh_med_df.loc[(oh_med_df.HNA_ORDER_MNEMONIC == 'DME Prescription'), 'DME'] = 1.0
-    oh_med_df = oh_med_df \
-      .join(pd.get_dummies(oh_med_df['LEVEL1_DRUG_CLASS_NAME'], globals.MED1)) \
-      .drop(columns=['HNA_ORDER_MNEMONIC', 'LEVEL1_DRUG_CLASS_NAME']) \
-      .groupby(by='SURG_CASE_KEY').sum()
-    oh_med_df[oh_med_df > 1] = 1.0
-    dashb_df = dashb_df.join(oh_med_df, on='SURG_CASE_KEY', how='left')
-    dashb_df.fillna({mcol: 0.0 for mcol in oh_med_df.columns.to_list()}, inplace=True)
+    dashb_df, _ = join_med_df_list_rep(med_df, dashb_df, levels=(1, 2, 3))
     print_df_info(dashb_df, dfname='Dashboard df with Medication')
 
   # Load datetime dataset
@@ -135,7 +125,6 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=N
   return dashb_df
 
 
-
 def gen_cols_with_nan(df):
   res = df.isnull().sum().sort_values(ascending=False).head(20)
   return res
@@ -152,16 +141,18 @@ def print_df_info(df, dfname="Dashboard", other_cols=None):
 
 
 def join_med_df_list_rep(med_df, dashb_df, levels=(1,)):
+  med_levels = ['LEVEL%d_DRUG_CLASS_NAME' % l for l in levels]
+  med_df = med_df[['SURG_CASE_KEY', 'HNA_ORDER_MNEMONIC'] + med_levels]
+  med_df.loc[med_df['LEVEL1_DRUG_CLASS_NAME'].isna(), med_levels] = med_df['HNA_ORDER_MNEMONIC']
 
-  med_df = med_df[['SURG_CASE_KEY', 'HNA_ORDER_MNEMONIC'] + ['LEVEL%d_DRUG_CLASS_NAME' % l for l in levels]]
   med_df = med_df.groupby(by='SURG_CASE_KEY')\
-    .agg({'LEVEL%d_DRUG_CLASS_NAME' % l: lambda x: list(x) for l in levels})\
+    .agg({'LEVEL%d_DRUG_CLASS_NAME' % l: lambda x: list({d for d in x if not pd.isna(d)}) for l in levels})\
     .reset_index()
   dashb_df = dashb_df.join(med_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='left')
   for l in levels:
     dashb_df['LEVEL%d_DRUG_CLASS_NAME' % l] = dashb_df['LEVEL%d_DRUG_CLASS_NAME' % l]\
       .apply(lambda x: x if isinstance(x, list) else [])
-  # TODO: consider removing Nans in lists & Add DME prescription
+  # TODO: if levels starts at 2, and some are Nan at this level & are not DME, then what?
   return dashb_df, med_df
 
 
@@ -176,6 +167,18 @@ def gen_data_without_sps_pred(df):
   """Select a subset of cases where SPS surgeon estimation is not available"""
   return df.loc[df['SPS_PREDICTED_LOS'].isnull()]
 
+
+
+# oh_med_df = med_df[['SURG_CASE_KEY', 'HNA_ORDER_MNEMONIC', 'LEVEL1_DRUG_CLASS_NAME']]
+# oh_med_df[globals.MED1 + '_DME'] = 0.0
+# oh_med_df.loc[(oh_med_df.HNA_ORDER_MNEMONIC == 'DME Prescription'), 'DME'] = 1.0
+# oh_med_df = oh_med_df \
+#   .join(pd.get_dummies(oh_med_df['LEVEL1_DRUG_CLASS_NAME'], globals.MED1)) \
+#   .drop(columns=['HNA_ORDER_MNEMONIC', 'LEVEL1_DRUG_CLASS_NAME']) \
+#   .groupby(by='SURG_CASE_KEY').sum()
+# oh_med_df[oh_med_df > 1] = 1.0
+# dashb_df = dashb_df.join(oh_med_df, on='SURG_CASE_KEY', how='left')
+# dashb_df.fillna({mcol: 0.0 for mcol in oh_med_df.columns.to_list()}, inplace=True)
 
 
 # if __name__ == "__main__":

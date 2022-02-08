@@ -13,6 +13,7 @@ from time import time
 
 from . import globals
 from . import c0_data_prepare as dp
+from .c7_feature_engineering import FeatureEngineeringModifier, DecileGenerator
 
 
 def gen_cohort_df(df, cohort):
@@ -27,9 +28,11 @@ def gen_cohort_df(df, cohort):
 
 class Dataset(object):
 
-  def __init__(self, df, outcome=globals.NNT, cols=globals.FEATURE_COLS, med_prefix=None,
-               onehot_cols=None, onehot_dtypes=None, test_pct=0.2, test_idxs=None, cohort=globals.COHORT_ALL,
-               trimmed_ccsr=None, discretize_cols=None, target_features=None, remove_o2m=(True, True)):
+  def __init__(self, df, outcome=globals.NNT, ftr_cols=globals.FEATURE_COLS, col2decile_ftrs2aggf=None,
+               discretize_cols=None, onehot_cols=None, onehot_dtypes=None, decile_gen=None,
+               test_pct=0.2, test_idxs=None,
+               cohort=globals.COHORT_ALL, trimmed_ccsr=None, target_features=None, remove_o2m=(True, True)):
+    # Check args
     if (onehot_cols is not None) and (onehot_dtypes is not None):
       assert len(onehot_cols) == len(onehot_dtypes), "One-hot Encoding columns and dtypes must match!"
 
@@ -38,11 +41,7 @@ class Dataset(object):
     # Filter df by primary procedure cohort
     self.cohort = cohort
     self.cohort_df = gen_cohort_df(df, cohort)
-    print(self.cohort_df.shape)
-
-    # Add medication indicators
-    if med_prefix is not None:
-      cols = cols + list(filter(lambda x: x.startswith(med_prefix), df.columns.to_list()))
+    print('cohort df shape: ', self.cohort_df.shape)
 
     # 1. Train-test split
     if test_idxs is None:
@@ -50,52 +49,76 @@ class Dataset(object):
         train_df, test_df = self.cohort_df, None
       elif test_pct == 1:
         train_df, test_df = None, self.cohort_df
+        if col2decile_ftrs2aggf is not None and len(col2decile_ftrs2aggf) > 0:
+          assert isinstance(decile_gen, DecileGenerator), "Please specify pre-computed deciles for testing!"
       else:
         train_df, test_df = train_test_split(self.cohort_df, test_size=test_pct)
     else:
       test_df = self.cohort_df.iloc[test_idxs]
       train_df = self.cohort_df.iloc[list(set(range(self.cohort_df.shape[0])) - set(test_idxs))]
 
-    # 2. Preprocess training set
-    if train_df is not None:
-      self.Xtrain, self.ytrain, self.feature_names, self.train_case_keys, self.o2m_df_train = gen_Xy(
-        train_df, outcome, cols, onehot_cols, onehot_dtypes, trimmed_ccsr, discretize_cols, True, None, remove_o2m[0])
-      self.train_cohort_df = self.cohort_df[self.cohort_df['SURG_CASE_KEY'].isin(self.train_case_keys)]
+    # 2. Initialize required fields
+    self.train_df_raw, self.test_df_raw = train_df, test_df
+    self.Xtrain, self.ytrain, self.train_case_keys, self.train_cohort_df = None, None, None, None
+    self.Xtest, self.ytest, self.test_case_keys, self.test_cohort_df = None, None, None, None
+    self.o2m_df_train = None
+    self.feature_names = None
+    self.FeatureEngineer = FeatureEngineeringModifier(
+      onehot_cols, onehot_dtypes, trimmed_ccsr, discretize_cols, col2decile_ftrs2aggf)
+    if decile_gen is not None:
+      self.FeatureEngineer.set_decile_gen(decile_gen)
+
+    # 3. Preprocess train & test data
+    self.preprocess_train_test(outcome, ftr_cols, target_features, remove_o2m)
+
+  def preprocess_train_test(self, outcome, ftr_cols=globals.FEATURE_COLS, target_features=None, remove_o2m=(None, None)):
+
+    # I. Preprocess training set
+    if self.train_df_raw is not None:
+      # Preprocess outcome values / SPS prediction in df
+      train_df = preprocess_y(self.train_df_raw, outcome)
+      if globals.SPS_LOS_FTR in train_df.columns.to_list():
+        train_df = preprocess_y(train_df, outcome, sps_y=True)
+
+      # Modify data matrix
+      self.Xtrain, self.feature_names, self.train_case_keys, self.ytrain, self.o2m_df_train = preprocess_Xtrain(
+        train_df, outcome, ftr_cols, self.FeatureEngineer, remove_o2m=remove_o2m[0])
+      self.train_cohort_df = self.train_df_raw[self.train_df_raw['SURG_CASE_KEY'].isin(self.train_case_keys)]
     else:
       self.Xtrain, self.ytrain, self.train_case_keys = np.array([]), np.array([]), np.array([])
-      self.train_cohort_df = train_df
-      assert target_features is not None, "target_features cannot be None if test_pct = 1!"
-      self.feature_names = target_features
+      self.train_cohort_df = self.train_df_raw
 
-    # 3. Preprocess test set, if it's not empty
-    if test_df is not None:
+    # II. Preprocess test set, if it's not empty
+    if self.test_df_raw is not None:
       if isinstance(remove_o2m[1], pd.DataFrame):
         o2m_df = remove_o2m[1]
         self.feature_names = o2m_df.columns.to_list()  # TODO: refactor this, in case o2m_df is empty
       elif remove_o2m[1] == True:
         o2m_df = self.o2m_df_train
+      elif remove_o2m[1] == False:
+        o2m_df = None
+        # TODO: why not set feature_names here as well????
       else:
         o2m_df = None
-      self.Xtest, self.ytest, _, self.test_case_keys, _ = gen_Xy(
-        test_df, outcome, cols, onehot_cols, onehot_dtypes, trimmed_ccsr, discretize_cols, False, self.feature_names,
-        o2m_df)
-      self.test_cohort_df = self.cohort_df[self.cohort_df['SURG_CASE_KEY'].isin(self.test_case_keys)]
+        self.feature_names = target_features
+        if self.feature_names is None:
+          raise ValueError("target_features cannot be None when test_pct = 1!")
+
+      self.Xtest, _, self.test_case_keys = preprocess_Xtest(self.test_df_raw, self.feature_names, ftr_cols,
+                                                            ftrEng=self.FeatureEngineer, skip_cases_df_or_fp=o2m_df)
+      self.ytest = self.test_df_raw[self.test_df_raw['SURG_CASE_KEY'].isin(self.test_case_keys)][outcome].to_numpy()
+      self.test_cohort_df = self.test_df_raw[self.test_df_raw['SURG_CASE_KEY'].isin(self.test_case_keys)]
     else:
       self.Xtest, self.ytest, self.test_case_keys = np.array([]), np.array([]), np.array([])
-      self.test_cohort_df = test_df
+      self.test_cohort_df = self.test_df_raw
 
-    # self.case_keys = case_keys
-    # self.sps_preds = df[globals.SPS_LOS_FTR].to_numpy()  # Might contain NaN
-    # self.cpt_groups = df['CPT_GROUPS'].to_numpy()
+  def get_Xtrain_by_case_key(self, query_case_keys):
+    idxs = np.where(np.in1d(self.train_case_keys, query_case_keys))[0]
+    return self.Xtrain[idxs, :]
 
-
-  def _filter_X_by_index(self, Xtype, keep_idxs):
-    if Xtype == globals.XTEST:
-      self.Xtest = self.Xtest[keep_idxs, :]
-      self.ytest = self.ytest[keep_idxs]
-      self.test_idx = self.test_idx[keep_idxs]
-    else:
-      raise NotImplementedError
+  def get_Xtest_by_case_key(self, query_case_keys):
+    idxs = np.where(np.in1d(self.test_case_keys, query_case_keys))[0]
+    return self.Xtest[idxs, :]
 
   def __str__(self):
     res = "Training set size: %d\n" \
@@ -105,56 +128,28 @@ class Dataset(object):
     return res
 
 
-# TODO: add data cleaning, e.g. 1. check for negative LoS and remove
-# Generate data matrix X and a response vector y
-def gen_Xy(df, outcome, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None, trimmed_ccsr=None,
-           discretize_cols=None, is_train=True, target_features=None, remove_o2m=True):
-  """
-  Generate X, y for downstream modeling
-
-  :param df:
-  :param outcome:
-  :param nranges: A list of non-negative numbers, starting with 0
-  :param cols:
-  :return:
-  """
-  # Preprocess outcome values / SPS prediction in df
-  df = preprocess_y(df, outcome)
-  if globals.SPS_LOS_FTR in df.columns.to_list():
-    df = preprocess_y(df, outcome, sps_y=True)
-
-  # Generate a preprocessed data matrix X, and a response vector y
-  o2m_df = None
-  if is_train:
-    X, features, X_case_keys, y, o2m_df = preprocess_Xtrain(
-      df, outcome, cols, onehot_cols, onehot_dtypes, trimmed_ccsr=trimmed_ccsr, discretize_cols=discretize_cols,
-      remove_o2m=remove_o2m)
-  else:
-    X, features, X_case_keys = preprocess_Xtest(df, target_features, cols, onehot_cols, onehot_dtypes, trimmed_ccsr,
-                                                discretize_cols, remove_o2m)
-    y = df[df['SURG_CASE_KEY'].isin(X_case_keys)][outcome].to_numpy()
-
-  return X, y, features, X_case_keys, o2m_df
-
-
-def preprocess_Xtrain(df, outcome, feature_cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None,
-                      remove_nonnumeric=True, verbose=False, trimmed_ccsr=None, discretize_cols=None, remove_o2m=True):
+def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModifier,
+                      remove_nonnumeric=True, verbose=False, remove_o2m=True):
   # Make data matrix X numeric
   Xdf = df.copy()[feature_cols]
 
   # Discard unwanted CCSRs
-  if trimmed_ccsr:
-    Xdf, onehot_cols = trim_ccsr_in_X(Xdf, onehot_cols, trimmed_ccsr)
+  Xdf, onehot_cols = ftrEng.trim_ccsr_in_X(Xdf, ftrEng.onehot_cols, ftrEng.trimmed_ccsr)
 
   # Encode categorical variables
-  Xdf = dummy_code_discrete_cols(Xdf)
+  Xdf = ftrEng.dummy_code_discrete_cols(Xdf)
 
   # Discretize certain continuous columns by request
-  if discretize_cols is not None:
-    discretize_columns_df(Xdf, discretize_cols, inplace=True)
+  ftrEng.discretize_columns_df(Xdf, ftrEng.discretize_cols, inplace=True)
 
-  if onehot_cols is not None:
-    Xdf = onehot_encode_cols(Xdf, onehot_cols, onehot_dtypes)
+  # One-hot encode indicator variables
+  Xdf = ftrEng.onehot_encode_cols(Xdf, onehot_cols, ftrEng.onehot_dtypes)
+
+  # Generate deciles (TODO: generate deciles)
+  decile_cols = ftrEng.decile_generator.gen_decile_cols(Xdf, globals.LOS, ftrEng.col2decile_ftr2aggf)
+
+  # Add decile-related columns to Xdf
+  Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy()
@@ -172,6 +167,9 @@ def preprocess_Xtrain(df, outcome, feature_cols=globals.FEATURE_COLS, onehot_col
     o2m_df, X, X_case_keys, y = discard_o2m_cases_from_self(X, X_case_keys, y, target_features)  # training set
     print("Removing o2m cases from self took %d sec" % (time() - s))
 
+    # TODO: regenerate decile if o2m_df.shape[0] > 0
+
+
   if verbose:
     display(pd.DataFrame(X, columns=target_features).head(20))
   assert X.shape[1] == len(target_features), 'Generated data matrix has %d features, but feature list has %d items' % \
@@ -180,8 +178,7 @@ def preprocess_Xtrain(df, outcome, feature_cols=globals.FEATURE_COLS, onehot_col
 
 
 # Data preprocessing (clean, discretize and one-hot encode certain features)
-def preprocess_Xtest(df, target_features, feature_cols, onehot_cols=None, onehot_dtypes=None,
-                     trimmed_ccsr=None, discretize_cols=None, skip_cases_df_or_fp=None):
+def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeringModifier, skip_cases_df_or_fp=None):
   # Get target feature names from training data
   if skip_cases_df_or_fp is None:
     skip_cases_df = None
@@ -193,22 +190,23 @@ def preprocess_Xtest(df, target_features, feature_cols, onehot_cols=None, onehot
   Xdf = df.copy()[feature_cols]
 
   # Add a column of trimmed CCSRs with/without a column of the corresponding trimmed ICD10s
-  if trimmed_ccsr is not None:
-    Xdf, onehot_cols = trim_ccsr_in_X(Xdf, onehot_cols, trimmed_ccsr)
+  Xdf, onehot_cols = ftrEng.trim_ccsr_in_X(Xdf, ftrEng.onehot_cols, ftrEng.trimmed_ccsr)
 
   # Make data matrix X numeric
-  Xdf = dummy_code_discrete_cols(Xdf)
+  Xdf = ftrEng.dummy_code_discrete_cols(Xdf)
 
   # Discretize certain continuous columns by request
-  if discretize_cols is not None:
-    Xdf = discretize_columns_df(Xdf, discretize_cols, inplace=True)
+  ftrEng.discretize_columns_df(Xdf, ftrEng.discretize_cols, inplace=True)
 
   if onehot_cols is not None:
     # One-hot encode the required columns according to a given historical set of features (e.g. CPT, CCSR etc.)
-    Xdf = onehot_encode_cols(Xdf, onehot_cols, onehot_dtypes)
+    Xdf = ftrEng.onehot_encode_cols(Xdf, onehot_cols, ftrEng.onehot_dtypes)
 
     # Match Xdf to the target features from the training data matrix (for now, only medical codes lead to such need)
-    Xdf = match_Xdf_cols_to_target_features(Xdf, target_features)
+    Xdf = ftrEng.match_Xdf_cols_to_target_features(Xdf, target_features)
+
+  # Join with existing deciles -- TODO: Test this
+  Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_key = Xdf['SURG_CASE_KEY'].to_numpy()
@@ -232,137 +230,13 @@ def preprocess_Xtest(df, target_features, feature_cols, onehot_cols=None, onehot
   return X, target_features, X_case_key
 
 
-def dummy_code_discrete_cols(Xdf):
-  # Gender
-  Xdf.loc[(Xdf.SEX_CODE != 'F'), 'SEX_CODE'] = 0.0
-  Xdf.loc[(Xdf.SEX_CODE == 'F'), 'SEX_CODE'] = 1.0
-
-  Xdf_cols = Xdf.columns.to_list()
-  # Interpreter need or not
-  if 'INTERPRETER_NEED' in Xdf_cols:
-    Xdf.loc[(Xdf.INTERPRETER_NEED == 'N'), 'INTERPRETER_NEED'] = 0.0
-    Xdf.loc[(Xdf.INTERPRETER_NEED == 'Y'), 'INTERPRETER_NEED'] = 1.0
-
-  # State code
-  if 'STATE_CODE' in Xdf_cols:
-    Xdf[['IN_STATE', 'OUT_OF_STATE_US', 'FOREIGN']] = 0.0
-    Xdf.loc[(Xdf.STATE_CODE == 'MA'), 'IN_STATE'] = 1.0
-    Xdf.loc[(Xdf.STATE_CODE == 'Foreign'), 'FOREIGN'] = 1.0
-    Xdf.loc[((Xdf.IN_STATE == 0.0) & (Xdf.FOREIGN == 0.0)), 'OUT_OF_STATE_US'] = 1.0
-
-  # Language   TODO: Unable to Collect == all 0s or a separate col or discard??
-  if 'LANGUAGE_DESC' in Xdf_cols:
-    Xdf[['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE']] = 0.0
-    Xdf.loc[(Xdf.LANGUAGE_DESC == 'English'), 'ENGLISH'] = 1.0
-    Xdf.loc[(Xdf.LANGUAGE_DESC == 'Spanish'), 'SPANISH'] = 1.0
-    Xdf.loc[(Xdf.LANGUAGE_DESC == 'Unable to Collect'), 'UNKNOWN_LANGUAGE'] = 1.0
-    Xdf.loc[((Xdf.ENGLISH == 0.0) & (Xdf.SPANISH == 0.0) & (Xdf.UNKNOWN_LANGUAGE == 0.0)), 'OTHER_LANGUAGE'] = 1.0
-
-    Xdf.drop(columns=['STATE_CODE', 'LANGUAGE_DESC'], inplace=True)
-  return Xdf
+def get_df_by_case_keys(df, case_keys):
+  return df[df['SURG_CASE_KEY'].isin(case_keys)]
 
 
-def trim_ccsr_in_X(Xdf, onehot_cols, trimmed_ccsrs):
-  # add a column with only the target set of CCSRs
-  if 'CCSRS' in onehot_cols:
-    Xdf['Trimmed_CCSRS'] = Xdf['CCSRS'].apply(lambda row: [cc for cc in row if cc in trimmed_ccsrs])
-    onehot_cols = list(map(lambda item: item.replace('CCSRS', 'Trimmed_CCSRS'), onehot_cols))
-  # add a column with only the ICD10s of the target CCSR set
-  if 'ICD10S' in onehot_cols:
-    Xdf['Trimmed_ICD10S'] = Xdf[['CCSRS', 'ICD10S']].apply(
-      lambda row: [row['ICD10S'][i] for i in range(len(row['ICD10S'])) if row['CCSRS'][i] in trimmed_ccsrs], axis=1)
-    onehot_cols = list(map(lambda item: item.replace('ICD10S', 'Trimmed_ICD10S'), onehot_cols))
-  return Xdf, onehot_cols
-
-
-# Apply one-hot encoding to the designated columns
-def onehot_encode_cols(Xdf, onehot_cols, onehot_dtypes):
-  for oh_col, dtype in zip(onehot_cols, onehot_dtypes):
-    if dtype == str:
-      dummies = pd.get_dummies(Xdf[oh_col], prefix=oh_col)
-    elif dtype == list:  # Expand list to (row_id, oh_col indicator) first
-      s = Xdf[oh_col].explode()
-      dummies = pd.crosstab(s.index, s).add_prefix(oh_col[:-1] + '_')
-      dummies[dummies > 1] = 1  # in case a list contains duplicates  TODO: double check
-    else:
-      raise NotImplementedError("Cannot encode column '%s' with a data type of '%s'" % (oh_col, dtype))
-    Xdf = Xdf.drop(columns=[oh_col]).join(dummies).fillna(0)
-  return Xdf
-
-
-# Note: column order should be taken care of after calling this function
-def match_Xdf_cols_to_target_features(Xdf, target_features):
-  Xdf_cols = Xdf.columns.to_list()
-
-  # Drop rows that has certain indicator columns not covered in the target feature list (e.g. an unseen CPT code)
-  new_ftrs = set(Xdf_cols) - set(target_features) - set(globals.NON_NUMERIC_COLS)
-  # TODO: think about how to handle different types of unseen codes (e.g. always drop if pproc is unseen, but unseen CCSR/CPT could be fine)
-  if len(new_ftrs) > 0:
-    case_idxs_with_new_ftrs = set()
-    for new_ftr in new_ftrs:
-      idxs = Xdf.index[Xdf[new_ftr] == 1].to_list()
-      case_idxs_with_new_ftrs = case_idxs_with_new_ftrs.union(set(idxs))
-    print_feature_match_details(new_ftrs, 'unseen')
-    print("Dropping %d cases with new features..." % len(case_idxs_with_new_ftrs))
-    Xdf = Xdf.drop(index=list(case_idxs_with_new_ftrs)) \
-      .drop(columns=list(new_ftrs)) \
-      .reset_index(drop=True)
-    if Xdf.shape[0] == 0:
-      raise Exception("All cases in this dataset contain at least 1 unseen indicator!")
-
-  # Add unobserved indicators as columns of 0
-  uncovered_ftrs = set(target_features) - set(Xdf_cols)
-  Xdf[list(uncovered_ftrs)] = 0.0
-  print_feature_match_details(uncovered_ftrs, 'uncovered')
-  return Xdf
-
-
-def print_feature_match_details(feature_set, ftr_type='unseen'):
-  print("\nTotal %s features: %d" % (ftr_type, len(feature_set)))
-  print("#%s CPTs: %d" % (ftr_type, len(list(filter(lambda x: x.startswith('CPT'), feature_set)))))
-  print("#%s CPT Groups: %d" % (ftr_type, len(list(filter(lambda x: x.startswith('CPT_GROUP'), feature_set)))))
-  print("#%s CCSRs: %d" % (ftr_type, len(list(filter(lambda x: x.startswith('CCSR'), feature_set)))))
-
-
-def discretize_columns_df(Xdf: pd.DataFrame, discretize_cols, inplace=False):
-  if not inplace:
-    Xdf = Xdf.copy()
-
-  # Modify data matrix with discretized columns by request
-  for dis_col in discretize_cols:
-    if dis_col not in Xdf.columns.to_list():
-      raise Warning("%s is not in Xdf columns!" % dis_col)
-    elif dis_col == 'AGE_AT_PROC_YRS':
-      Xdf[dis_col] = pd.cut(Xdf[dis_col], bins=globals.AGE_BINS, labels=False, right=False, include_lowest=True)
-    elif dis_col == 'WEIGHT_ZSCORE':
-      weightz_bins = [float('-inf'), -4, -2, -1, 1, 2, 4, float('inf')]
-      print("Weight z-score bins: ", weightz_bins)
-      Xdf[dis_col] = pd.cut(Xdf[dis_col], bins=weightz_bins, labels=False, right=False, include_lowest=True)
-    else:
-      raise Warning("%s discretization is not available yet!" % dis_col)
-  return Xdf
-
-
-def discretize_columns(X, feature_names, discretize_cols, inplace=False):
-  if not inplace:
-    X = np.copy(X)
-
-  # Modify data matrix with discretized columns by request
-  for dis_col in discretize_cols:
-    idx = feature_names.index(dis_col)
-    if dis_col == 'AGE_AT_PROC_YRS':
-      X[:, idx] = np.digitize(X[:, idx], globals.AGE_BINS)
-    elif dis_col == 'WEIGHT_ZSCORE':
-      weightz_bins = [float('-inf'), -4, -2, -1, 1, 2, 4, float('inf')]
-      print("Weight z-score bins: ", weightz_bins)
-      X[:, idx] = np.digitize(X[:, idx], weightz_bins)
-    else:
-      raise Warning("%s discretization is not available yet!" % dis_col)
-  return X
-
-
-def preprocess_y(df, outcome, sps_y=False):
+def preprocess_y(df: pd.DataFrame, outcome, sps_y=False, inplace=False):
   # Generate an outcome vector y with shape: (n_samples, )
+  df = df.copy() if not inplace else df
   y = np.array(df.LENGTH_OF_STAY.to_numpy())
   if outcome == globals.LOS:
     return y
@@ -380,11 +254,11 @@ def preprocess_y(df, outcome, sps_y=False):
   else:
     raise NotImplementedError("Outcome type '%s' is not implemented yet!" % outcome)
 
+  # Update df by adding the outcome column
   if sps_y:
     df['SPS_PREDICTED_LOS'] = y
   else:
     df[outcome] = y
-
   return df
 
 
@@ -500,3 +374,166 @@ def gen_o2m_cases(X, y, features, unique=True, save_fp=None, X_case_keys=None):
   if save_fp:
     o2m_df.to_csv(save_fp, index=False)
   return o2m_df
+
+#
+# def dummy_code_discrete_cols(Xdf):
+#   # Gender
+#   Xdf.loc[(Xdf.SEX_CODE != 'F'), 'SEX_CODE'] = 0.0
+#   Xdf.loc[(Xdf.SEX_CODE == 'F'), 'SEX_CODE'] = 1.0
+#
+#   Xdf_cols = Xdf.columns.to_list()
+#   # Interpreter need or not
+#   if 'INTERPRETER_NEED' in Xdf_cols:
+#     Xdf.loc[(Xdf.INTERPRETER_NEED == 'N'), 'INTERPRETER_NEED'] = 0.0
+#     Xdf.loc[(Xdf.INTERPRETER_NEED == 'Y'), 'INTERPRETER_NEED'] = 1.0
+#
+#   # State code
+#   if 'STATE_CODE' in Xdf_cols:
+#     Xdf[['IN_STATE', 'OUT_OF_STATE_US', 'FOREIGN']] = 0.0
+#     Xdf.loc[(Xdf.STATE_CODE == 'MA'), 'IN_STATE'] = 1.0
+#     Xdf.loc[(Xdf.STATE_CODE == 'Foreign'), 'FOREIGN'] = 1.0
+#     Xdf.loc[((Xdf.IN_STATE == 0.0) & (Xdf.FOREIGN == 0.0)), 'OUT_OF_STATE_US'] = 1.0
+#
+#   # Language   TODO: Unable to Collect == all 0s or a separate col or discard??
+#   if 'LANGUAGE_DESC' in Xdf_cols:
+#     Xdf[['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE']] = 0.0
+#     Xdf.loc[(Xdf.LANGUAGE_DESC == 'English'), 'ENGLISH'] = 1.0
+#     Xdf.loc[(Xdf.LANGUAGE_DESC == 'Spanish'), 'SPANISH'] = 1.0
+#     Xdf.loc[(Xdf.LANGUAGE_DESC == 'Unable to Collect'), 'UNKNOWN_LANGUAGE'] = 1.0
+#     Xdf.loc[((Xdf.ENGLISH == 0.0) & (Xdf.SPANISH == 0.0) & (Xdf.UNKNOWN_LANGUAGE == 0.0)), 'OTHER_LANGUAGE'] = 1.0
+#
+#     Xdf.drop(columns=['STATE_CODE', 'LANGUAGE_DESC'], inplace=True)
+#   return Xdf
+#
+#
+# def trim_ccsr_in_X(Xdf, onehot_cols, trimmed_ccsrs):
+#   # add a column with only the target set of CCSRs
+#   if 'CCSRS' in onehot_cols:
+#     Xdf['Trimmed_CCSRS'] = Xdf['CCSRS'].apply(lambda row: [cc for cc in row if cc in trimmed_ccsrs])
+#     onehot_cols = list(map(lambda item: item.replace('CCSRS', 'Trimmed_CCSRS'), onehot_cols))
+#   # add a column with only the ICD10s of the target CCSR set
+#   if 'ICD10S' in onehot_cols:
+#     Xdf['Trimmed_ICD10S'] = Xdf[['CCSRS', 'ICD10S']].apply(
+#       lambda row: [row['ICD10S'][i] for i in range(len(row['ICD10S'])) if row['CCSRS'][i] in trimmed_ccsrs], axis=1)
+#     onehot_cols = list(map(lambda item: item.replace('ICD10S', 'Trimmed_ICD10S'), onehot_cols))
+#   return Xdf, onehot_cols
+#
+#
+# # Apply one-hot encoding to the designated columns
+# def onehot_encode_cols(Xdf, onehot_cols, onehot_dtypes):
+#   for oh_col, dtype in zip(onehot_cols, onehot_dtypes):
+#     oh_prefix = oh_col if oh_col not in globals.DRUG_COLS else 'MED%s_' % list(filter(str.isdigit, oh_col))[0]
+#     if dtype == str:
+#       dummies = pd.get_dummies(Xdf[oh_col], prefix=oh_prefix)
+#     elif dtype == list:  # Expand list to (row_id, oh_col indicator) first
+#       s = Xdf[oh_col].explode()
+#       dummies = pd.crosstab(s.index, s).add_prefix(oh_prefix[:-1] + '_')
+#       dummies[dummies > 1] = 1  # in case a list contains duplicates  TODO: double check
+#     else:
+#       raise NotImplementedError("Cannot encode column '%s' with a data type of '%s'" % (oh_col, dtype))
+#     Xdf = Xdf.drop(columns=[oh_col]).join(dummies).fillna(0)
+#   return Xdf
+#
+#
+# # Note: column order should be taken care of after calling this function
+# def match_Xdf_cols_to_target_features(Xdf, target_features):
+#   Xdf_cols = Xdf.columns.to_list()
+#
+#   # Drop rows that has certain indicator columns not covered in the target feature list (e.g. an unseen CPT code)
+#   new_ftrs = set(Xdf_cols) - set(target_features) - set(globals.NON_NUMERIC_COLS)
+#   # TODO: think about how to handle different types of unseen codes (e.g. always drop if pproc is unseen, but unseen CCSR/CPT could be fine)
+#   if len(new_ftrs) > 0:
+#     case_idxs_with_new_ftrs = set()
+#     for new_ftr in new_ftrs:
+#       idxs = Xdf.index[Xdf[new_ftr] == 1].to_list()
+#       case_idxs_with_new_ftrs = case_idxs_with_new_ftrs.union(set(idxs))
+#     print_feature_match_details(new_ftrs, 'unseen')
+#     print("Dropping %d cases with new features..." % len(case_idxs_with_new_ftrs))
+#     Xdf = Xdf.drop(index=list(case_idxs_with_new_ftrs)) \
+#       .drop(columns=list(new_ftrs)) \
+#       .reset_index(drop=True)
+#     if Xdf.shape[0] == 0:
+#       raise Exception("All cases in this dataset contain at least 1 unseen indicator!")
+#
+#   # Add unobserved indicators as columns of 0
+#   uncovered_ftrs = set(target_features) - set(Xdf_cols)
+#   Xdf[list(uncovered_ftrs)] = 0.0
+#   print_feature_match_details(uncovered_ftrs, 'uncovered')
+#   return Xdf
+#
+#
+# def print_feature_match_details(feature_set, ftr_type='unseen'):
+#   print("\nTotal %s features: %d" % (ftr_type, len(feature_set)))
+#   print("#%s CPTs: %d" % (ftr_type, len(list(filter(lambda x: x.startswith('CPT'), feature_set)))))
+#   print("#%s CPT Groups: %d" % (ftr_type, len(list(filter(lambda x: x.startswith('CPT_GROUP'), feature_set)))))
+#   print("#%s CCSRs: %d" % (ftr_type, len(list(filter(lambda x: x.startswith('CCSR'), feature_set)))))
+#
+#
+# def discretize_columns_df(Xdf: pd.DataFrame, discretize_cols, inplace=False):
+#   if not inplace:
+#     Xdf = Xdf.copy()
+#
+#   # Modify data matrix with discretized columns by request
+#   for dis_col in discretize_cols:
+#     if dis_col not in Xdf.columns.to_list():
+#       raise Warning("%s is not in Xdf columns!" % dis_col)
+#     elif dis_col == 'AGE_AT_PROC_YRS':
+#       Xdf[dis_col] = pd.cut(Xdf[dis_col], bins=globals.AGE_BINS, labels=False, right=False, include_lowest=True)
+#     elif dis_col == 'WEIGHT_ZSCORE':
+#       weightz_bins = [float('-inf'), -4, -2, -1, 1, 2, 4, float('inf')]
+#       print("Weight z-score bins: ", weightz_bins)
+#       Xdf[dis_col] = pd.cut(Xdf[dis_col], bins=weightz_bins, labels=False, right=False, include_lowest=True)
+#     else:
+#       raise Warning("%s discretization is not available yet!" % dis_col)
+#   return Xdf
+#
+#
+# def discretize_columns(X, feature_names, discretize_cols, inplace=False):
+#   if not inplace:
+#     X = np.copy(X)
+#
+#   # Modify data matrix with discretized columns by request
+#   for dis_col in discretize_cols:
+#     idx = feature_names.index(dis_col)
+#     if dis_col == 'AGE_AT_PROC_YRS':
+#       X[:, idx] = np.digitize(X[:, idx], globals.AGE_BINS)
+#     elif dis_col == 'WEIGHT_ZSCORE':
+#       weightz_bins = [float('-inf'), -4, -2, -1, 1, 2, 4, float('inf')]
+#       print("Weight z-score bins: ", weightz_bins)
+#       X[:, idx] = np.digitize(X[:, idx], weightz_bins)
+#     else:
+#       raise Warning("%s discretization is not available yet!" % dis_col)
+#   return X
+#
+
+
+
+# # TODO: add data cleaning, e.g. 1. check for negative LoS and remove
+# # Generate data matrix X and a response vector y
+# def gen_Xy(df, outcome, cols=globals.FEATURE_COLS, onehot_cols=None, onehot_dtypes=None, trimmed_ccsr=None,
+#            discretize_cols=None, is_train=True, target_features=None, remove_o2m=True):
+#   """
+#   Generate X, y for downstream modeling
+#
+#   :param df:
+#   :param outcome:
+#   :param nranges: A list of non-negative numbers, starting with 0
+#   :param cols:
+#   :return:
+#   """
+#   # Preprocess outcome values / SPS prediction in df
+#   df = preprocess_y(df, outcome)
+#   if globals.SPS_LOS_FTR in df.columns.to_list():
+#     df = preprocess_y(df, outcome, sps_y=True)
+#
+#   # Generate a preprocessed data matrix X, and a response vector y
+#   o2m_df, med_decile = None, None
+#   if is_train:
+#     X, features, X_case_keys, y, o2m_df = preprocess_Xtrain(df, outcome, self.FeatureEngineer, cols, remove_o2m=remove_o2m)
+#   else:
+#     X, features, X_case_keys = preprocess_Xtest(df, target_features, cols, onehot_cols, onehot_dtypes, trimmed_ccsr,
+#                                                 discretize_cols, remove_o2m)
+#     y = df[df['SURG_CASE_KEY'].isin(X_case_keys)][outcome].to_numpy()
+#
+#   return X, y, features, X_case_keys, o2m_df, med_decile
+#

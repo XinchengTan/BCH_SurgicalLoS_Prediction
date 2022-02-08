@@ -1,5 +1,21 @@
 from pathlib import Path
 
+# Default built-in column names
+SPS_LOS_FTR = 'SPS_PREDICTED_LOS'
+LOS = "LENGTH_OF_STAY"
+
+# Customized new column names during dataframe preprocessing
+NNT = "NUM_OF_NIGHTS"
+CCSRS, CCSR, CCSR_DECILE = 'CCSRS', 'CCSR', 'CCSR_DECILE'
+CPTS, CPT, CPT_DECILE = 'CPTS', 'CPT', 'CPT_DECILE'
+CPT_GROUPS = 'CPT_GROUPS'
+MED1, MED1_DECILE = 'MED1', 'MED1_DECILE'
+MED2, MED2_DECILE = 'MED2', 'MED2_DECILE'
+MED3, MED3_DECILE = 'MED3', 'MED3_DECILE'
+PPROC, PPROC_DECILE = 'PPROC', 'PPROC_DECILE'
+
+
+# Column list for feature selection
 OS_CODES = ['Cardiovascular', 'Digestive', 'Endocrine',
             'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
             'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic',
@@ -14,28 +30,32 @@ DATETIME_COLS = ['SURG_CASE_KEY', 'CARE_CLASS', 'ICU_BED_NEEDED', 'PRIMARY_PROC'
                  'ADMIT_DATE', 'DISCHARGE_DATE', 'SURGEON_START_DT_TM', 'SURGERY_END_DT_TM',
                  'HAR_ADMIT_DATE', 'HAR_DISCHARGE_DATE']
 
-FEATURE_COLS_NO_WEIGHT = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'PROC_DECILE',
-                          'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS'] + OS_CODES  # , 'ICD10S'
+FEATURE_COLS_NO_WEIGHT = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', CPT_DECILE,
+                          CPTS, CPT_GROUPS, 'PRIMARY_PROC', CCSRS] + OS_CODES  # , 'ICD10S'
 
 FEATURE_COLS = FEATURE_COLS_NO_WEIGHT + ['WEIGHT_ZSCORE'] # , 'ICD10S'
 
 FEATURE_COLS_PPROC_NO_WEIGHT_OLD = FEATURE_COLS_NO_WEIGHT + ['PPROC_DECILE'] # , 'ICD10S'
 
 FEATURE_COLS_PPROC_NO_WEIGHT = FEATURE_COLS_NO_WEIGHT + ['PPROC_DECILE', 'STATE_CODE', 'LANGUAGE_DESC', 'INTERPRETER_NEED'] # , 'ICD10S'
+FEATURE_COLS_PPROC_NO_WEIGHT_MED1 = FEATURE_COLS_NO_WEIGHT + \
+                                    [PPROC_DECILE, 'STATE_CODE', 'LANGUAGE_DESC', 'INTERPRETER_NEED',
+                                     'LEVEL1_DRUG_CLASS_NAME']  # , 'ICD10S'
 
 FEATURE_COLS_NO_DECILE = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
-                          'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS'] + OS_CODES  # , 'ICD10S'
+                          CPTS, CPT_GROUPS, 'PRIMARY_PROC', CCSRS] + OS_CODES  # , 'ICD10S'
 
 FEATURE_COLS_NO_OS = ['SURG_CASE_KEY', 'SEX_CODE', 'AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE',
-                      'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS']  # , 'ICD10S'
+                      CPTS, CPT_GROUPS, 'PRIMARY_PROC', CCSRS]  # , 'ICD10S'
 
-MED1 = 'MED1'
-SPS_LOS_FTR = 'SPS_PREDICTED_LOS'
 FEATURE_COLS_SPS = FEATURE_COLS + [SPS_LOS_FTR]
 FEATURE_COLS_NO_OS_SPS = FEATURE_COLS_NO_OS + [SPS_LOS_FTR]
-NON_NUMERIC_COLS = ['SURG_CASE_KEY', 'CPTS', 'CPT_GROUPS', 'PRIMARY_PROC', 'CCSRS', 'ICD10S']
+
+DRUG_COLS = ['LEVEL1_DRUG_CLASS_NAME', 'LEVEL2_DRUG_CLASS_NAME', 'LEVEL3_DRUG_CLASS_NAME']
+NON_NUMERIC_COLS = ['SURG_CASE_KEY', CPTS, CPT_GROUPS, 'PRIMARY_PROC', CCSRS, 'ICD10S'] + DRUG_COLS
 CONTINUOUS_COLS = ['AGE_AT_PROC_YRS', 'WEIGHT_ZSCORE']
 
+# Cohort labels
 COHORT_ALL = 'All Cases'
 COHORT_TONSIL = 'Tonsillectomy'
 COHORT_SPINE = 'Spinal Fusion'
@@ -44,7 +64,7 @@ COHORT_ORTHO = 'Orthopedics'
 COHORT_NEUROLOGIC = 'Spinal Fusion - Neurologic'
 COHORT_NON_NEUROLOGIC = 'Spinal Fusion - non-Neurologic'
 
-
+# TODO: Update this, since primary proc has been updated!
 COHORT_TO_PPROCS = {COHORT_TONSIL: {'TONSILLECTOMY WITH ADENOIDECTOMY, ORL', 'TONSILLOTOMY WITH ADENOIDECTOMY, ORL',
                                     'TONSILLECTOMY, ORL', 'ADENOIDECTOMY, ORL', 'TONSILLOTOMY, ORL',
                                     'TONSILLECTOMY, LINGUAL, ORL'},
@@ -55,18 +75,18 @@ COHORT_TO_PPROCS = {COHORT_TONSIL: {'TONSILLECTOMY WITH ADENOIDECTOMY, ORL', 'TO
                                    'zzSPINE FUSION POSTERIOR, LUMBAR, ORTHO'}}
 
 CCSRS_TONSIL = {'Chronic respiratory insufficiency',
-               'Epilepsy',
-               'Malacia of trachea or larynx',
-               'Down syndrome',
-               'Austism spectrum disorder',
-               'Cerebral palsy',
-               'Esophageal reflux',
-               'Enterostomy',
-               'Neurodevelopmental disorder',
-               'Chronic rhinitis',
-               'Asthma',
-               'Obesity',
-               'Hearing loss'}
+                'Epilepsy',
+                 'Malacia of trachea or larynx',
+                 'Down syndrome',
+                 'Austism spectrum disorder',
+                 'Cerebral palsy',
+                 'Esophageal reflux',
+                 'Enterostomy',
+                 'Neurodevelopmental disorder',
+                 'Chronic rhinitis',
+                 'Asthma',
+                 'Obesity',
+                 'Hearing loss'}
 
 CCSRS_SPINE = {'Chronic respiratory insufficiency',
               'Bladder dysfunction',
@@ -100,8 +120,6 @@ HOUR = "H"
 DAY = "D"
 NIGHT = "N"
 
-LOS = "LENGTH_OF_STAY"
-NNT = "NUM_OF_NIGHTS"
 MAX_NNT = 5
 NNT_CUTOFFS = list(range(MAX_NNT+1))
 NNT_CLASS_CNT = len(NNT_CUTOFFS) + 1
