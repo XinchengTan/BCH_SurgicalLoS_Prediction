@@ -145,7 +145,7 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   # One-hot encode indicator variables
   Xdf = ftrEng.onehot_encode_cols(Xdf, onehot_cols, ftrEng.onehot_dtypes)
 
-  # Generate deciles (TODO: generate deciles)
+  # Generate deciles
   s = time()
   decile_cols = ftrEng.decile_generator.gen_decile_cols(Xdf, ftrEng.decile_outcome, ftrEng.col2decile_ftr2aggf)
   print('Took %d sec to generate all deciles' % (time() - s))
