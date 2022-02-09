@@ -7,12 +7,12 @@ import numpy as np
 import pandas as pd
 
 from . import globals
-from .c1_data_preprocessing import Dataset, discretize_columns
+from .c1_data_preprocessing import Dataset
 
 
 # Generate k dataset objects for k-fold cross validation
 def gen_kfolds_datasets(df, kfold, features, outcome=globals.NNT, onehot_cols=None, onehot_dtypes=None,
-                        discretize_cols=None, shuffle_df=False, remove_o2m=(True, True)):
+                        discretize_cols=None, col2decile_ftr2aggf=None, shuffle_df=False, remove_o2m=(True, True)):
   if shuffle_df:
     df = df.sample(frac=1).reset_index(drop=True)
   else:
@@ -22,8 +22,9 @@ def gen_kfolds_datasets(df, kfold, features, outcome=globals.NNT, onehot_cols=No
   datasets = []
   for k in tqdm(range(kfold)):
     test_idxs = np.arange(int(k * test_pct * N), int((k+1) * test_pct * N))
-    dataset_k = Dataset(df, outcome, features, onehot_cols, onehot_dtypes, test_idxs=test_idxs,
-                        discretize_cols=discretize_cols, remove_o2m=remove_o2m)
+    dataset_k = Dataset(df, outcome, features, onehot_cols=onehot_cols, onehot_dtypes=onehot_dtypes,
+                        discretize_cols=discretize_cols, col2decile_ftrs2aggf=col2decile_ftr2aggf,
+                        test_idxs=test_idxs, remove_o2m=remove_o2m)
     datasets.append(dataset_k)
 
   return datasets

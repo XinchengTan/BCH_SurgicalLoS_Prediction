@@ -3,22 +3,17 @@ import pandas as pd
 from pathlib import Path
 
 from . import globals
-from .c1_data_preprocessing import Dataset
 
 
 class FeatureEngineeringModifier(object):
 
-  default_col2decile_features = {globals.CPT: {globals.CPT_DECILE: 'max'},
-                                 globals.PPROC: {globals.PPROC_DECILE: 'max'},
-                                 globals.MED1: {globals.MED1_DECILE: 'max'}}
-
   def __init__(self, onehot_cols=None, onehot_dtypes=None, trimmed_ccsr=None, discretize_cols=None,
-               col2decile_ftrs2aggf=default_col2decile_features):
+               col2decile_ftrs2aggf=globals.DEFAULT_COL2DECILE_FTR2AGGF, decile_outcome=globals.LOS):
     self.onehot_cols, self.onehot_dtypes = onehot_cols, onehot_dtypes
     self.trimmed_ccsr = trimmed_ccsr
     self.discretize_cols = discretize_cols
     self.col2decile_ftr2aggf = col2decile_ftrs2aggf
-
+    self.decile_outcome = decile_outcome
     self.decile_generator = DecileGenerator()
 
   def add_temporal_feature_admit_hour(self, data_df: pd.DataFrame):
@@ -85,6 +80,8 @@ class FeatureEngineeringModifier(object):
     """
     if col2decile_ftrs2aggf is None:
       col2decile_ftrs2aggf = self.col2decile_ftr2aggf
+    if col2decile_ftrs2aggf is None:
+      return Xdf
 
     for col, ftr2aggf in col2decile_ftrs2aggf.items():
       if col == globals.PPROC:
@@ -125,25 +122,21 @@ class FeatureEngineeringModifier(object):
     med_col = globals.DRUG_COLS[level-1]
     Xdf_w_decile = Xdf[['SURG_CASE_KEY', med_col]]\
       .explode(med_col)\
-      .dropna(subset=[med_col])\
-      .join(med_decile.set_index(med_col), on=med_col, how='inner')\
+      .join(med_decile.set_index(med_col), on=med_col, how='left')\
       .groupby('SURG_CASE_KEY')\
-      .agg(decile_col2aggf)
+      .agg(decile_col2aggf)\
+      .fillna(0)  # TODO: carefully handle NaN here! Think about how different agg functions would handle NA
     # Join on 'SURG_CASE_KEY' with the input Xdf
     Xdf_ret = Xdf.join(Xdf_w_decile, on='SURG_CASE_KEY', how='inner')
     print("[FtrEng-join_MED%d_dcl] Input Xdf shape: " % level, Xdf.shape, '; Output Xdf shape: ', Xdf_ret.shape,
           "\nAdded decile columns: ", decile_col2aggf.keys())
-    # # iterate through col names, with known prefix, multiply column by decile value
-    # med_cols = list(filter(lambda x: x.startswith('MED%d' % level), Xdf.columns.to_list()))
-    # med2decile = med_decile['MED%d_DECILE' % level].to_dict()
-    # for medcol in med_cols:
-    #   Xdf[medcol] *= med2decile[medcol[5:]]
     return Xdf_ret
 
   def join_with_pproc_decile(self, Xdf: pd.DataFrame, pproc_decile: pd.DataFrame,
                              decile_col2aggf={globals.PPROC_DECILE: 'max'}):
-    Xdf_ret = Xdf.join(pproc_decile.set_index('PRIMARY_PROC')[decile_col2aggf.keys()], on='PRIMARY_PROC', how='inner')\
-      .groupby('SURG_CASE_KEY').agg(decile_col2aggf).reset_index()
+    Xdf_ret = Xdf.join(pproc_decile.set_index('PRIMARY_PROC')[decile_col2aggf.keys()], on='PRIMARY_PROC', how='inner')
+    #  .groupby('SURG_CASE_KEY').agg(decile_col2aggf).reset_index() --- This part removes all other cols!
+    print("[FtrEng-join_PPROC_decile] Input Xdf shape: ", Xdf.shape, "; Output Xdf shape: ", Xdf_ret.shape)
     if Xdf.shape[0] != Xdf_ret.shape[0]:
       raise Warning("%d cases are discarded due to unseen primary procedure!" % (Xdf.shape[0] - Xdf_ret.shape[0]))
     return Xdf_ret
@@ -195,7 +188,8 @@ class FeatureEngineeringModifier(object):
         dummies[dummies > 1] = 1  # in case a list contains duplicates  TODO: double check
       else:
         raise NotImplementedError("Cannot encode column '%s' with a data type of '%s'" % (oh_col, dtype))
-      Xdf = Xdf.drop(columns=[oh_col]).join(dummies).fillna(0)
+      #Xdf = Xdf.drop(columns=[oh_col]).join(dummies).fillna(0)
+      Xdf = Xdf.join(dummies).fillna(0)
     return Xdf
 
   def set_decile_gen(self, decile_gen):
@@ -225,9 +219,9 @@ class DecileGenerator(object):
     self.cpt_decile = None
     self.cpt_group_decile = None
     self.ccsr_decile = None
-    self.med_level2decile = None
+    self.med_level2decile = {}
 
-  def gen_decile_cols(self, Xdf: pd.DataFrame, outcome, col2decile_features):
+  def gen_decile_cols(self, Xdf: pd.DataFrame, outcome, col2decile_features=globals.DEFAULT_COL2DECILE_FTR2AGGF):
     """
     Generates the decile & related columns for each medical code type (CPT, CCSR, medication, etc.)
 
@@ -237,6 +231,10 @@ class DecileGenerator(object):
 
     :return: A list of decile-related features
     """
+    if col2decile_features is None:
+      print("No deciles are generated.")
+      return []
+
     X_dcl_features = []
     for col, dcl_ftrs2aggf in col2decile_features.items():
       if col == globals.PPROC:
@@ -291,11 +289,11 @@ class DecileGenerator(object):
 
     if save_fp:
       cpt_decile.to_csv(save_fp, index=False)
-    return
+    return cpt_decile
 
   def gen_medication_decile(self, data_df: pd.DataFrame, outcome=globals.LOS, level=1, save_dir=None):
     med_col = globals.DRUG_COLS[level-1]
-    med_outcome_df = data_df[med_col + [outcome]]
+    med_outcome_df = data_df[[med_col, outcome]]
     # Explode df by medication type col and groupby
     exp_med_out_df = med_outcome_df.explode(med_col).dropna(subset=[med_col])
     med_groupby = exp_med_out_df.groupby(med_col)

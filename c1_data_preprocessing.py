@@ -29,8 +29,8 @@ def gen_cohort_df(df, cohort):
 class Dataset(object):
 
   def __init__(self, df, outcome=globals.NNT, ftr_cols=globals.FEATURE_COLS, col2decile_ftrs2aggf=None,
-               discretize_cols=None, onehot_cols=None, onehot_dtypes=None, decile_gen=None,
-               test_pct=0.2, test_idxs=None,
+               onehot_cols=None, onehot_dtypes=None, decile_gen=None,
+               test_pct=0.2, test_idxs=None, discretize_cols=None,
                cohort=globals.COHORT_ALL, trimmed_ccsr=None, target_features=None, remove_o2m=(True, True)):
     # Check args
     if (onehot_cols is not None) and (onehot_dtypes is not None):
@@ -131,7 +131,7 @@ class Dataset(object):
 def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModifier,
                       remove_nonnumeric=True, verbose=False, remove_o2m=True):
   # Make data matrix X numeric
-  Xdf = df.copy()[feature_cols]
+  Xdf = df.copy()[feature_cols+[ftrEng.decile_outcome]]
 
   # Discard unwanted CCSRs
   Xdf, onehot_cols = ftrEng.trim_ccsr_in_X(Xdf, ftrEng.onehot_cols, ftrEng.trimmed_ccsr)
@@ -146,15 +146,18 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   Xdf = ftrEng.onehot_encode_cols(Xdf, onehot_cols, ftrEng.onehot_dtypes)
 
   # Generate deciles (TODO: generate deciles)
-  decile_cols = ftrEng.decile_generator.gen_decile_cols(Xdf, globals.LOS, ftrEng.col2decile_ftr2aggf)
+  s = time()
+  decile_cols = ftrEng.decile_generator.gen_decile_cols(Xdf, ftrEng.decile_outcome, ftrEng.col2decile_ftr2aggf)
+  print('Took %d sec to generate all deciles' % (time() - s))
 
   # Add decile-related columns to Xdf
+  print(Xdf.columns)
   Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy()
   if remove_nonnumeric:
-    Xdf.drop(columns=globals.NON_NUMERIC_COLS, inplace=True, errors='ignore')
+    Xdf.drop(columns=globals.NON_NUMERIC_COLS+[ftrEng.decile_outcome], inplace=True, errors='ignore')
 
   # Convert dataframe to numerical numpy matrix and save the corresponding features' names
   X = Xdf.to_numpy(dtype=np.float64)
