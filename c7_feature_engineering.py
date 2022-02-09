@@ -17,7 +17,7 @@ class FeatureEngineeringModifier(object):
     self.decile_generator = DecileGenerator()
 
   def add_temporal_feature_admit_hour(self, data_df: pd.DataFrame):
-    # TODO: FINISH THIS;  Q: Upon scheduling, is hour of day specified?
+    # TODO: FINISH THIS
     return
 
   def discretize_columns_df(self, Xdf: pd.DataFrame, discretize_cols, inplace=False):
@@ -192,10 +192,6 @@ class FeatureEngineeringModifier(object):
       Xdf = Xdf.join(dummies).fillna(0)
     return Xdf
 
-  def set_decile_gen(self, decile_gen):
-    assert isinstance(decile_gen, DecileGenerator), 'Input decile_gen must be a DecileGenerator object!'
-    self.decile_generator = decile_gen
-
   def trim_ccsr_in_X(self, Xdf, onehot_cols, trimmed_ccsrs):
     if onehot_cols is None or trimmed_ccsrs is None: return Xdf, onehot_cols
 
@@ -210,9 +206,37 @@ class FeatureEngineeringModifier(object):
       onehot_cols = list(map(lambda item: item.replace('ICD10S', 'Trimmed_ICD10S'), onehot_cols))
     return Xdf, onehot_cols
 
+  def get_ccsr_decile(self):
+    assert isinstance(self.decile_generator, DecileGenerator), \
+      "Field 'decile_generator' must be a DecileGenerator object!"
+    return self.decile_generator.ccsr_decile
 
+  def get_cpt_decile(self):
+    assert isinstance(self.decile_generator, DecileGenerator), \
+      "Field 'decile_generator' must be a DecileGenerator object!"
+    return self.decile_generator.cpt_decile
+
+  def get_med_decile(self, level):
+    assert isinstance(self.decile_generator, DecileGenerator), \
+      "Field 'decile_generator' must be a DecileGenerator object!"
+    return self.decile_generator.med_level2decile[level]
+
+  def get_pproc_decile(self):
+    assert isinstance(self.decile_generator, DecileGenerator), \
+      "Field 'decile_generator' must be a DecileGenerator object!"
+    return self.decile_generator.pproc_decile
+
+  def set_decile_gen(self, decile_gen):
+    assert isinstance(decile_gen, DecileGenerator), 'Input decile_gen must be a DecileGenerator object!'
+    self.decile_generator = decile_gen
+
+
+# Generator of medical complexity of different types of medical codes
 class DecileGenerator(object):
-  # Methods of this object should only be applied on Xtrain; for Xtest, simply join with
+  """
+  Methods of this object should only be applied on Xtrain.
+  For Xtest, simply join the test data frame with the corresponding decile df in this object
+  """
 
   def __init__(self):
     self.pproc_decile = None
@@ -232,7 +256,7 @@ class DecileGenerator(object):
     :return: A list of decile-related features
     """
     if col2decile_features is None:
-      print("No deciles are generated.")
+      print("No decile is generated.")
       return []
 
     X_dcl_features = []
