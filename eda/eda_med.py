@@ -16,15 +16,16 @@ def med_category_vs_los(df: pd.DataFrame, level, level_decile: pd.DataFrame, fre
     .join(level_decile.set_index(med_col)[[med_cnt, 'MED%d_DECILE' % level]], on=med_col, how='inner')\
     .sort_values(by=med_cnt, ascending=False)
 
-  # Scatter Plot
   fig, ax = plt.subplots(1, 1, figsize=(20, 13))
-  if not violin:
+  if violin:
+    # Violin Plot
+    # White dot: median; thick grey bar: interquantile range (25% - 75%); thin grey bar: rest of data
+    sns.violinplot(med_exp_topK_cnt[med_col], med_exp_topK_cnt[globals.LOS], ax=ax)
+  else:
+    # Scatter Plot
     ax.scatter(med_exp_topK_cnt[med_col], med_exp_topK_cnt[globals.LOS], facecolors='none', edgecolors='g')
     ax.plot(med_exp_topK_cnt[med_col], med_exp_topK_cnt[med_dcl], linestyle='None',
             marker="*", markersize=10, markeredgecolor="red", markerfacecolor="red")
-  else:
-    # White dot: median; thick grey bar: interquantile range (25% - 75%); thin grey bar: rest of data
-    sns.violinplot(med_exp_topK_cnt[med_col], med_exp_topK_cnt[globals.LOS], ax=ax)
 
   ax.set_ylim(-5, 25)
   ax.set_xlabel("Level %d Medication Type" % level, fontsize=15)
@@ -34,7 +35,5 @@ def med_category_vs_los(df: pd.DataFrame, level, level_decile: pd.DataFrame, fre
   ax.yaxis.set_tick_params(labelsize=13)
   fig.autofmt_xdate(rotation=45)
   plt.show()
-
-  # Violin Plot
 
 
