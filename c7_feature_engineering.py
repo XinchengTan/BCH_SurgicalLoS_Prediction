@@ -319,7 +319,9 @@ class DecileGenerator(object):
       .join(pproc_groupby.size().reset_index(name='PPROC_COUNT').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left') \
       .join(pproc_groupby[outcome].std().reset_index(name='PPROC_SD').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left') \
       .join(pproc_groupby[outcome].min().reset_index(name='PPROC_MIN').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left') \
-      .join(pproc_groupby[outcome].max().reset_index(name='PPROC_MAX').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left')
+      .join(pproc_groupby[outcome].max().reset_index(name='PPROC_MAX').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left') \
+      .join(pproc_groupby[outcome].quantile(0.25).reset_index(name='PPROC_QT25').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left') \
+      .join(pproc_groupby[outcome].quantile(0.75).reset_index(name='PPROC_QT75').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left')
 
     pproc_decile[globals.PPROC_DECILE] = pproc_decile['PPROC_MEDIAN'].apply(lambda x: float(min(round(x), globals.MAX_NNT + 1)))
     pproc_decile.reset_index(inplace=True)
@@ -337,7 +339,9 @@ class DecileGenerator(object):
       .join(cpt_groupby.size().reset_index(name='CPT_COUNT').set_index('CPT'), on='CPT', how='left') \
       .join(cpt_groupby[outcome].std().reset_index(name='CPT_SD').set_index('CPT'), on='CPT', how='left') \
       .join(cpt_groupby[outcome].min().reset_index(name='CPT_MIN').set_index('CPT'), on='CPT', how='left') \
-      .join(cpt_groupby[outcome].max().reset_index(name='CPT_MAX').set_index('CPT'), on='CPT', how='left')
+      .join(cpt_groupby[outcome].max().reset_index(name='CPT_MAX').set_index('CPT'), on='CPT', how='left') \
+      .join(cpt_groupby[outcome].quantile(0.25).reset_index(name='CPT_QT25').set_index('CPT'), on='CPT', how='left') \
+      .join(cpt_groupby[outcome].quantile(0.75).reset_index(name='CPT_QT75').set_index('CPT'), on='CPT', how='left')
 
     cpt_decile[globals.CPT_DECILE] = cpt_decile['CPT_MEDIAN'].apply(lambda x: float(min(round(x), globals.MAX_NNT + 1)))
     cpt_decile.reset_index(inplace=True)
@@ -356,8 +360,10 @@ class DecileGenerator(object):
       .join(med_groupby[outcome].mean().reset_index(name='MED%d_MEAN' % level).set_index(med_col), on=med_col, how='left') \
       .join(med_groupby.size().reset_index(name='MED%d_COUNT' % level).set_index(med_col), on=med_col, how='left')\
       .join(med_groupby[outcome].std().reset_index(name='MED%d_SD' % level).set_index(med_col), on=med_col, how='left')\
-      .join(med_groupby[outcome].min().reset_index(name='MED%d_MIN' % level).set_index(med_col), on=med_col, how='left')\
-      .join(med_groupby[outcome].max().reset_index(name='MED%d_MAX' % level).set_index(med_col), on=med_col, how='left')
+      .join(med_groupby[outcome].min().reset_index(name='MED%d_MIN' % level).set_index(med_col), on=med_col, how='left') \
+      .join(med_groupby[outcome].max().reset_index(name='MED%d_MAX' % level).set_index(med_col), on=med_col, how='left') \
+      .join(med_groupby[outcome].quantile(0.25).reset_index(name='MED%d_QT25' % level).set_index(med_col), on=med_col, how='left') \
+      .join(med_groupby[outcome].quantile(0.75).reset_index(name='MED%d_QT75' % level).set_index(med_col), on=med_col, how='left')
 
     med_decile['MED%d_DECILE' % level] = med_decile['MED%d_MEDIAN' % level].apply(
       lambda x: float(min(round(x), globals.MAX_NNT + 1)))

@@ -62,7 +62,8 @@ def get_args():
   parser.add_argument('--miles', default=False, action='store_true')
   # features -- medical conditions
   parser.add_argument('--prob_cnt', default=False, action='store_true')
-  parser.add_argument('--pproc', nargs='+')  # default value is None; list item choise: none, oh, dcl, cnt, sd, min, max
+  ### The following args has default value = None; list item choice: none, oh, dcl, cnt, sd, min, max, qt25, qt75
+  parser.add_argument('--pproc', nargs='+')
   parser.add_argument('--cpt', nargs='+')
   parser.add_argument('--cpt_grp', nargs='+')
   parser.add_argument('--ccsr', nargs='+')
@@ -118,18 +119,23 @@ def get_all_data_fp(args):
   return dashb_fp, cpt_fp, ccsr_fp, med_fp, cpt_grp_fp, os_fp, os_cpt_fp, os_ccsr_fp, os_med_fp
 
 
-def load_decile_features(code_abbr, code_ftrs, col2decile_ftrs2aggf):
-  # TODO: default aggregation function is 'max' for all decile-related features
-  if 'dcl' in code_ftrs:
+def load_decile_features(code_abbr, arg_ftrs, col2decile_ftrs2aggf):
+  # NOTE: default aggregation function is 'max' for all decile-related features
+  # TODO: Need to figure out a way to specify aggregation function on multiple decile features
+  if 'dcl' in arg_ftrs:
     col2decile_ftrs2aggf[code_abbr][f'{code_abbr}_DECILE'] = 'max'
-  if 'cnt' in code_ftrs:
+  if 'cnt' in arg_ftrs:
     col2decile_ftrs2aggf[code_abbr][f'{code_abbr}_COUNT'] = 'max'
-  if 'sd' in args.pproc:
+  if 'sd' in arg_ftrs:
     col2decile_ftrs2aggf[code_abbr][f'{code_abbr}_SD'] = 'max'
-  if 'min' in args.pproc:
+  if 'min' in arg_ftrs:
     col2decile_ftrs2aggf[code_abbr][f'{code_abbr}_MIN'] = 'max'
-  if 'max' in args.pproc:
+  if 'max' in arg_ftrs:
     col2decile_ftrs2aggf[code_abbr][f'{code_abbr}_MAX'] = 'max'
+  if 'qt25' in arg_ftrs:
+    col2decile_ftrs2aggf[code_abbr][f'{code_abbr}_QT25'] = 'max'
+  if 'qt75' in arg_ftrs:
+    col2decile_ftrs2aggf[code_abbr][f'{code_abbr}_QT75'] = 'max'
 
   return col2decile_ftrs2aggf
 
