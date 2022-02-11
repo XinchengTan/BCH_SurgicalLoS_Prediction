@@ -57,6 +57,12 @@ class FeatureEngineeringModifier(object):
       Xdf.loc[(Xdf.STATE_CODE == 'MA'), 'IN_STATE'] = 1.0
       Xdf.loc[(Xdf.STATE_CODE == 'Foreign'), 'FOREIGN'] = 1.0
       Xdf.loc[((Xdf.IN_STATE == 0.0) & (Xdf.FOREIGN == 0.0)), 'OUT_OF_STATE_US'] = 1.0
+      Xdf.drop(columns=['STATE_CODE'], inplace=True)
+
+    # Major region
+    if 'MAJOR_REGION' in Xdf_cols:
+      Xdf = Xdf.join(pd.get_dummies(Xdf['MAJOR_REGION'], prefix='REGION'))\
+        .drop(columns=['MAJOR_REGION'])
 
     # Language
     if 'LANGUAGE_DESC' in Xdf_cols:
@@ -66,7 +72,32 @@ class FeatureEngineeringModifier(object):
       Xdf.loc[(Xdf.LANGUAGE_DESC == 'Unable to Collect'), 'UNKNOWN_LANGUAGE'] = 1.0
       Xdf.loc[((Xdf.ENGLISH == 0.0) & (Xdf.SPANISH == 0.0) & (Xdf.UNKNOWN_LANGUAGE == 0.0)), 'OTHER_LANGUAGE'] = 1.0
 
-      Xdf.drop(columns=['STATE_CODE', 'LANGUAGE_DESC'], inplace=True)
+      Xdf.drop(columns=['LANGUAGE_DESC'], inplace=True)
+    return Xdf
+
+  def handle_nans(self, Xdf: pd.DataFrame):  # NOTE: Xdf is a partial dataframe with only the designated feature columns
+    # Drop rows with NaN or its equivalent in the corresponding columns
+    Xdf_cols = Xdf.columns.to_list()
+    prevN = Xdf.shape[0]
+    if globals.MILES in Xdf_cols:
+      Xdf = Xdf[Xdf[globals.MILES] != 0]
+      print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {globals.MILES}")
+      prevN = Xdf.shape[0]
+    if globals.INTERPRETER in Xdf_cols:
+      Xdf = Xdf[Xdf[globals.INTERPRETER] != 0]
+      print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {globals.INTERPRETER}")
+      prevN = Xdf.shape[0]
+    if globals.STATE in Xdf_cols:
+      Xdf = Xdf[Xdf[globals.STATE] != 0]
+      print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {globals.STATE}")
+      prevN = Xdf.shape[0]
+    if globals.WEIGHT_ZS in Xdf_cols:
+      Xdf = Xdf[Xdf[globals.WEIGHT_ZS].notnull()]
+      print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {globals.WEIGHT_ZS}")
+      prevN = Xdf.shape[0]
+    # TODO: get columns that end with '_SD' and filter out NA entries, or assign 0?
+
+    print('Xdf shape after handling NAs: ', Xdf.shape)
     return Xdf
 
   def join_with_all_deciles(self, Xdf: pd.DataFrame, col2decile_ftrs2aggf=None):
@@ -321,14 +352,14 @@ class DecileGenerator(object):
     # Explode df by medication type col and groupby
     exp_med_out_df = med_outcome_df.explode(med_col).dropna(subset=[med_col])
     med_groupby = exp_med_out_df.groupby(med_col)
-    med_decile = med_groupby[outcome].median().reset_index(name='MED%d_Median' % level).set_index(med_col) \
+    med_decile = med_groupby[outcome].median().reset_index(name='MED%d_MEDIAN' % level).set_index(med_col) \
       .join(med_groupby[outcome].mean().reset_index(name='MED%d_MEAN' % level).set_index(med_col), on=med_col, how='left') \
       .join(med_groupby.size().reset_index(name='MED%d_COUNT' % level).set_index(med_col), on=med_col, how='left')\
       .join(med_groupby[outcome].std().reset_index(name='MED%d_SD' % level).set_index(med_col), on=med_col, how='left')\
       .join(med_groupby[outcome].min().reset_index(name='MED%d_MIN' % level).set_index(med_col), on=med_col, how='left')\
       .join(med_groupby[outcome].max().reset_index(name='MED%d_MAX' % level).set_index(med_col), on=med_col, how='left')
 
-    med_decile['MED%d_DECILE' % level] = med_decile['MED%d_Median' % level].apply(
+    med_decile['MED%d_DECILE' % level] = med_decile['MED%d_MEDIAN' % level].apply(
       lambda x: float(min(round(x), globals.MAX_NNT + 1)))
     med_decile.reset_index(inplace=True)
 

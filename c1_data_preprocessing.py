@@ -29,12 +29,13 @@ def gen_cohort_df(df, cohort):
 class Dataset(object):
 
   def __init__(self, df, outcome=globals.NNT, ftr_cols=globals.FEATURE_COLS, col2decile_ftrs2aggf=None,
-               onehot_cols=None, onehot_dtypes=None, decile_gen=None,
-               test_pct=0.2, test_idxs=None, discretize_cols=None,
+               onehot_cols=[], discretize_cols=None, decile_gen=None, test_pct=0.2, test_idxs=None,
                cohort=globals.COHORT_ALL, trimmed_ccsr=None, target_features=None, remove_o2m=(True, True)):
     # Check args
-    if (onehot_cols is not None) and (onehot_dtypes is not None):
-      assert len(onehot_cols) == len(onehot_dtypes), "One-hot Encoding columns and dtypes must match!"
+    assert all(oh in globals.ONEHOT_COL2DTYPE.keys() for oh in onehot_cols), \
+      f'onehot_cols must be in {globals.ONEHOT_COL2DTYPE.keys()}!'
+    # Define datatype of the columns to be onehot-encoded in order
+    onehot_dtypes = [globals.ONEHOT_COL2DTYPE[oh] for oh in onehot_cols]
 
     self.df = df.copy()
 
@@ -72,7 +73,6 @@ class Dataset(object):
     self.preprocess_train_test(outcome, ftr_cols, target_features, remove_o2m)
 
   def preprocess_train_test(self, outcome, ftr_cols=globals.FEATURE_COLS, target_features=None, remove_o2m=(None, None)):
-
     # I. Preprocess training set
     if self.train_df_raw is not None:
       # Preprocess outcome values / SPS prediction in df
@@ -154,6 +154,8 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   print(Xdf.columns)
   Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
 
+  # TODO: Handle NaNs?? -- handle weight nan here?
+
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy()
   if remove_nonnumeric:
@@ -169,9 +171,7 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
     s = time()
     o2m_df, X, X_case_keys, y = discard_o2m_cases_from_self(X, X_case_keys, y, target_features)  # training set
     print("Removing o2m cases from self took %d sec" % (time() - s))
-
-    # TODO: regenerate decile if o2m_df.shape[0] > 0
-
+    # TODO: ??? regenerate decile if o2m_df.shape[0] > 0
 
   if verbose:
     display(pd.DataFrame(X, columns=target_features).head(20))
@@ -210,6 +210,8 @@ def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeri
 
   # Join with existing deciles -- TODO: Test this
   Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
+
+  # TODO: Handle NaNs here?
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_key = Xdf['SURG_CASE_KEY'].to_numpy()

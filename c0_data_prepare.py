@@ -18,7 +18,7 @@ from . import utils_plot as pltutil
 pd.set_option('display.max_columns', 50)
 
 
-def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=None, pproc_fp=None, exclude2021=True,
+def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=None, pproc_fp=None, exclude2021=False,
                  force_weight=False):
   """
   Prepares the patient LoS dataset, combining datetime and CPT related info
@@ -38,7 +38,7 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=N
     dashb_df = dashb_df[globals.DASHDATA_COLS].dropna(subset=['WEIGHT_ZSCORE'])
   print_df_info(dashb_df, dfname='Processed Dashboard (weight)')
 
-  # Add primary procedure decile column (TODO: here cases with unseen pproc are already excluded)
+  # Add primary procedure decile column (TODO: remove this?)
   if pproc_fp is not None:
     pproc_df = pd.read_csv(pproc_fp)
     dashb_df = dashb_df\
@@ -166,19 +166,6 @@ def gen_sps_data(df):
 def gen_data_without_sps_pred(df):
   """Select a subset of cases where SPS surgeon estimation is not available"""
   return df.loc[df['SPS_PREDICTED_LOS'].isnull()]
-
-
-
-# oh_med_df = med_df[['SURG_CASE_KEY', 'HNA_ORDER_MNEMONIC', 'LEVEL1_DRUG_CLASS_NAME']]
-# oh_med_df[globals.MED1 + '_DME'] = 0.0
-# oh_med_df.loc[(oh_med_df.HNA_ORDER_MNEMONIC == 'DME Prescription'), 'DME'] = 1.0
-# oh_med_df = oh_med_df \
-#   .join(pd.get_dummies(oh_med_df['LEVEL1_DRUG_CLASS_NAME'], globals.MED1)) \
-#   .drop(columns=['HNA_ORDER_MNEMONIC', 'LEVEL1_DRUG_CLASS_NAME']) \
-#   .groupby(by='SURG_CASE_KEY').sum()
-# oh_med_df[oh_med_df > 1] = 1.0
-# dashb_df = dashb_df.join(oh_med_df, on='SURG_CASE_KEY', how='left')
-# dashb_df.fillna({mcol: 0.0 for mcol in oh_med_df.columns.to_list()}, inplace=True)
 
 
 # if __name__ == "__main__":
