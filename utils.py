@@ -11,8 +11,8 @@ from .c1_data_preprocessing import Dataset
 
 
 # Generate k dataset objects for k-fold cross validation
-def gen_kfolds_datasets(df, kfold, features, outcome=globals.NNT, onehot_cols=None, onehot_dtypes=None,
-                        discretize_cols=None, col2decile_ftr2aggf=None, shuffle_df=False, remove_o2m=(True, True)):
+def gen_kfolds_datasets(df, kfold, features, shuffle_df=False, outcome=globals.NNT, onehot_cols=None, discretize_cols=None,
+                        col2decile_ftr2aggf=None, cohort=globals.COHORT_ALL, remove_o2m=(True, True)):
   if shuffle_df:
     df = df.sample(frac=1).reset_index(drop=True)
   else:
@@ -22,8 +22,8 @@ def gen_kfolds_datasets(df, kfold, features, outcome=globals.NNT, onehot_cols=No
   datasets = []
   for k in tqdm(range(kfold)):
     test_idxs = np.arange(int(k * test_pct * N), int((k+1) * test_pct * N))
-    dataset_k = Dataset(df, outcome, features, onehot_cols=onehot_cols, onehot_dtypes=onehot_dtypes,
-                        discretize_cols=discretize_cols, col2decile_ftrs2aggf=col2decile_ftr2aggf,
+    dataset_k = Dataset(df, outcome, features, onehot_cols=onehot_cols, discretize_cols=discretize_cols,
+                        col2decile_ftrs2aggf=col2decile_ftr2aggf, cohort=cohort,
                         test_idxs=test_idxs, remove_o2m=remove_o2m)
     datasets.append(dataset_k)
 
@@ -77,7 +77,8 @@ def check_one_to_many_in_X_updated(dataset: Dataset, discretize_cols=None, check
 
   # Modify data matrix with discretized columns by request
   if discretize_cols:
-    discretize_columns(X, feature_names, discretize_cols, inplace=True)
+    print('[utils] discretize cols not called')
+    # discretize_columns(X, feature_names, discretize_cols, inplace=True)
 
   # Get duplicated feature rows with corresponding outcome
   start = time()
@@ -135,7 +136,8 @@ def check_one_to_many_in_X(dataset: Dataset, discretize_cols=None, check_train=T
 
   # Modify data matrix with discretized columns by request
   if discretize_cols:
-    discretize_columns(X, feature_names, discretize_cols, inplace=True)
+    print('[utils] discretize col not called')
+    # discretize_columns(X, feature_names, discretize_cols, inplace=True)
 
   start = time()
   # Track indices of feature-value duplicate rows

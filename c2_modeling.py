@@ -58,6 +58,7 @@ from . import c1_data_preprocessing as dpp
 from .c1_data_preprocessing import Dataset
 from .c4_model_eval import ModelPerf
 from .c3_ensemble import Ensemble
+from .c8_models import OrdinalClassifier
 from . import utils_plot as pltutil
 
 
@@ -84,30 +85,6 @@ class AllModels(object):
     for mdname, model in self.mdname_model_map.items():
       md2preds[mdname] = model.predict(X)
     return md2preds
-
-
-# An extensible wrapper classifier of statsmodels's OrderedModel()
-class OrdinalClassifier(object):
-
-  def __init__(self, distr='logit', solver='lbgfs', disp=False, maxiter=200):
-    self.distr = distr
-    self.solver = solver
-    self.disp = disp
-    self.maxiter = maxiter
-    self.ord_model = None
-    self.fitted_ord_model = None
-
-  def fit(self, X, y):
-    self.ord_model = OrderedModel(endog=y, exog=X, distr=self.distr)
-    self.ord_fitted_model = self.ord_model.fit(method=self.solver, maxiter=self.maxiter, disp=self.disp)
-    return self
-
-  def predict(self, X):
-    proba = self.predict_proba(X)
-    return np.argmax(proba, axis=1)
-
-  def predict_proba(self, X):
-    return self.ord_fitted_model.model.predict(params=self.ord_fitted_model.params, exog=X, which='prob')
 
 
 def run_regression_model(Xtrain, ytrain, Xtest, ytest, model=globals.LR, eval=True):
@@ -274,7 +251,7 @@ def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
       'loss': 'deviance',
       'max_depth': [None] + list(range(2, 21, 2)),
       'max_features': [None] + list(range(2, 1 + n_frts // 2, 2)),
-      'max_leaf_nodes': None + list(range(5, )),
+      'max_leaf_nodes': [None] + list(range(5, )),
       'min_samples_leaf': [1, 2, 3, 4, 5],
       'min_samples_split': list(range(2, int(minority_size * (1 - 1. / kfold)), 3)),
       'n_estimators': [20, 30, 40, 50, 80, 100, 200, 300, 400]
@@ -287,14 +264,14 @@ def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
   # Define scorer
   refit = True
   if scorer == globals.SCR_1NNT_TOL:
-    scorer = make_scorer(c4_model_eval.scorer_1nnt_tol, greater_is_better=True)
+    scorer = make_scorer(c4_model_eval.MyScorer.scorer_1nnt_tol, greater_is_better=True)
   elif scorer == globals.SCR_1NNT_TOL_ACC:
     scorer = {globals.SCR_ACC: globals.SCR_ACC,
-              globals.SCR_1NNT_TOL: make_scorer(c4_model_eval.scorer_1nnt_tol, greater_is_better=True)}
+              globals.SCR_1NNT_TOL: make_scorer(c4_model_eval.MyScorer.scorer_1nnt_tol, greater_is_better=True)}
     refit = globals.SCR_1NNT_TOL
   elif scorer == globals.SCR_MULTI_ALL:
     scorer = {globals.SCR_ACC: globals.SCR_ACC, globals.SCR_AUC: globals.SCR_AUC,
-              globals.SCR_1NNT_TOL: make_scorer(c4_model_eval.scorer_1nnt_tol, greater_is_better=True)}
+              globals.SCR_1NNT_TOL: make_scorer(c4_model_eval.MyScorer.scorer_1nnt_tol, greater_is_better=True)}
     refit = globals.SCR_AUC
 
   # For each parameter, iterate through its param grid

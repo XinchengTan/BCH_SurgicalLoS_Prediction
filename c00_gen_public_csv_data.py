@@ -54,7 +54,7 @@ def deidentify_model_input_data(dashb_fp, cpt_fp, ccsr_fp, med_fp, dtime_fp=None
                        'PSEUDO_SURG_CASE_KEY': 'SURG_CASE_KEY'}, inplace=True)\
       .to_csv(data_dir / 'surg_case_key_og2pseudo.csv', index=False)
     for dfname, df in new_dfs.items():
-      df.to_csv(data_dir / dfname+'.csv', index=False)
+      df.to_csv(data_dir / f'{dfname}.csv', index=False)
 
   return new_dfs, surg_ckeys_mapping_df
 

@@ -1,6 +1,5 @@
 import argparse
 import boto3
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pathlib
@@ -9,29 +8,14 @@ import warnings
 from collections import defaultdict
 from imblearn.over_sampling import SMOTENC
 from imblearn.ensemble import BalancedBaggingClassifier, BalancedRandomForestClassifier
-from IPython.display import display
 
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import make_pipeline
-from sklearn.metrics import mean_squared_error, make_scorer, plot_roc_curve
-from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split
-from sklearn.calibration import CalibratedClassifierCV, calibration_curve
-
-from sklearn.linear_model import LinearRegression, LogisticRegression, PoissonRegressor, Ridge, RidgeCV
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import SVC, SVR
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, GradientBoostingClassifier, GradientBoostingRegressor
-# from statsmodels.miscmodels.ordinal_model import OrderedModel
-from xgboost import XGBClassifier
-
-from . import globals, c4_model_eval, c6_surgeon, utils
+from . import globals, c6_surgeon, utils, c5_model_perf as md_perf
 from . import c0_data_prepare as dp, c1_data_preprocessing as dpp
 from .c1_data_preprocessing import Dataset
 from .c3_ensemble import Ensemble
 from .c4_model_eval import ModelPerf
 from .c7_feature_engineering import FeatureEngineeringModifier, DecileGenerator
-from . import utils_plot as pltutil
+from .c8_models import *
 
 
 ### Goal: hyper parameter tuning for models with different feature sets
@@ -40,7 +24,7 @@ from . import utils_plot as pltutil
 def get_args():
   parser = argparse.ArgumentParser(description='Hyperparam Tuning Script')
   # platform
-  parser.add_argument('--platform', '-pf', default='aws', choices=['aws', 'local', 'gcp'], type=str)
+  parser.add_argument('--platform', '-pf', default='local', choices=['aws', 'local', 'gcp'], type=str)
   parser.add_argument('--data_dir', default=pathlib.Path('../ModelInput'), type=pathlib.Path)
   parser.add_argument('--device', '-d', default='cpu', choices=['cpu', 'cuda:0'], type=str)  # ineffective for now
 
@@ -75,7 +59,7 @@ def get_args():
 
   # modeling
   parser.add_argument('--kfold', default=5, type=int)  # If 1, no cross validation
-  parser.add_argument('--model', nargs='+')  # all, lgr, svc, knn, dt, rmf, xgb
+  parser.add_argument('--models', nargs='+')  # all, lgr, svc, knn, dt, rmf, xgb
   parser.add_argument('--ensemble', nargs='+')
   parser.add_argument('--md_fp', '--model_filepath', type=pathlib.Path)
   # TODO: Have an arg for filepath of model params?   arg for where results are saved?
@@ -103,17 +87,17 @@ def get_all_data_fp(args):
   elif args.platform == 'local':
     data_dir = args.data_dir
     # Historical dataset
-    dashb_fp = data_dir / 'historic_aws.csv'
-    cpt_fp = data_dir / 'cpt_hist_aws.csv'
-    ccsr_fp = data_dir / 'ccsr_hist_aws.csv'
-    med_fp = data_dir / 'medication_hist_aws.csv'
+    dashb_fp = data_dir / 'historic.csv'
+    cpt_fp = data_dir / 'cpt_hist.csv'
+    ccsr_fp = data_dir / 'ccsr_hist.csv'
+    med_fp = data_dir / 'medication_hist.csv'
     cpt_grp_fp = data_dir / 'cpt2group.csv'
 
     # Out-of-sample test dataset
-    os_fp = data_dir / 'outsample_aws.csv'
-    os_cpt_fp = data_dir / 'cpt_os_aws.csv'
-    os_ccsr_fp = data_dir / 'ccsr_os_aws.csv'
-    os_med_fp = data_dir / 'medication_os_aws.csv'
+    os_fp = data_dir / 'outsample.csv'
+    os_cpt_fp = data_dir / 'cpt_os.csv'
+    os_ccsr_fp = data_dir / 'ccsr_os.csv'
+    os_med_fp = data_dir / 'medication_os.csv'
   else:
     raise NotImplementedError
   return dashb_fp, cpt_fp, ccsr_fp, med_fp, cpt_grp_fp, os_fp, os_cpt_fp, os_ccsr_fp, os_med_fp
@@ -239,12 +223,49 @@ if __name__ == '__main__':
   feature_cols, col2decile_ftrs2aggf, onehot_cols, discretize_cols = make_feature_cols(args)
 
   # Generate a preprocessed Dataset with the designated features engineered
-  dataset = Dataset(dashb_df, args.outcome, feature_cols, col2decile_ftrs2aggf, onehot_cols,
-                    test_pct=args.test_pct, discretize_cols=discretize_cols, cohort=args.cohort,
-                    remove_o2m=args.skip_o2m[:2])
+  if args.kfold == 1:
+    datasets = [
+      Dataset(dashb_df, args.outcome, feature_cols, col2decile_ftrs2aggf, onehot_cols,
+              test_pct=args.test_pct, discretize_cols=discretize_cols, cohort=args.cohort, remove_o2m=args.skip_o2m[:2])
+    ]
+  elif args.kfold > 1:
+    datasets = utils.gen_kfolds_datasets(dashb_df, args.kfold, feature_cols, shuffle_df=True, outcome=args.outcome,
+                                         onehot_cols=onehot_cols, discretize_cols=discretize_cols,
+                                         col2decile_ftr2aggf=col2decile_ftrs2aggf, cohort=args.cohort,
+                                         remove_o2m=args.skip_o2m[:2])
+  else:
+    raise ValueError("kfold must be a positive int!")
 
-  # Shuffle df
+  # Apply modeling
+  perf_dfs = defaultdict(pd.DataFrame)
+  for dataset in datasets:
+    if args.val_pct == 0:
+      train_model(None, {})
+    elif args.val_pct < 1:
+      tune_model(None, dataset.Xtrain, dataset.ytrain, None, args.kfold)
+    else:
+      continue
+    # Model evaluation
 
+
+  # Save performance table & best models
+
+
+
+  # Hold-out Test
   if args.os_test:
+    if args.val_pct > 0:
+      # Retrain the best model on the full dataset, and then apply on test set
+      dataset = Dataset(dashb_df, args.outcome, feature_cols, col2decile_ftrs2aggf, onehot_cols,
+                        test_pct=args.test_pct, discretize_cols=discretize_cols, cohort=args.cohort,
+                        remove_o2m=args.skip_o2m[:2])
+      # TODO
+    else:
+      pass
+
     os_df = dp.prepare_data(os_fp, os_cpt_fp, cpt_grp_fp, os_ccsr_fp, os_med_fp)
     os_dataset = None
+
+    # Predict
+
+    # Surgeon prediction

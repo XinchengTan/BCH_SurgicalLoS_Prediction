@@ -68,31 +68,6 @@ class ModelPerf:
     return ("Accuracy", "Accuracy\n(tol = 1 NNT)", "Accuracy\n(tol = 2 NNT)", "Over Prediction Rate",
             "Under Prediction Rate", "RMSE", "Case Count", "Case Count Ratio")
 
-
-# @dataclass
-# class ModelPerf_XDISAGREE:
-#   model_perf: ModelPerf
-#   sps_model_perf: ModelPerf
-#
-#   def get_perf_as_dict(self):  # TODO: f1 scores as a list
-#     return {"Accuracy": self.model_perf.acc, "Accuracy (tol = 1 NNT)": self.model_perf.acc_1nnt_tol,
-#             "Over Prediction Rate": self.model_perf.overpred_pct, "Under Prediction Rate": self.model_perf.underpred_pct,
-#             "RMSE": self.model_perf.rmse, "R-squared": self.model_perf.rsqr,
-#             }
-#
-#   @classmethod
-#   def get_metrics_formatter(cls):
-#     return {"Accuracy": "{:.2%}".format, "Accuracy (tol = 1 NNT)": "{:.2%}".format,
-#             "Over Prediction Rate": "{:.2%}".format, "Under Prediction Rate": "{:.2%}".format,
-#             "RMSE": "{:.2f}".format, "R-squared": "{:.2f}".format, "Surgeon Agreement Rate": "{:.2%}".format}
-#
-#   @classmethod
-#   def get_perf_metrics(cls):
-#     return ("Accuracy", "Accuracy (tol = 1 NNT)", "Over Prediction Rate", "Under Prediction Rate", "RMSE", "R-squared",
-#             "Surgeon Agreement Rate")
-
-
-
 @dataclass
 class BinaryModelPerf:
   """Class for saving evaluated stats of a binary classifier"""
@@ -126,6 +101,34 @@ class BinaryModelPerf:
   @classmethod
   def get_perf_metrics(cls):
     return ("Majority Percentage", "Accuracy", "Precision", "Recall", "F1")
+
+
+class MyScorer:
+
+  def __init__(self):
+    return
+
+  @staticmethod
+  def scorer_1nnt_tol(ytrue, ypred):
+    # accuracy within +-1 nnt error tolerance
+    acc_1nnt_tol = len(np.where(np.abs(ytrue - ypred) <= 1)[0]) / len(ytrue)
+    return acc_1nnt_tol
+
+  @staticmethod
+  def scorer_2nnt_tol(ytrue, ypred):
+    # accuracy within +-1 nnt error tolerance
+    acc_1nnt_tol = len(np.where(np.abs(ytrue - ypred) <= 2)[0]) / len(ytrue)
+    return acc_1nnt_tol
+
+  @staticmethod
+  def scorer_overpred_pct(ytrue, ypred, diff=2):
+    overpred_pct = len(np.where((ypred - ytrue) > diff)[0]) / len(ytrue)
+    return overpred_pct
+
+  @staticmethod
+  def scorer_underpred_pct(ytrue, ypred, diff=2):
+    underpred_pct = len(np.where((ytrue - ypred) > diff)[0]) / len(ytrue)
+    return underpred_pct
 
 
 Xtype_to_conf_style = {globals.XTRAIN: sn.color_palette("ch:start=.2,rot=-.3"),
@@ -198,28 +201,6 @@ def eval_nnt_regressor(reg, dataset: Dataset, md_name):
   pltutil.plot_error_histogram(ytest, pred_test, md_name, Xtype='test', yType="Number of nights", ax=axs[1])
 
 
-def scorer_1nnt_tol(ytrue, ypred):
-  # accuracy within +-1 nnt error tolerance
-  acc_1nnt_tol = len(np.where(np.abs(ytrue - ypred) <= 1)[0]) / len(ytrue)
-  return acc_1nnt_tol
-
-
-def scorer_2nnt_tol(ytrue, ypred):
-  # accuracy within +-1 nnt error tolerance
-  acc_1nnt_tol = len(np.where(np.abs(ytrue - ypred) <= 2)[0]) / len(ytrue)
-  return acc_1nnt_tol
-
-
-def scorer_overpred_pct(ytrue, ypred, diff=2):
-  overpred_pct = len(np.where((ypred - ytrue) > diff)[0]) / len(ytrue)
-  return overpred_pct
-
-
-def scorer_underpred_pct(ytrue, ypred, diff=2):
-  underpred_pct = len(np.where((ytrue - ypred) > diff)[0]) / len(ytrue)
-  return underpred_pct
-
-
 def rmse(g):
   rmse = np.sqrt(metrics.mean_squared_error(g['NUM_OF_NIGHTS'], g['Predicted']))
   return pd.Series(dict(rmse=rmse))
@@ -253,10 +234,10 @@ def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT, cohor
   mse = metrics.mean_squared_error(y, pred_y)
   rmse = np.sqrt(mse)
   acc = metrics.accuracy_score(y, pred_y, normalize=True)
-  acc_1nnt = scorer_1nnt_tol(y, pred_y)
-  acc_2nnt = scorer_2nnt_tol(y, pred_y)
-  overpred_pct = scorer_overpred_pct(y, pred_y)
-  underpred_pct = scorer_underpred_pct(y, pred_y)
+  acc_1nnt = MyScorer.scorer_1nnt_tol(y, pred_y)
+  acc_2nnt = MyScorer.scorer_2nnt_tol(y, pred_y)
+  overpred_pct = MyScorer.scorer_overpred_pct(y, pred_y)
+  underpred_pct = MyScorer.scorer_underpred_pct(y, pred_y)
   f1s = pd.DataFrame({"NNT class": globals.NNT_CLASS_LABELS,
                       "F-1 score": metrics.f1_score(y, pred_y, labels=globals.NNT_CLASSES, average=None)})
   rsqr = metrics.r2_score(y, pred_y)
