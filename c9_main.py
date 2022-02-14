@@ -59,7 +59,8 @@ def get_args():
   parser.add_argument('--kfold', default=5, type=int)  # If 1, no cross validation
   parser.add_argument('--models', nargs='+')  # [all, lgr, svc, knn, dt, rmf, xgb]
   parser.add_argument('--ensemble', nargs='+')
-  parser.add_argument('--md_dir', '--model_dir', type=pathlib.Path)  # directory to load / save models
+  parser.add_argument('--md_dir', '--model_dir', type=pathlib.Path)  # directory to load models / model params
+  parser.add_argument('--save_dir', type=pathlib.Path)  # directory to save results (models, model perfs)
   parser.add_argument('--scorers', default=[], nargs='+')  # [acc, acc_err1, overpred, underpred, bal_acc]
   # TODO: Have an arg for filepath of model params?   arg for where results are saved?
 
@@ -251,7 +252,7 @@ if __name__ == '__main__':
                                       globals.SCR_OVERPRED, globals.SCR_UNDERPRED])
   cv_results = defaultdict(list)  # md: [cv_result_df1, cv_result_df2, ...] --- len() = ktrial
   perf_df = pd.DataFrame(columns=['Trial', 'Model'] + list(scorers.keys()))
-  surg_perf = pd.DataFrame(columns=['Trial', 'Model'] + list(scorers.keys())) # Trial, train_scores ...
+  surg_perf = pd.DataFrame(columns=['Trial', 'Model'] + list(scorers.keys()))  # Trial, train_scores ...
   for trial, dataset in enumerate(datasets):  # ktrials
     # Surgeon prediction
     train_scores_dict, test_scores_dict = eval_surgeon_perf(dataset, scorers)
@@ -274,12 +275,20 @@ if __name__ == '__main__':
         perf_df = append_perf_row(perf_df, trial, 'Surgeon-test', test_scores_dict)
 
   # Save actual features, performance tables & best models, surgeon performance, (model_params) -- locally
-  
-
+  # TODO: Make a custom dir name for result_dir, based on features used -- or uuid?
+  result_dir = pathlib.Path(args.save_dir / '#Feature_abbr#')
+  result_dir.mkdir(parents=True, exist_ok=True)
+  surg_perf.to_csv(result_dir / 'surgeon_perf_train.csv', index=False)
+  perf_df.to_csv(result_dir / 'model&surg_perf_test.csv', index=False)
+  for md, md_cv_results in cv_results.items():
+    for trial, md_cv_result in enumerate(md_cv_results):
+      pd.DataFrame(md_cv_result).to_csv(result_dir / f'{trial}-{md}_cv_result.csv', index=False)
+  for trial, dataset in enumerate(datasets):
+    pd.DataFrame(columns=dataset.feature_names).to_csv(result_dir / f'{trial}-feature_names.csv', index=False)
 
   # Hold-out Test
   if args.os_test:
-    # load pretrained model / load selected model params & retrain
+    # Load pretrained model / load selected model params & retrain
 
     # Retrain the best model on the full dataset, and then apply on test set
     dataset = Dataset(dashb_df, args.outcome, feature_cols, col2decile_ftrs2aggf, onehot_cols,
@@ -290,6 +299,7 @@ if __name__ == '__main__':
     os_df = dp.prepare_data(os_fp, os_cpt_fp, cpt_grp_fp, os_ccsr_fp, os_med_fp)
     os_dataset = None
 
-    # Predict
+    # Predict on out-of-sample dataset
 
     # Surgeon prediction
+
