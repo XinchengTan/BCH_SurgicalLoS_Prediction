@@ -59,9 +59,10 @@ def get_args():
 
   # modeling
   parser.add_argument('--kfold', default=5, type=int)  # If 1, no cross validation
-  parser.add_argument('--models', nargs='+')  # all, lgr, svc, knn, dt, rmf, xgb
+  parser.add_argument('--models', nargs='+')  # [all, lgr, svc, knn, dt, rmf, xgb]
   parser.add_argument('--ensemble', nargs='+')
-  parser.add_argument('--md_fp', '--model_filepath', type=pathlib.Path)
+  parser.add_argument('--md_dir', '--model_dir', type=pathlib.Path)  # directory to load / save models
+  parser.add_argument('--scorers', default=[], nargs='+')  # [acc, acc_err1, overpred, underpred, bal_acc]
   # TODO: Have an arg for filepath of model params?   arg for where results are saved?
 
   args = parser.parse_args()
@@ -237,18 +238,19 @@ if __name__ == '__main__':
     raise ValueError("kfold must be a positive int!")
 
   # Apply modeling
-  perf_dfs = defaultdict(pd.DataFrame)
-  for dataset in datasets:
-    if args.val_pct == 0:
-      train_model(None, {})
-    elif args.val_pct < 1:
-      tune_model(None, dataset.Xtrain, dataset.ytrain, None, args.kfold)
-    else:
-      continue
-    # Model evaluation
+  for md in args.models:
+    perf_df = md_perf.init_perf_df(md)
+    for dataset in datasets:
+      if args.val_pct == 0:
+        train_model(None, {})
+      elif args.val_pct < 1:
+        tune_model(None, dataset.Xtrain, dataset.ytrain, None, args.kfold)
+      else:
+        continue
+      # Model evaluation
 
 
-  # Save performance table & best models
+  # Save actual features, performance tables & best models
 
 
 

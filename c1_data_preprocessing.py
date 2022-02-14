@@ -67,12 +67,23 @@ class Dataset(object):
     self.FeatureEngineer = FeatureEngineeringModifier(
       onehot_cols, onehot_dtypes, trimmed_ccsr, discretize_cols, col2decile_ftrs2aggf)
     if decile_gen is not None:
-      self.FeatureEngineer.set_decile_gen(decile_gen)
+      self.FeatureEngineer.set_decile_gen(decile_gen)  # when test_pct = 1
 
     # 3. Preprocess train & test data
-    self.preprocess_train_test(outcome, ftr_cols, target_features, remove_o2m)
+    self.preprocess_train(outcome, ftr_cols, remove_o2m_train=remove_o2m[0])
+    self.preprocess_test(outcome, ftr_cols, target_features, remove_o2m_test=remove_o2m[1])
 
-  def preprocess_train_test(self, outcome, ftr_cols=globals.FEATURE_COLS, target_features=None, remove_o2m=(None, None)):
+    # 4. Apply scaling (e.g. normalization)
+
+  def normalize_train(self, how='norm'):  # ['norm', 'std', 'robust']  -- only normalize continuous / ordinal features
+    # TODO: finish me
+    pass
+
+  def normalize_test(self):
+
+    pass
+
+  def preprocess_train(self, outcome, ftr_cols=globals.FEATURE_COLS, remove_o2m_train=True):
     # I. Preprocess training set
     if self.train_df_raw is not None:
       # Preprocess outcome values / SPS prediction in df
@@ -82,20 +93,21 @@ class Dataset(object):
 
       # Modify data matrix
       self.Xtrain, self.feature_names, self.train_case_keys, self.ytrain, self.o2m_df_train = preprocess_Xtrain(
-        train_df, outcome, ftr_cols, self.FeatureEngineer, remove_o2m=remove_o2m[0])
+        train_df, outcome, ftr_cols, self.FeatureEngineer, remove_o2m=remove_o2m_train)
       self.train_cohort_df = self.train_df_raw[self.train_df_raw['SURG_CASE_KEY'].isin(self.train_case_keys)]
     else:
       self.Xtrain, self.ytrain, self.train_case_keys = np.array([]), np.array([]), np.array([])
       self.train_cohort_df = self.train_df_raw
 
+  def preprocess_test(self, outcome, ftr_cols=globals.FEATURE_COLS, target_features=None, remove_o2m_test=None):
     # II. Preprocess test set, if it's not empty
     if self.test_df_raw is not None:
-      if isinstance(remove_o2m[1], pd.DataFrame):
-        o2m_df = remove_o2m[1]
+      if isinstance(remove_o2m_test, pd.DataFrame):
+        o2m_df = remove_o2m_test
         self.feature_names = o2m_df.columns.to_list()  # TODO: refactor this, in case o2m_df is empty
-      elif remove_o2m[1] == True:
+      elif remove_o2m_test == True:
         o2m_df = self.o2m_df_train
-      elif remove_o2m[1] == False:
+      elif remove_o2m_test == False:
         o2m_df = None
         # TODO: why not set feature_names here as well????
       else:
@@ -131,7 +143,7 @@ class Dataset(object):
 def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModifier,
                       remove_nonnumeric=True, verbose=False, remove_o2m=True):
   # Make data matrix X numeric
-  Xdf = df.copy()[feature_cols+[ftrEng.decile_outcome]]
+  Xdf = df.copy()[feature_cols + [ftrEng.decile_outcome]]  # add outcome col for computing decile features
 
   # Discard unwanted CCSRs
   Xdf, onehot_cols = ftrEng.trim_ccsr_in_X(Xdf, ftrEng.onehot_cols, ftrEng.trimmed_ccsr)
@@ -151,7 +163,6 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   print('Took %d sec to generate all deciles' % (time() - s))
 
   # Add decile-related columns to Xdf
-  print(Xdf.columns)
   Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
 
   # TODO: Handle NaNs?? -- handle weight nan here?
@@ -159,7 +170,7 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy()
   if remove_nonnumeric:
-    Xdf.drop(columns=globals.NON_NUMERIC_COLS+[ftrEng.decile_outcome], inplace=True, errors='ignore')
+    Xdf.drop(columns=globals.NON_NUMERIC_COLS + [ftrEng.decile_outcome], inplace=True, errors='ignore')
 
   # Convert dataframe to numerical numpy matrix and save the corresponding features' names
   X = Xdf.to_numpy(dtype=np.float64)
@@ -176,7 +187,7 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   if verbose:
     display(pd.DataFrame(X, columns=target_features).head(20))
   assert X.shape[1] == len(target_features), 'Generated data matrix has %d features, but feature list has %d items' % \
-                                          (X.shape[1], len(target_features))  # Basic sanity check
+                                             (X.shape[1], len(target_features))  # Basic sanity check
   return X, target_features, X_case_keys, y, o2m_df
 
 
@@ -208,10 +219,11 @@ def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeri
     # Match Xdf to the target features from the training data matrix (for now, only medical codes lead to such need)
     Xdf = ftrEng.match_Xdf_cols_to_target_features(Xdf, target_features)
 
-  # Join with existing deciles -- TODO: Test this
+  # Join with existing deciles (do this step before match_Xdf_cols_to_target_features()) -- TODO: Test this
   Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
 
   # TODO: Handle NaNs here?
+  # TODO: Scan for uniform columns
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_key = Xdf['SURG_CASE_KEY'].to_numpy()

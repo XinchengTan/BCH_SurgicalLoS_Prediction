@@ -46,43 +46,50 @@ class FeatureEngineeringModifier(object):
     Xdf.loc[(Xdf.SEX_CODE == 'F'), 'SEX_CODE'] = 1.0
 
     Xdf_cols = Xdf.columns.to_list()
+    print("[dummy_code] 0. Xdf shape: ", Xdf.shape)
     # Interpreter need or not
-    if 'INTERPRETER_NEED' in Xdf_cols:
-      Xdf.loc[(Xdf.INTERPRETER_NEED == 'N'), 'INTERPRETER_NEED'] = 0.0
-      Xdf.loc[(Xdf.INTERPRETER_NEED == 'Y'), 'INTERPRETER_NEED'] = 1.0
+    if globals.INTERPRETER in Xdf_cols:
+      Xdf = Xdf[(Xdf[globals.INTERPRETER] != 0) & Xdf[globals.INTERPRETER].notnull()]  # Drop rows
+      Xdf.loc[(Xdf.INTERPRETER_NEED == 'N'), globals.INTERPRETER] = 0.0
+      Xdf.loc[(Xdf.INTERPRETER_NEED == 'Y'), globals.INTERPRETER] = 1.0
+    print("[dummy_code] 1. Xdf shape: ", Xdf.shape)
 
     # State code
     if 'STATE_CODE' in Xdf_cols:
+      Xdf = Xdf[(Xdf[globals.STATE] != 0) & (Xdf[globals.STATE].notnull())]
       Xdf[['IN_STATE', 'OUT_OF_STATE_US', 'FOREIGN']] = 0.0
       Xdf.loc[(Xdf.STATE_CODE == 'MA'), 'IN_STATE'] = 1.0
       Xdf.loc[(Xdf.STATE_CODE == 'Foreign'), 'FOREIGN'] = 1.0
       Xdf.loc[((Xdf.IN_STATE == 0.0) & (Xdf.FOREIGN == 0.0)), 'OUT_OF_STATE_US'] = 1.0
       Xdf.drop(columns=['STATE_CODE'], inplace=True)
+    print("[dummy_code] 2. Xdf shape: ", Xdf.shape)
 
     # Major region
-    if 'MAJOR_REGION' in Xdf_cols:
+    if 'MAJOR_REGION' in Xdf_cols:  # TODO: should I remove, or infer based on Miles???
+      Xdf = Xdf[(Xdf[globals.REGION].notnull()) & (Xdf[globals.REGION] != 'Unknown')]
       Xdf = Xdf.join(pd.get_dummies(Xdf['MAJOR_REGION'], prefix='REGION'))\
         .drop(columns=['MAJOR_REGION'])
+    print("[dummy_code] 3. Xdf shape: ", Xdf.shape)
 
     # Language
-    if 'LANGUAGE_DESC' in Xdf_cols:
-      Xdf[['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE']] = 0.0
+    if 'LANGUAGE_DESC' in Xdf_cols:  # TODO: Should I just infer based on major region if it's 0?
+      Xdf[['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']] = 0.0
       Xdf.loc[(Xdf.LANGUAGE_DESC == 'English'), 'ENGLISH'] = 1.0
       Xdf.loc[(Xdf.LANGUAGE_DESC == 'Spanish'), 'SPANISH'] = 1.0
       Xdf.loc[(Xdf.LANGUAGE_DESC == 'Unable to Collect'), 'UNKNOWN_LANGUAGE'] = 1.0
       Xdf.loc[((Xdf.ENGLISH == 0.0) & (Xdf.SPANISH == 0.0) & (Xdf.UNKNOWN_LANGUAGE == 0.0)), 'OTHER_LANGUAGE'] = 1.0
-
       Xdf.drop(columns=['LANGUAGE_DESC'], inplace=True)
+
     return Xdf
 
   def handle_nans(self, Xdf: pd.DataFrame):  # NOTE: Xdf is a partial dataframe with only the designated feature columns
     # Drop rows with NaN or its equivalent in the corresponding columns
     Xdf_cols = Xdf.columns.to_list()
     prevN = Xdf.shape[0]
-    if globals.MILES in Xdf_cols:
-      Xdf = Xdf[Xdf[globals.MILES] != 0]
-      print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {globals.MILES}")
-      prevN = Xdf.shape[0]
+    # if globals.MILES in Xdf_cols:
+    #   Xdf = Xdf[Xdf[globals.MILES] != 0]
+    #   print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {globals.MILES}")
+    #   prevN = Xdf.shape[0]
     if globals.INTERPRETER in Xdf_cols:
       Xdf = Xdf[Xdf[globals.INTERPRETER] != 0]
       print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {globals.INTERPRETER}")
@@ -129,6 +136,10 @@ class FeatureEngineeringModifier(object):
         raise NotImplementedError("%s decile is not implemented yet!" % col)
     return Xdf
 
+  def join_with_ccsr_decile(self, Xdf: pd.DataFrame, ccsr_decile: pd.DataFrame,
+                           decile_col2aggf={globals.CCSR_DECILE: 'max'}):
+    pass
+
   def join_with_cpt_decile(self, Xdf: pd.DataFrame, cpt_decile: pd.DataFrame,
                            decile_col2aggf={globals.CPT_DECILE: 'max'}):
     # Note: Assume Xdf contains the CPT list column before one-hot encoding
@@ -140,8 +151,11 @@ class FeatureEngineeringModifier(object):
       .join(cpt_decile.set_index('CPT')[decile_col2aggf.keys()], on='CPT', how='inner')\
       .groupby('SURG_CASE_KEY')\
       .agg(decile_col2aggf)
-    # Join on 'SURG_CASE_KEY' with the input Xdf
+    # Drop any placeholder column added by match_Xdf_cols_to_target_ftrs()
+    Xdf.drop(columns=decile_col2aggf.keys(), inplace=True, errors='ignore')
+    # Join selected columns in the decile df on 'SURG_CASE_KEY' with the input Xdf
     Xdf_ret = Xdf.join(Xdf_w_decile, on='SURG_CASE_KEY', how='inner')
+
     print("[FtrEng-join_CPT_dcl] Input Xdf shape: ", Xdf.shape, '; Output Xdf shape: ', Xdf_ret.shape,
           "\nAdded decile columns: ", decile_col2aggf.keys())
     return Xdf_ret
@@ -157,7 +171,9 @@ class FeatureEngineeringModifier(object):
       .groupby('SURG_CASE_KEY')\
       .agg(decile_col2aggf)\
       .fillna(0)  # TODO: carefully handle NaN here! Think about how different agg functions would handle NA
-    # Join on 'SURG_CASE_KEY' with the input Xdf
+    # Drop any placeholder column added by match_Xdf_cols_to_target_ftrs()
+    Xdf.drop(columns=decile_col2aggf.keys(), inplace=True, errors='ignore')
+    # Join selected columns in the decile df on 'SURG_CASE_KEY' with the input Xdf
     Xdf_ret = Xdf.join(Xdf_w_decile, on='SURG_CASE_KEY', how='inner')
     print("[FtrEng-join_MED%d_dcl] Input Xdf shape: " % level, Xdf.shape, '; Output Xdf shape: ', Xdf_ret.shape,
           "\nAdded decile columns: ", decile_col2aggf.keys())
@@ -165,8 +181,11 @@ class FeatureEngineeringModifier(object):
 
   def join_with_pproc_decile(self, Xdf: pd.DataFrame, pproc_decile: pd.DataFrame,
                              decile_col2aggf={globals.PPROC_DECILE: 'max'}):
-    Xdf_ret = Xdf.join(pproc_decile.set_index('PRIMARY_PROC')[decile_col2aggf.keys()], on='PRIMARY_PROC', how='inner')
-    #  .groupby('SURG_CASE_KEY').agg(decile_col2aggf).reset_index() --- This part removes all other cols!
+    # Drop any placeholder column added by match_Xdf_cols_to_target_ftrs()
+    Xdf.drop(columns=decile_col2aggf.keys(), inplace=True, errors='ignore')
+    # Join selected columns in the decile df on 'SURG_CASE_KEY' with the input Xdf
+    Xdf_ret = Xdf.join(pproc_decile.set_index(globals.PRIMARY_PROC)[decile_col2aggf.keys()], on=globals.PRIMARY_PROC, how='inner')
+    #  .groupby('SURG_CASE_KEY').agg(decile_col2aggf).reset_index() --- This part removes all other cols but only kept decile_cols...
     print("[FtrEng-join_PPROC_decile] Input Xdf shape: ", Xdf.shape, "; Output Xdf shape: ", Xdf_ret.shape)
     if Xdf.shape[0] != Xdf_ret.shape[0]:
       raise Warning("%d cases are discarded due to unseen primary procedure!" % (Xdf.shape[0] - Xdf_ret.shape[0]))
@@ -200,9 +219,17 @@ class FeatureEngineeringModifier(object):
 
   def _print_feature_match_details(self, feature_set, ftr_type='unseen'):
     print("\nTotal %s features: %d" % (ftr_type, len(feature_set)))
-    print("#%s CPTs: %d" % (ftr_type, len(list(filter(lambda x: x.startswith('CPT'), feature_set)))))
-    print("#%s CPT Groups: %d" % (ftr_type, len(list(filter(lambda x: x.startswith('CPT_GROUP'), feature_set)))))
-    print("#%s CCSRs: %d" % (ftr_type, len(list(filter(lambda x: x.startswith('CCSR'), feature_set)))))
+    print("#%s PProcs: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.PRIMARY_PROC), feature_set)))))
+    print("#%s CPTs: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.CPT), feature_set)))))
+    print("#%s CPT Groups: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.CPT_GROUP), feature_set)))))
+    print("#%s CCSRs: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.CCSR), feature_set)))))
+    print("#%s MED1s: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.MED1), feature_set)))))
+    print("#%s MED2s: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.MED2), feature_set)))))
+    print("#%s MED3s: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.MED3), feature_set)))))
+    print("#%s Others: " % ftr_type, list(filter(
+      lambda x: not (x.startswith(globals.PRIMARY_PROC) or x.startswith(globals.CPT) or x.startswith(globals.CPT_GROUP)
+                     or x.startswith(globals.CCSR) or x.startswith(globals.MED1) or x.startswith(globals.MED2)
+                     or x.startswith(globals.MED3)), feature_set)))
 
   # Apply one-hot encoding to the designated columns
   def onehot_encode_cols(self, Xdf, onehot_cols, onehot_dtypes):
@@ -279,6 +306,7 @@ class DecileGenerator(object):
   def gen_decile_cols(self, Xdf: pd.DataFrame, outcome, col2decile_features=globals.DEFAULT_COL2DECILE_FTR2AGGF):
     """
     Generates the decile & related columns for each medical code type (CPT, CCSR, medication, etc.)
+    These methods should only be applied to Xtrain.
 
     :param Xdf: dataframe that contains the relevant columns that are *NOT* one-hot encoded!
     :param outcome: surgical outcome type to calculate decile score
@@ -330,7 +358,11 @@ class DecileGenerator(object):
       pproc_decile.to_csv(save_fp, index=False)
     return pproc_decile
 
-  def gen_cpt_decile(self, data_df: pd.DataFrame, outcome=globals.LOS, save_fp=None):  # Only called for Xtrain
+  def gen_ccsr_decile(self, data_df: pd.DataFrame, outcome=globals.LOS, save_fp=None):
+
+    pass
+
+  def gen_cpt_decile(self, data_df: pd.DataFrame, outcome=globals.LOS, save_fp=None):
     cpt_df = data_df[['CPTS', outcome]]
     exp_cpt2outcome_df = cpt_df.explode('CPTS').dropna(subset=['CPTS']).rename(columns={'CPTS': 'CPT'})
     cpt_groupby = exp_cpt2outcome_df.groupby('CPT')

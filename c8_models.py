@@ -169,15 +169,15 @@ def tune_model(md, X, y, scorer, kfold):  # cv_how='grid_search',
 
   # Define scorer
   refit = True
-  if scorer == globals.SCR_1NNT_TOL:
+  if scorer == globals.SCR_ACC_ERR1:
     scorer = make_scorer(MyScorer.scorer_1nnt_tol, greater_is_better=True)
   elif scorer == globals.SCR_1NNT_TOL_ACC:
     scorer = {globals.SCR_ACC: globals.SCR_ACC,
-              globals.SCR_1NNT_TOL: make_scorer(MyScorer.scorer_1nnt_tol, greater_is_better=True)}
-    refit = globals.SCR_1NNT_TOL
+              globals.SCR_ACC_ERR1: make_scorer(MyScorer.scorer_1nnt_tol, greater_is_better=True)}
+    refit = globals.SCR_ACC_ERR1
   elif scorer == globals.SCR_MULTI_ALL:
     scorer = {globals.SCR_ACC: globals.SCR_ACC, globals.SCR_AUC: globals.SCR_AUC,
-              globals.SCR_1NNT_TOL: make_scorer(MyScorer.scorer_1nnt_tol, greater_is_better=True)}
+              globals.SCR_ACC_ERR1: make_scorer(MyScorer.scorer_1nnt_tol, greater_is_better=True)}
     refit = globals.SCR_AUC
   # TODO: add balanced accuracy scorer, and other potentially informative metrics
 
