@@ -6,14 +6,12 @@ import pathlib
 import warnings
 
 from collections import defaultdict
-from imblearn.over_sampling import SMOTENC
-from imblearn.ensemble import BalancedBaggingClassifier, BalancedRandomForestClassifier
 
-from . import globals, c6_surgeon, utils, c5_model_perf as md_perf
+from . import globals, c6_surgeon, utils
 from . import c0_data_prepare as dp, c1_data_preprocessing as dpp
 from .c1_data_preprocessing import Dataset
 from .c3_ensemble import Ensemble
-from .c4_model_eval import ModelPerf
+from .c5_model_perf import *
 from .c7_feature_engineering import FeatureEngineeringModifier, DecileGenerator
 from .c8_models import *
 
@@ -30,7 +28,6 @@ def get_args():
 
   # dataset
   parser.add_argument('--cohort', default='all', type=str)
-  parser.add_argument('--val_pct', default=0.2, type=float)
   parser.add_argument('--holdout_test', '--os_test', default=False, action='store_true')
   parser.add_argument('--skip_o2m', default=[True, True, True], nargs=3, type=bool)  # train, val, test
   parser.add_argument('--outcome', default=globals.NNT, type=str)
@@ -58,6 +55,7 @@ def get_args():
   # TODO: specify decile feature agg functions? workaround dict? Or sth like: dcl_avg, dcl_max ??
 
   # modeling
+  parser.add_argument('--ktrial', default=5, type=int)  # If 1, just generate 1 test dataset
   parser.add_argument('--kfold', default=5, type=int)  # If 1, no cross validation
   parser.add_argument('--models', nargs='+')  # [all, lgr, svc, knn, dt, rmf, xgb]
   parser.add_argument('--ensemble', nargs='+')
@@ -102,6 +100,15 @@ def get_all_data_fp(args):
   else:
     raise NotImplementedError
   return dashb_fp, cpt_fp, ccsr_fp, med_fp, cpt_grp_fp, os_fp, os_cpt_fp, os_ccsr_fp, os_med_fp
+
+
+def get_model2params(args):
+  model_dir = args.model_dir
+  assert md != globals.ENSEMBLE_MAJ_EQ
+  param_fp = model_dir / 'model2params.json'
+  with open(param_fp) as json_file:
+    params = json.load(json_file)
+  return params
 
 
 def load_decile_features(code_abbr, arg_ftrs, col2decile_ftrs2aggf):
@@ -223,47 +230,62 @@ if __name__ == '__main__':
   # Load feature column list
   feature_cols, col2decile_ftrs2aggf, onehot_cols, discretize_cols = make_feature_cols(args)
 
-  # Generate a preprocessed Dataset with the designated features engineered
-  if args.kfold == 1:
+  # Generate preprocessed Dataset(s) with the designated features engineered
+  if args.ktrial == 1:
     datasets = [
       Dataset(dashb_df, args.outcome, feature_cols, col2decile_ftrs2aggf, onehot_cols,
               test_pct=args.test_pct, discretize_cols=discretize_cols, cohort=args.cohort, remove_o2m=args.skip_o2m[:2])
     ]
-  elif args.kfold > 1:
-    datasets = utils.gen_kfolds_datasets(dashb_df, args.kfold, feature_cols, shuffle_df=True, outcome=args.outcome,
+  elif args.ktrial > 1:
+    datasets = utils.gen_kfolds_datasets(dashb_df, args.ktrial, feature_cols, shuffle_df=True, outcome=args.outcome,
                                          onehot_cols=onehot_cols, discretize_cols=discretize_cols,
                                          col2decile_ftr2aggf=col2decile_ftrs2aggf, cohort=args.cohort,
                                          remove_o2m=args.skip_o2m[:2])
   else:
-    raise ValueError("kfold must be a positive int!")
+    raise ValueError("ktrial must be a positive int!")
 
   # Apply modeling
-  for md in args.models:
-    perf_df = md_perf.init_perf_df(md)
-    for dataset in datasets:
-      if args.val_pct == 0:
-        train_model(None, {})
-      elif args.val_pct < 1:
-        tune_model(None, dataset.Xtrain, dataset.ytrain, None, args.kfold)
+  # scorers: Acc, Acc_err1, Acc_err2, overpred rate, underpred rate
+  md2params = get_model2params(args)
+  scorers = MyScorer.get_scorer_dict([globals.SCR_ACC, globals.SCR_ACC_BAL, globals.SCR_ACC_ERR1, globals.SCR_ACC_ERR2,
+                                      globals.SCR_OVERPRED, globals.SCR_UNDERPRED])
+  cv_results = defaultdict(list)  # md: [cv_result_df1, cv_result_df2, ...] --- len() = ktrial
+  perf_df = pd.DataFrame(columns=['Trial', 'Model'] + list(scorers.keys()))
+  surg_perf = pd.DataFrame(columns=['Trial', 'Model'] + list(scorers.keys())) # Trial, train_scores ...
+  for trial, dataset in enumerate(datasets):  # ktrials
+    # Surgeon prediction
+    train_scores_dict, test_scores_dict = eval_surgeon_perf(dataset, scorers)
+    surg_perf = append_perf_row_surg(surg_perf, trial, train_scores_dict)
+
+    # Train / Tune models
+    for md in args.models:
+      if args.kfold == 1:
+        clf = train_model(md, md2params[md], dataset.Xtrain, dataset.ytrain)
       else:
-        continue
-      # Model evaluation
+        grid_search = train_model_cv(md, dataset.Xtrain, dataset.ytrain, args.kfold, scorers=scorers,
+                                     refit=globals.SCR_ACC_BAL)
+        cv_results[md] = grid_search.cv_results_
+        clf = grid_search.best_estimator_
 
+      # Evaluate trained model / best estimator on Xtest
+      if dataset.Xtest is not None and dataset.Xtest.shape[0] > 0:
+        scores_row_dict = MyScorer.apply_scorers(scorers, dataset.ytest, clf.predict(dataset.ytest))
+        perf_df = append_perf_row(perf_df, trial, md, scores_row_dict)
+        perf_df = append_perf_row(perf_df, trial, 'Surgeon-test', test_scores_dict)
 
-  # Save actual features, performance tables & best models
-
+  # Save actual features, performance tables & best models, surgeon performance, (model_params) -- locally
+  
 
 
   # Hold-out Test
   if args.os_test:
-    if args.val_pct > 0:
-      # Retrain the best model on the full dataset, and then apply on test set
-      dataset = Dataset(dashb_df, args.outcome, feature_cols, col2decile_ftrs2aggf, onehot_cols,
-                        test_pct=args.test_pct, discretize_cols=discretize_cols, cohort=args.cohort,
-                        remove_o2m=args.skip_o2m[:2])
-      # TODO
-    else:
-      pass
+    # load pretrained model / load selected model params & retrain
+
+    # Retrain the best model on the full dataset, and then apply on test set
+    dataset = Dataset(dashb_df, args.outcome, feature_cols, col2decile_ftrs2aggf, onehot_cols,
+                      test_pct=args.test_pct, discretize_cols=discretize_cols, cohort=args.cohort,
+                      remove_o2m=args.skip_o2m[:2])
+
 
     os_df = dp.prepare_data(os_fp, os_cpt_fp, cpt_grp_fp, os_ccsr_fp, os_med_fp)
     os_dataset = None

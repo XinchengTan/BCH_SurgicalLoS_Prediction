@@ -38,6 +38,7 @@ class Dataset(object):
     onehot_dtypes = [globals.ONEHOT_COL2DTYPE[oh] for oh in onehot_cols]
 
     self.df = df.copy()
+    self.outcome = outcome
 
     # Filter df by primary procedure cohort
     self.cohort = cohort
@@ -88,7 +89,7 @@ class Dataset(object):
     if self.train_df_raw is not None:
       # Preprocess outcome values / SPS prediction in df
       train_df = preprocess_y(self.train_df_raw, outcome)
-      if globals.SPS_LOS_FTR in train_df.columns.to_list():
+      if globals.SPS_PRED in train_df.columns:
         train_df = preprocess_y(train_df, outcome, sps_y=True)
 
       # Modify data matrix
@@ -102,6 +103,10 @@ class Dataset(object):
   def preprocess_test(self, outcome, ftr_cols=globals.FEATURE_COLS, target_features=None, remove_o2m_test=None):
     # II. Preprocess test set, if it's not empty
     if self.test_df_raw is not None:
+      # Preprocess ytest & sps prediction
+      test_df = preprocess_y(self.test_df_raw, outcome)
+      preprocess_y(test_df, outcome, sps_y=True, inplace=True)
+
       if isinstance(remove_o2m_test, pd.DataFrame):
         o2m_df = remove_o2m_test
         self.feature_names = o2m_df.columns.to_list()  # TODO: refactor this, in case o2m_df is empty
@@ -116,10 +121,10 @@ class Dataset(object):
         if self.feature_names is None:
           raise ValueError("target_features cannot be None when test_pct = 1!")
 
-      self.Xtest, _, self.test_case_keys = preprocess_Xtest(self.test_df_raw, self.feature_names, ftr_cols,
+      self.Xtest, _, self.test_case_keys = preprocess_Xtest(test_df, self.feature_names, ftr_cols,
                                                             ftrEng=self.FeatureEngineer, skip_cases_df_or_fp=o2m_df)
-      self.ytest = self.test_df_raw[self.test_df_raw['SURG_CASE_KEY'].isin(self.test_case_keys)][outcome].to_numpy()
-      self.test_cohort_df = self.test_df_raw[self.test_df_raw['SURG_CASE_KEY'].isin(self.test_case_keys)]
+      self.test_cohort_df = test_df[test_df['SURG_CASE_KEY'].isin(self.test_case_keys)]
+      self.ytest = self.test_cohort_df[outcome]
     else:
       self.Xtest, self.ytest, self.test_case_keys = np.array([]), np.array([]), np.array([])
       self.test_cohort_df = self.test_df_raw
@@ -131,6 +136,14 @@ class Dataset(object):
   def get_Xtest_by_case_key(self, query_case_keys):
     idxs = np.where(np.in1d(self.test_case_keys, query_case_keys))[0]
     return self.Xtest[idxs, :]
+
+  def get_surgeon_pred_by_case_key(self, query_case_keys):
+    if query_case_keys is None or len(query_case_keys) == 0:
+      return pd.DataFrame(columns=['SURG_CASE_KEY', globals.SPS_PRED])
+    surg_df = self.df[['SURG_CASE_KEY', globals.SPS_PRED]]
+    surg_df = surg_df[(surg_df['SURG_CASE_KEY'].isin(query_case_keys)) & (surg_df[globals.SPS_PRED].notnull())]
+    preprocess_y(surg_df, self.outcome, True, inplace=True)
+    return surg_df
 
   def __str__(self):
     res = "Training set size: %d\n" \
@@ -177,7 +190,7 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   target_features = Xdf.columns.to_list()
 
   # Remove cases that have multiple possible outcomes
-  o2m_df, y = None, df[outcome].to_numpy()
+  o2m_df, y = None, df[df['SURG_CASE_KEY'].isin(X_case_keys)][outcome].to_numpy()
   if remove_o2m:
     s = time()
     o2m_df, X, X_case_keys, y = discard_o2m_cases_from_self(X, X_case_keys, y, target_features)  # training set
@@ -254,7 +267,7 @@ def get_df_by_case_keys(df, case_keys):
 def preprocess_y(df: pd.DataFrame, outcome, sps_y=False, inplace=False):
   # Generate an outcome vector y with shape: (n_samples, )
   df = df.copy() if not inplace else df
-  y = np.array(df.LENGTH_OF_STAY.to_numpy())
+  y = df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[globals.SPS_PRED].to_numpy()
   if outcome == globals.LOS:
     return y
   elif outcome == ">12h":
@@ -264,23 +277,26 @@ def preprocess_y(df: pd.DataFrame, outcome, sps_y=False, inplace=False):
     y[y > 1] = 1
     y[y <= 1] = 0
   elif outcome == globals.NNT:
-    y = gen_y_nnt(df[globals.NNT])
+    y = gen_y_nnt(y)
   elif outcome.endswith("nnt"):
     cutoff = int(outcome.split("nnt")[0])
     y = gen_y_nnt_binary(y, cutoff)
   else:
     raise NotImplementedError("Outcome type '%s' is not implemented yet!" % outcome)
 
-  # Update df by adding the outcome column
+  # Update df by adding or updating the outcome column
   if sps_y:
-    df['SPS_PREDICTED_LOS'] = y
+    df[globals.SPS_PRED] = y
   else:
     df[outcome] = y
   return df
 
 
-def gen_y_nnt(dfcol):
-  y = np.array(dfcol.to_numpy())
+def gen_y_nnt(y):
+  if isinstance(y, pd.Series):
+    y = y.to_numpy()
+  elif not isinstance(y, np.ndarray):
+    y = np.array(y)
   y[y > globals.MAX_NNT] = globals.MAX_NNT + 1
   return y
 

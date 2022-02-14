@@ -9,6 +9,7 @@ import pandas as pd
 import seaborn as sn
 
 from sklearn import metrics
+from sklearn.metrics import make_scorer
 from sklearn.calibration import calibration_curve
 from sklearn.inspection import permutation_importance
 
@@ -107,6 +108,28 @@ class MyScorer:
 
   def __init__(self):
     return
+
+  @staticmethod
+  def get_scorer_dict(scorer_names):
+    scr_dict = {}
+    for scorer in scorer_names:
+      if scorer == globals.SCR_ACC:
+        scr_dict[scorer] = 'accuracy'
+      elif scorer == globals.SCR_ACC_BAL:
+        scr_dict[scorer] = 'balanced_accuracy'
+      elif scorer == globals.SCR_AUC:
+        scr_dict[scorer] = 'roc_auc'
+      elif scorer == globals.SCR_ACC_ERR1:
+        scr_dict[scorer] = make_scorer(MyScorer.scorer_1nnt_tol, greater_is_better=True)
+      elif scorer == globals.SCR_ACC_ERR2:
+        scr_dict[scorer] = make_scorer(MyScorer.scorer_2nnt_tol, greater_is_better=True)
+      elif scorer == globals.SCR_OVERPRED:
+        scr_dict[scorer] = make_scorer(MyScorer.scorer_overpred_pct, greater_is_better=False)
+      elif scorer == globals.SCR_UNDERPRED:
+        scr_dict[scorer] = make_scorer(MyScorer.scorer_underpred_pct, greater_is_better=False)
+      else:
+        raise Warning(f"Scorer {scorer} is not supported yet!")
+    return scr_dict
 
   @staticmethod
   def scorer_1nnt_tol(ytrue, ypred):
@@ -214,9 +237,9 @@ def get_rsqr(clf, md_name, X, ytrue, ypred):
 
 
 def get_surgeon_agreed_pct(Xdf, ypred_md, population_size):
-  if globals.SPS_LOS_FTR not in Xdf.columns:
+  if globals.SPS_PRED not in Xdf.columns:
     return np.nan
-  surgeon_pred = dpp.gen_y_nnt(Xdf[globals.SPS_LOS_FTR])
+  surgeon_pred = dpp.gen_y_nnt(Xdf[globals.SPS_PRED])
   population_size = len(ypred_md) if population_size == None else population_size
   agree_pct = len(np.where(surgeon_pred == ypred_md)[0]) / population_size
   return agree_pct
@@ -225,7 +248,7 @@ def get_surgeon_agreed_pct(Xdf, ypred_md, population_size):
 def eval_multiclf_on_Xy(clf, Xdf, X, y, md_name, XType, yType=globals.NNT, cohort=globals.COHORT_ALL, pop_size=None,
                         plot=True):
   if md_name == globals.clf2name_eval[globals.SURGEON]:
-    pred_y = dpp.gen_y_nnt(Xdf[globals.SPS_LOS_FTR])
+    pred_y = dpp.gen_y_nnt(Xdf[globals.SPS_PRED])
   else:
     pred_y = clf.predict(X)
   Xdf = Xdf.copy(deep=True)

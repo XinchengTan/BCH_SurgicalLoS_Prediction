@@ -1,6 +1,6 @@
 # Customized Model classes
+import json
 import numpy as np
-
 from collections import Counter
 
 import xgboost
@@ -10,7 +10,7 @@ from sklearn.metrics import mean_squared_error, make_scorer, accuracy_score
 from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 
-from sklearn.linear_model import LogisticRegression, PoissonRegressor, Ridge, RidgeCV
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV, PoissonRegressor, Ridge, RidgeCV
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC, SVR
 from sklearn.tree import DecisionTreeClassifier
@@ -18,7 +18,7 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier,
 from xgboost import XGBClassifier
 
 from . import globals
-from .c4_model_eval import MyScorer
+from .c5_model_perf import MyScorer
 
 
 try:
@@ -68,23 +68,47 @@ class PoissonClassifier(PoissonRegressor):
     return accuracy_score(y, preds, sample_weight=sample_weight)
 
 
-def train_model(md, params):
+def train_model(md, params, X, y):
+  if md == globals.LGR:
+    clf = LogisticRegression(random_state=globals.SEED)
+  elif md == globals.SVC:
+    clf = SVC(random_state=globals.SEED, probability=True)
+  elif md == globals.KNN:
+    clf = KNeighborsClassifier()
+  elif md == globals.DTCLF:
+    clf = DecisionTreeClassifier(random_state=globals.SEED)
+  elif md == globals.RMFCLF:
+    clf = RandomForestClassifier(random_state=globals.SEED)
+  elif md == globals.GBCLF:
+    clf = GradientBoostingClassifier(random_state=globals.SEED)
+  elif md == globals.XGBCLF:
+    clf = XGBClassifier(random_state=globals.SEED)
+  else:
+    raise NotImplementedError(f"Model {md} is not implemented yet!")
 
-  return
+  clf.set_params(**params)
+  clf.fit(X, y)
+  return clf
 
 
-def tune_model(md, X, y, scorer, kfold):  # cv_how='grid_search',
+def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search',
   def minority_class_size(y):
     return min(Counter(y).values())
+  assert kfold >= 1, 'kfold must be a positive integer!'
 
   n_frts = X.shape[1]
   minority_size = minority_class_size(y)
   min_samples_split_max = int(minority_size * (1-1/kfold))
   print("Minority-class size: ", minority_size)
-  if md == globals.SVC:
+  if md == globals.LGR:
+    param_space = {'Cs': [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100],
+                   'l1_ratio': [0, 0.01, 0.03, 0.1, 0.3, 0.5, 0.8, 0.9, 0.95, 0.99, 1],
+                   'class_weight': [None, 'balanced']}
+    clf = LogisticRegression(random_state=globals.SEED, penalty='elasticnet', solver='saga', max_iter=300)
+  elif md == globals.SVC:
     clf = SVC(random_state=globals.SEED, probability=False)
     param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10],
-                   'gamma': sorted([1 / n_frts] + [1, 0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001]),
+                   'gamma': sorted(list({1 / n_frts, 1, 0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001})),
                    'kernel': ['rbf', 'poly', 'sigmoid'],
                    'degree': [2, 3, 4],
                    'class_weight': [None, 'balanced']}
@@ -167,27 +191,8 @@ def tune_model(md, X, y, scorer, kfold):  # cv_how='grid_search',
   else:
     raise NotImplementedError("Model %s is not supported!" % md)
 
-  # Define scorer
-  refit = True
-  if scorer == globals.SCR_ACC_ERR1:
-    scorer = make_scorer(MyScorer.scorer_1nnt_tol, greater_is_better=True)
-  elif scorer == globals.SCR_1NNT_TOL_ACC:
-    scorer = {globals.SCR_ACC: globals.SCR_ACC,
-              globals.SCR_ACC_ERR1: make_scorer(MyScorer.scorer_1nnt_tol, greater_is_better=True)}
-    refit = globals.SCR_ACC_ERR1
-  elif scorer == globals.SCR_MULTI_ALL:
-    scorer = {globals.SCR_ACC: globals.SCR_ACC, globals.SCR_AUC: globals.SCR_AUC,
-              globals.SCR_ACC_ERR1: make_scorer(MyScorer.scorer_1nnt_tol, greater_is_better=True)}
-    refit = globals.SCR_AUC
-  # TODO: add balanced accuracy scorer, and other potentially informative metrics
-
-  # For each parameter, iterate through its param grid
-  param2gs = {}
-  for param, param_grid in param_space.items():
-    print("\nSearching %s among " % param, param_grid)
-    gs = GridSearchCV(estimator=clf, param_grid={param: param_grid}, scoring=scorer, cv=kfold, n_jobs=-1,
-                      refit=refit, return_train_score=True, verbose=0)  # TODO: n_jobs??
-    gs.fit(X, y)
-    param2gs[param] = gs
-  return
+  # Use GridSearchCV for hyperparameter tuning
+  grid_search = GridSearchCV(estimator=clf, param_grid=param_space, scoring=scorers, cv=kfold, n_jobs=-1,
+                             refit=refit, return_train_score=True, verbose=0)  # TODO: n_jobs??
+  return grid_search
 

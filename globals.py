@@ -1,7 +1,7 @@
 from pathlib import Path
 
 # Default built-in column names
-SPS_LOS_FTR = 'SPS_PREDICTED_LOS'
+SPS_PRED = 'SPS_PREDICTED_LOS'
 LOS = "LENGTH_OF_STAY"
 AGE = 'AGE_AT_PROC_YRS'
 WEIGHT_ZS = 'WEIGHT_ZSCORE'
@@ -59,8 +59,8 @@ FEATURE_COLS_NO_DECILE = ['SURG_CASE_KEY', GENDER, AGE, WEIGHT_ZS, CPTS, CPT_GRO
 
 FEATURE_COLS_NO_OS = ['SURG_CASE_KEY', GENDER, AGE, WEIGHT_ZS, CPTS, CPT_GROUPS, PRIMARY_PROC, CCSRS]  # , 'ICD10S'
 
-FEATURE_COLS_SPS = FEATURE_COLS + [SPS_LOS_FTR]
-FEATURE_COLS_NO_OS_SPS = FEATURE_COLS_NO_OS + [SPS_LOS_FTR]
+FEATURE_COLS_SPS = FEATURE_COLS + [SPS_PRED]
+FEATURE_COLS_NO_OS_SPS = FEATURE_COLS_NO_OS + [SPS_PRED]
 
 # Default medical code to decile feature to aggregation function
 DEFAULT_COL2DECILE_FTR2AGGF = {
@@ -250,12 +250,14 @@ F1 = "F1 score"
 FPRPCT15 = "< 0.15"
 
 # Evaluation metrics
-SCR_ACC = 'Accuracy'
+SCR_ACC = 'accuracy'
 SCR_AUC = 'roc_auc'
+SCR_ACC_BAL = 'balanced_accuracy'
 SCR_ACC_ERR1 = 'Accuracy (tol = 1 NNT)'
+SCR_ACC_ERR2 = 'Accuracy (tol = 2 NNT)'
 SCR_UNDERPRED = 'underprediction rate'
 SCR_OVERPRED = 'overprediction rate'
-SCR_BAL_ACC = 'balanced_accuracy'
+# TODO: Remove these
 SCR_1NNT_TOL_ACC = 'Accuracy (Hit rate and tol=1NNT)'
 SCR_MULTI_ALL = 'multiple scorers (all)'
 

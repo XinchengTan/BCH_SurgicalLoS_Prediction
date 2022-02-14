@@ -357,7 +357,7 @@ def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType, cohor
   # Treat surgeon as a model and evaluate
   if eval_surgeon:
     df_sps = df.join(dataset.df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner', rsuffix='_full')
-    if not df_sps[globals.SPS_LOS_FTR].isnull().any():  # or (XType not in [globals.XTRAIN, globals.XTEST, None])
+    if not df_sps[globals.SPS_PRED].isnull().any():  # or (XType not in [globals.XTRAIN, globals.XTEST, None])
       df = df_sps
       model2trained_clf[globals.SURGEON] = None
     else:

@@ -27,11 +27,11 @@ def gen_all_model_predictions(dataset: dpp.Dataset, all_models: c2_modeling.AllM
   md2preds = all_models.predict_all(Xsubset)
   md2preds['True LOS'] = true_y[subset_data_idx]
   md2preds['SURG_CASE_KEY'] = dataset.case_keys[subset_idx]
-  md2preds[globals.SPS_LOS_FTR] = dataset.sps_preds[subset_idx]
+  md2preds[globals.SPS_PRED] = dataset.sps_preds[subset_idx]
   md2preds['CPT_GROUPS'] = dataset.cpt_groups[subset_idx]
 
   # Order columns and generate dataframe
-  columns = ['SURG_CASE_KEY', 'CPT_GROUPS', 'True LOS', globals.SPS_LOS_FTR]
+  columns = ['SURG_CASE_KEY', 'CPT_GROUPS', 'True LOS', globals.SPS_PRED]
   columns.extend(all_models.mdnames)
   df_all = pd.DataFrame(md2preds, columns=columns).sort_values(by=['True LOS'])
 
