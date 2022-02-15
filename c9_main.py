@@ -25,6 +25,7 @@ def get_args():
   # platform
   parser.add_argument('--platform', '-pf', default='local', choices=['aws', 'local', 'gcp'], type=str)
   parser.add_argument('--data_dir', default=pathlib.Path('../ModelInput'), type=pathlib.Path)
+  parser.add_argument('--param_dir', default=pathlib.Path('..'), type=pathlib.Path)  # dir to load model2params.json
   parser.add_argument('--device', '-d', default='cpu', choices=['cpu', 'cuda:0'], type=str)  # ineffective for now
 
   # dataset
@@ -61,12 +62,12 @@ def get_args():
   parser.add_argument('--ktrial', default=5, type=int)  # If 1, just generate 1 test dataset
   parser.add_argument('--kfold', default=5, type=int)  # If 1, no cross validation
   parser.add_argument('--models', nargs='+')  # [all, lgr, svc, knn, dt, rmf, xgb]
-  parser.add_argument('--ensemble', nargs='+')
-  parser.add_argument('--md_dir', '--model_dir', type=pathlib.Path)  # directory to load models / model params
-  parser.add_argument('--md_fnames', '--model_filenames', nargs='+')  # a list of model file names aligning with --models
-  parser.add_argument('--save_dir', type=pathlib.Path)  # directory to save results (models, model perfs)
+  parser.add_argument('--ensemble', default=None, nargs='+')  # todo
+  parser.add_argument('--md_dir', '--model_dir', type=pathlib.Path)  # directory to load models / save trained models
+  parser.add_argument('--md_fnames', '--model_filenames', default=[], nargs='+')  # a list of model file names aligning with --models
+  parser.add_argument('--result_dir', type=pathlib.Path)  # directory to save results (model perfs)
   parser.add_argument('--scorers', default=[], nargs='+')  # [acc, acc_err1, overpred, underpred, bal_acc]
-  # TODO: Have an arg for filepath of model params?   arg for where results are saved?
+  # TODO: Have an arg for filepath of model params?
 
   args = parser.parse_args()
   return args
@@ -110,9 +111,9 @@ def get_all_data_fp(args):
 
 # Get Model abbr to a mapping of its hyperparameters (load from json)
 def get_model2params(args):
-  model_dir = args.model_dir
+  md_param_dir = args.param_dir
   assert md != globals.ENSEMBLE_MAJ_EQ
-  param_fp = model_dir / 'model2params.json'
+  param_fp = md_param_dir / 'model2params.json'
   with open(param_fp) as json_file:
     params = json.load(json_file)
   return params
@@ -228,21 +229,25 @@ def make_feature_cols(args):  # TODO: make folder name here!
   return feature_cols, col2decile_ftrs2aggf, onehot_cols, discretize_cols
 
 
-# Load pre-trained model
-def load_pretrained_model(args):
+# Load pre-trained model, return a mapping from model abbr to model object
+def load_pretrained_models(args):
   mds = set(args.models)
   if len(mds - globals.ALL_MODELS) > 0:
     raise NotImplementedError("Input model set contains a model that is not implemented yet!")
+  if len(args.md_fnames) == 0:
+    return {}
+  assert len(mds) == len(args.md_fnames), 'Each model must have a corresponding file name!'
 
-  if len(mds) == 1:  # load a single sklearn model
-    model_fp = args.model_dir / (args.md_fnames[0] + '.joblib')
-    model = joblib.load(model_fp)
-  else:  # load an ensemble model
+  md2model_obj = {}
+  for md, md_filename in zip(args.models, args.md_fnames):
+    md2model_obj[md] = [joblib.load(args.model_dir / (md_filename + '.joblib'))]
+  # TODO: update ensemble args in the future
+  if args.ensemble is not None and len(args.ensemble) > 0:
     md2task2clf = defaultdict(lambda: defaultdict(list))
     for md, md_filename in zip(args.models, args.md_fnames):
-      md2task2clf[md][globals.TASK_MULTI_CLF] = [joblib.load(args.model_dir /md_filename)]
-    model = Ensemble(tasks=[globals.TASK_MULTI_CLF], md2clfs=md2task2clf)
-  return model
+      md2task2clf[md][globals.TASK_MULTI_CLF] = [joblib.load(args.model_dir / (md_filename + '.joblib'))]
+    md2model_obj['ensemble'] = Ensemble(tasks=[globals.TASK_MULTI_CLF], md2clfs=md2task2clf)
+  return md2model_obj
 
 
 if __name__ == '__main__':
@@ -301,7 +306,7 @@ if __name__ == '__main__':
 
   # Save actual features, performance tables & best models, surgeon performance, (model_params) -- locally
   # TODO: Make a custom dir name for result_dir, based on features used -- or uuid?
-  result_dir = pathlib.Path(args.save_dir / '#Feature_abbr???#')
+  result_dir = pathlib.Path(args.result_dir / '#Feature_abbr???#')
   result_dir.mkdir(parents=True, exist_ok=True)
   surg_perf.to_csv(result_dir / 'surgeon_perf_train.csv', index=False)
   perf_df.to_csv(result_dir / 'model&surg_perf_test.csv', index=False)
@@ -313,15 +318,20 @@ if __name__ == '__main__':
 
   # Hold-out Test
   if args.os_test:
-    # Load pretrained model / load selected model params & retrain --- TODO
-
-
+    # Load pretrained model / load selected model params & retrain
+    md2model_obj = load_pretrained_models(args)
     # Retrain the best model on the full dataset, and then apply on test set
     hist_dataset = Dataset(dashb_df, args.outcome, feature_cols, col2decile_ftrs2aggf, onehot_cols,
-                      test_pct=args.test_pct, discretize_cols=discretize_cols, cohort=args.cohort,
-                      remove_o2m=args.skip_o2m[:2], scaler=args.scaler, scale_numeric_only=not args.scale_nonnumeric)
+                           test_pct=0, discretize_cols=discretize_cols, cohort=args.cohort,
+                           remove_o2m=args.skip_o2m[:2], scaler=args.scaler,
+                           scale_numeric_only=not args.scale_nonnumeric)
+    # Load model parameters and train on full dataset
+    if len(md2model_obj) == 0:
+      md_params = get_model2params(args)
+      for md, md_params in md_params.items():
+        md2model_obj[md] = train_model(md, md_params, hist_dataset.Xtrain, hist_dataset.ytrain)
 
-
+    # Generate holdout test data
     os_df = dp.prepare_data(os_fp, os_cpt_fp, cpt_grp_fp, os_ccsr_fp, os_med_fp)
     os_dataset = Dataset(os_df, args.outcome, feature_cols, col2decile_ftrs2aggf, onehot_cols,
                         test_pct=1, discretize_cols=discretize_cols, cohort=args.cohort,
@@ -331,7 +341,7 @@ if __name__ == '__main__':
                         scaler=hist_dataset.input_scaler)
 
     # Predict on out-of-sample dataset
-
+    
 
     # Surgeon prediction
 

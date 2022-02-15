@@ -102,10 +102,10 @@ def append_perf_row_surg(surg_perf_df: pd.DataFrame, trial, scores_row_dict):
 def eval_surgeon_perf(dataset: Dataset, scorers):
   train_scores_row_dict, test_scores_row_dict = {}, {}
   if dataset.Xtrain:
-    train_surg_pred = dataset.get_surgeon_pred_by_case_key(dataset.train_case_keys)[globals.SPS_PRED]
+    train_surg_pred = dataset.get_surgeon_pred_df_by_case_key(dataset.train_case_keys)[globals.SPS_PRED]
     train_scores_row_dict = MyScorer.apply_scorers(scorers, dataset.ytrain, train_surg_pred)
   if dataset.Xtest:
-    test_surg_pred = dataset.get_surgeon_pred_by_case_key(dataset.test_case_keys)[globals.SPS_PRED]
+    test_surg_pred = dataset.get_surgeon_pred_df_by_case_key(dataset.test_case_keys)[globals.SPS_PRED]
     test_scores_row_dict = MyScorer.apply_scorers(scorers, dataset.ytest, test_surg_pred)
   return train_scores_row_dict, test_scores_row_dict
 
