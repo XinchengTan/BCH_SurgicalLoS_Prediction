@@ -165,28 +165,20 @@ def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search
     if not param_space['min_samples_split']:
       raise ValueError("min_samples_split cannot < 2!")
   elif md == globals.XGBCLF:
-    clf = xgboost.XGBClassifier(random_state=globals.SEED)  # TODO: n_jobs?, gpu_id?
+    clf = xgboost.XGBClassifier(random_state=globals.SEED)
+    if n_frts > 500:
+      colsample_bytree_range = np.arange(0.3, 0.9, 0.1)
+    else:
+      colsample_bytree_range = np.arange(0.8, 1, 0.05)
+    # ?? define objective?? multi:softmax ???
     param_space = {
-      'objective': 'binary:logistic',
-      'base_score': None,
-      'booster': None,
-      'colsample_bylevel': None,
-      'colsample_bynode': None,
-      'colsample_bytree': None,
-      'gamma': None,
-      'interaction_constraints': None,
-      'learning_rate': None,
-      'max_delta_step': None,
-      'max_depth': None,
-      'min_child_weight': None,
-      'monotone_constraints': None,
-      'num_parallel_tree': None,
-      'reg_alpha': None,
-      'reg_lambda': None,
-      'scale_pos_weight': None,
-      'subsample': None,
-      'tree_method': None,
-      'validate_parameters': None,
+      'n_estimators': np.arange(50, 501, 50),
+      'learning_rate': [0.01, 0.03, 0.06, 0.1, 0.2, 0.3],
+      'subsample': np.arange(0.8, 1.01, 0.05),
+      'colsample_bytree': colsample_bytree_range,
+      'max_depth': [3, 4, 5, 6, 7],
+      'gamma': [0, 0.1, 0.3, 1, 2, 3, 5],
+      'min_child_weight': [0.1, 0.3, 0.6, 1, 1.5, 2],
     }
   else:
     raise NotImplementedError("Model %s is not supported!" % md)
@@ -196,3 +188,21 @@ def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search
                              refit=refit, return_train_score=True, verbose=0)  # TODO: n_jobs??
   return grid_search
 
+## XGB other params:
+# 'reg_alpha': None,  # L1 reg - faster under high dimensionality
+# 'reg_lambda': None,  # L2 regularization - reduce overfitting
+# 'scale_pos_weight': None,  # val > 0 to enable faster convergence under imbalanced class
+# 'tree_method': None,
+# 'objective': 'binary:logistic',
+# 'use_label_encoder': True,
+# 'base_score': None,
+# 'booster': None,
+# 'colsample_bylevel': None,
+# 'colsample_bynode': None,
+# 'gpu_id': None,
+# 'importance_type': 'gain',
+# 'interaction_constraints': None,
+# 'max_delta_step': None,
+# 'monotone_constraints': None,
+# 'n_jobs': None,
+# 'num_parallel_tree': None,

@@ -1,5 +1,6 @@
 import argparse
 import boto3
+import joblib
 import numpy as np
 import pandas as pd
 import pathlib
@@ -30,6 +31,8 @@ def get_args():
   parser.add_argument('--cohort', default='all', type=str)
   parser.add_argument('--holdout_test', '--os_test', default=False, action='store_true')
   parser.add_argument('--skip_o2m', default=[True, True, True], nargs=3, type=bool)  # train, val, test
+  parser.add_argument('--scaler', default='robust', type=str)
+  parser.add_argument('--scale_nonnumeric', default=False, action='store_true')
   parser.add_argument('--outcome', default=globals.NNT, type=str)
 
   # features -- demographics
@@ -60,6 +63,7 @@ def get_args():
   parser.add_argument('--models', nargs='+')  # [all, lgr, svc, knn, dt, rmf, xgb]
   parser.add_argument('--ensemble', nargs='+')
   parser.add_argument('--md_dir', '--model_dir', type=pathlib.Path)  # directory to load models / model params
+  parser.add_argument('--md_fnames', '--model_filenames', nargs='+')  # a list of model file names aligning with --models
   parser.add_argument('--save_dir', type=pathlib.Path)  # directory to save results (models, model perfs)
   parser.add_argument('--scorers', default=[], nargs='+')  # [acc, acc_err1, overpred, underpred, bal_acc]
   # TODO: Have an arg for filepath of model params?   arg for where results are saved?
@@ -68,6 +72,7 @@ def get_args():
   return args
 
 
+# Get historic & out-of-sample data file path
 def get_all_data_fp(args):
   if args.platform == 'aws':
     client = boto3.client('s3')
@@ -103,6 +108,7 @@ def get_all_data_fp(args):
   return dashb_fp, cpt_fp, ccsr_fp, med_fp, cpt_grp_fp, os_fp, os_cpt_fp, os_ccsr_fp, os_med_fp
 
 
+# Get Model abbr to a mapping of its hyperparameters (load from json)
 def get_model2params(args):
   model_dir = args.model_dir
   assert md != globals.ENSEMBLE_MAJ_EQ
@@ -112,9 +118,10 @@ def get_model2params(args):
   return params
 
 
+# Get decile feature mapping
+# TODO: Need to figure out a way to specify aggregation function on multiple decile features
 def load_decile_features(code_abbr, arg_ftrs, col2decile_ftrs2aggf):
   # NOTE: default aggregation function is 'max' for all decile-related features
-  # TODO: Need to figure out a way to specify aggregation function on multiple decile features
   if 'dcl' in arg_ftrs:
     col2decile_ftrs2aggf[code_abbr][f'{code_abbr}_DECILE'] = 'max'
   if 'cnt' in arg_ftrs:
@@ -133,7 +140,8 @@ def load_decile_features(code_abbr, arg_ftrs, col2decile_ftrs2aggf):
   return col2decile_ftrs2aggf
 
 
-def make_feature_cols(args):
+# Parse args to obtain feature-related args to preprocess & feature-engineer Dataset
+def make_feature_cols(args):  # TODO: make folder name here!
   feature_cols = []
   discretize_cols = []
   onehot_cols = []
@@ -220,6 +228,23 @@ def make_feature_cols(args):
   return feature_cols, col2decile_ftrs2aggf, onehot_cols, discretize_cols
 
 
+# Load pre-trained model
+def load_pretrained_model(args):
+  mds = set(args.models)
+  if len(mds - globals.ALL_MODELS) > 0:
+    raise NotImplementedError("Input model set contains a model that is not implemented yet!")
+
+  if len(mds) == 1:  # load a single sklearn model
+    model_fp = args.model_dir / (args.md_fnames[0] + '.joblib')
+    model = joblib.load(model_fp)
+  else:  # load an ensemble model
+    md2task2clf = defaultdict(lambda: defaultdict(list))
+    for md, md_filename in zip(args.models, args.md_fnames):
+      md2task2clf[md][globals.TASK_MULTI_CLF] = [joblib.load(args.model_dir /md_filename)]
+    model = Ensemble(tasks=[globals.TASK_MULTI_CLF], md2clfs=md2task2clf)
+  return model
+
+
 if __name__ == '__main__':
   # Get args
   args = get_args()
@@ -276,7 +301,7 @@ if __name__ == '__main__':
 
   # Save actual features, performance tables & best models, surgeon performance, (model_params) -- locally
   # TODO: Make a custom dir name for result_dir, based on features used -- or uuid?
-  result_dir = pathlib.Path(args.save_dir / '#Feature_abbr#')
+  result_dir = pathlib.Path(args.save_dir / '#Feature_abbr???#')
   result_dir.mkdir(parents=True, exist_ok=True)
   surg_perf.to_csv(result_dir / 'surgeon_perf_train.csv', index=False)
   perf_df.to_csv(result_dir / 'model&surg_perf_test.csv', index=False)
@@ -288,18 +313,25 @@ if __name__ == '__main__':
 
   # Hold-out Test
   if args.os_test:
-    # Load pretrained model / load selected model params & retrain
+    # Load pretrained model / load selected model params & retrain --- TODO
+
 
     # Retrain the best model on the full dataset, and then apply on test set
-    dataset = Dataset(dashb_df, args.outcome, feature_cols, col2decile_ftrs2aggf, onehot_cols,
+    hist_dataset = Dataset(dashb_df, args.outcome, feature_cols, col2decile_ftrs2aggf, onehot_cols,
                       test_pct=args.test_pct, discretize_cols=discretize_cols, cohort=args.cohort,
-                      remove_o2m=args.skip_o2m[:2])
+                      remove_o2m=args.skip_o2m[:2], scaler=args.scaler, scale_numeric_only=not args.scale_nonnumeric)
 
 
     os_df = dp.prepare_data(os_fp, os_cpt_fp, cpt_grp_fp, os_ccsr_fp, os_med_fp)
-    os_dataset = None
+    os_dataset = Dataset(os_df, args.outcome, feature_cols, col2decile_ftrs2aggf, onehot_cols,
+                        test_pct=1, discretize_cols=discretize_cols, cohort=args.cohort,
+                        decile_gen=hist_dataset.FeatureEngineer.decile_generator,
+                        target_features=hist_dataset.feature_names,
+                        remove_o2m=(False, hist_dataset.o2m_df_train),
+                        scaler=hist_dataset.input_scaler)
 
     # Predict on out-of-sample dataset
+
 
     # Surgeon prediction
 

@@ -188,7 +188,7 @@ class FeatureEngineeringModifier(object):
     #  .groupby('SURG_CASE_KEY').agg(decile_col2aggf).reset_index() --- This part removes all other cols but only kept decile_cols...
     print("[FtrEng-join_PPROC_decile] Input Xdf shape: ", Xdf.shape, "; Output Xdf shape: ", Xdf_ret.shape)
     if Xdf.shape[0] != Xdf_ret.shape[0]:
-      raise Warning("%d cases are discarded due to unseen primary procedure!" % (Xdf.shape[0] - Xdf_ret.shape[0]))
+      print("Warning: %d cases are discarded due to unseen primary procedure!" % (Xdf.shape[0] - Xdf_ret.shape[0]))
     return Xdf_ret
 
   # Note: column order should be taken care of after calling this function
@@ -277,7 +277,7 @@ class FeatureEngineeringModifier(object):
   def get_med_decile(self, level):
     assert isinstance(self.decile_generator, DecileGenerator), \
       "Field 'decile_generator' must be a DecileGenerator object!"
-    return self.decile_generator.med_level2decile[level]
+    return self.decile_generator.med_level2decile.get(level, None)
 
   def get_pproc_decile(self):
     assert isinstance(self.decile_generator, DecileGenerator), \

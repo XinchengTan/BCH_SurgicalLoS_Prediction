@@ -53,7 +53,8 @@ FEATURE_COLS = FEATURE_COLS_NO_WEIGHT + [WEIGHT_ZS] # , 'ICD10S'
 #FEATURE_COLS_PPROC_NO_WEIGHT_OLD = FEATURE_COLS_NO_WEIGHT + [PPROC_DECILE] # , 'ICD10S'
 
 FEATURE_COLS_NO_WEIGHT_STATE_LANG_INTERP = FEATURE_COLS_NO_WEIGHT + [STATE, LANGUAGE, INTERPRETER] # , 'ICD10S'
-FEATURE_COLS_NO_WEIGHT_ALLMEDS = FEATURE_COLS_NO_WEIGHT + DRUG_COLS + [STATE, LANGUAGE, INTERPRETER, REGION, PROBLEM_CNT]  # , 'ICD10S'
+FEATURE_COLS_NO_WEIGHT_ALLMEDS = FEATURE_COLS_NO_WEIGHT + DRUG_COLS + \
+                                 [STATE, LANGUAGE, INTERPRETER, REGION, PROBLEM_CNT, MILES]  # , 'ICD10S'
 
 FEATURE_COLS_NO_DECILE = ['SURG_CASE_KEY', GENDER, AGE, WEIGHT_ZS, CPTS, CPT_GROUPS, PRIMARY_PROC, CCSRS] + OS_CODES  # , 'ICD10S'
 
@@ -64,12 +65,12 @@ FEATURE_COLS_NO_OS_SPS = FEATURE_COLS_NO_OS + [SPS_PRED]
 
 # Default medical code to decile feature to aggregation function
 DEFAULT_COL2DECILE_FTR2AGGF = {
-  CPT: {CPT_DECILE: 'max'},
-  PPROC: {PPROC_DECILE: 'max'},
-  MED1: {MED1_DECILE: 'max'},
-  MED2: {MED2_DECILE: 'max'},
-  MED3: {MED3_DECILE: 'max'},
+  CPT: {CPT_DECILE: 'max', f'{CPT}_COUNT': 'max'},
+  PPROC: {PPROC_DECILE: 'max', f'{PPROC}_COUNT': 'max'},
+  MED3: {MED3_DECILE: 'max', f'{MED3}_COUNT': 'max'},
 }
+# MED1: {MED1_DECILE: 'max'},
+# MED2: {MED2_DECILE: 'max'},
 
 ONEHOT_COL2DTYPE = {
   PRIMARY_PROC: str,
@@ -80,6 +81,18 @@ ONEHOT_COL2DTYPE = {
   DRUG_COLS[1]: list,
   DRUG_COLS[2]: list,
 }
+
+# All possible numeric features:
+ALL_POSSIBLE_NUMERIC_COLS = [
+  AGE, WEIGHT_ZS, MILES, PROBLEM_CNT,
+  'PPROC_COUNT', 'CPT_COUNT', 'CPT_GROUP_COUNT', 'MED1_COUNT', 'MED2_COUNT', 'MED3_COUNT', 'CCSR_COUNT',
+  'PPROC_SD', 'CPT_SD', 'CPT_GROUP_SD', 'MED1_SD', 'MED2_SD', 'MED3_SD', 'CCSR_SD',
+  'PPROC_QT25', 'CPT_QT25', 'CPT_GROUP_QT25', 'MED1_QT25', 'MED2_QT25', 'MED3_QT25', 'CCSR_QT25',
+  'PPROC_QT75', 'CPT_QT75', 'CPT_GROUP_QT75', 'MED1_QT75', 'MED2_QT75', 'MED3_QT75', 'CCSR_QT75',
+  'PPROC_MIN', 'CPT_MIN', 'CPT_GROUP_MIN', 'MED1_MIN', 'MED2_MIN', 'MED3_MIN', 'CCSR_MIN',
+  'PPROC_MAX', 'CPT_MAX', 'CPT_GROUP_MAX', 'MED1_MAX', 'MED2_MAX', 'MED3_MAX', 'CCSR_MAX',
+]
+
 
 # Cohort labels
 COHORT_ALL = 'All Cases'
@@ -236,10 +249,14 @@ binclf2name = {LGR: "Logistic Regression",
 ALL_MODELS = set(clf2name.keys()).union(binclf2name.keys())
 
 # Tasks
+TASK_REG = 'reg'
+TASK_MULTI_CLF = 'multiclf'
+TASK_BIN_CLF = 'binclf'
+# todo: update the following 3 vars to the 3 above
 REG = 'reg'
 MULTI_CLF = 'multiclf'
 BIN_CLF = 'binclf'
-TASK2Name = {REG: "Regression", MULTI_CLF: "Multi-class classification", BIN_CLF: "Binary classification"}
+TASK2Name = {TASK_REG: "Regression", TASK_MULTI_CLF: "Multi-class classification", TASK_BIN_CLF: "Binary classification"}
 ALL_TASKS = set(TASK2Name.keys())
 
 # Ensemble weighting mechanism

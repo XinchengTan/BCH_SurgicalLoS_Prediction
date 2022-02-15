@@ -8,7 +8,7 @@ from imblearn.over_sampling import SMOTENC
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from time import time
 
 from . import globals
@@ -29,8 +29,9 @@ def gen_cohort_df(df, cohort):
 class Dataset(object):
 
   def __init__(self, df, outcome=globals.NNT, ftr_cols=globals.FEATURE_COLS, col2decile_ftrs2aggf=None,
-               onehot_cols=[], discretize_cols=None, decile_gen=None, test_pct=0.2, test_idxs=None,
-               cohort=globals.COHORT_ALL, trimmed_ccsr=None, target_features=None, remove_o2m=(True, True)):
+               onehot_cols=[], discretize_cols=None, test_pct=0.2, test_idxs=None, cohort=globals.COHORT_ALL,
+               trimmed_ccsr=None, target_features=None, decile_gen=None, remove_o2m=(True, True),
+               scaler=None, scale_numeric_only=True):
     # Check args
     assert all(oh in globals.ONEHOT_COL2DTYPE.keys() for oh in onehot_cols), \
       f'onehot_cols must be in {globals.ONEHOT_COL2DTYPE.keys()}!'
@@ -74,28 +75,58 @@ class Dataset(object):
     self.preprocess_train(outcome, ftr_cols, remove_o2m_train=remove_o2m[0])
     self.preprocess_test(outcome, ftr_cols, target_features, remove_o2m_test=remove_o2m[1])
 
-    # 4. Apply scaling (e.g. normalization)
+    # 4. Apply data matrix scaling (e.g. normalization, standardization)
+    self.input_scaler = scaler
+    self.scale_numeric_only = scale_numeric_only
+    if self.input_scaler is not None:
+      self.scale_Xtrain(how=scaler, only_numeric=self.scale_numeric_only)
+      self.scale_Xtest(scaler=self.input_scaler)
 
-  def normalize_train(self, how='norm'):  # ['norm', 'std', 'robust']  -- only normalize continuous / ordinal features
-    # TODO: finish me
-    pass
+  def scale_Xtrain(self, how='minmax', only_numeric=True):  # ['minmax', 'std', 'robust']  -- only normalize continuous / ordinal features
+    if self.train_df_raw is None or self.Xtrain.shape[0] == 0:
+      return self.Xtrain
+    if how == 'minmax':
+      scaler = MinMaxScaler()
+    elif how == 'std':
+      scaler = StandardScaler()
+    elif how == 'robust':
+      scaler = RobustScaler()
+    else:
+      raise NotImplementedError(f'Scaler {how} is not supported yet!')
 
-  def normalize_test(self):
+    if only_numeric:
+      numeric_colidxs = np.where(np.in1d(self.feature_names, globals.ALL_POSSIBLE_NUMERIC_COLS))[0]
+      self.Xtrain[:, numeric_colidxs] = scaler.fit_transform(self.Xtrain[:, numeric_colidxs])
+    else:
+      self.Xtrain = scaler.fit_transform(self.Xtrain)
+    self.input_scaler = scaler
+    return self.Xtrain
 
-    pass
+  def scale_Xtest(self, scaler=None):
+    if self.test_df_raw is None or self.Xtest.shape[0] == 0:
+      return self.Xtest
+    if scaler is None:
+      scaler = self.input_scaler
+    assert scaler is not None, 'Input scaler for Xtest cannot be None!'
+    if self.scale_numeric_only:
+      numeric_colidxs = np.where(np.in1d(self.feature_names, globals.ALL_POSSIBLE_NUMERIC_COLS))[0]
+      self.Xtest[:, numeric_colidxs] = scaler.fit_transform(self.Xtest[:, numeric_colidxs])
+    else:
+      self.Xtest = scaler.transform(self.Xtest)
+    return self.Xtest
 
   def preprocess_train(self, outcome, ftr_cols=globals.FEATURE_COLS, remove_o2m_train=True):
     # I. Preprocess training set
     if self.train_df_raw is not None:
       # Preprocess outcome values / SPS prediction in df
-      train_df = preprocess_y(self.train_df_raw, outcome)
+      train_df = preprocess_y(self.train_df_raw, outcome, inplace=False)
       if globals.SPS_PRED in train_df.columns:
         train_df = preprocess_y(train_df, outcome, sps_y=True)
 
       # Modify data matrix
       self.Xtrain, self.feature_names, self.train_case_keys, self.ytrain, self.o2m_df_train = preprocess_Xtrain(
         train_df, outcome, ftr_cols, self.FeatureEngineer, remove_o2m=remove_o2m_train)
-      self.train_cohort_df = self.train_df_raw[self.train_df_raw['SURG_CASE_KEY'].isin(self.train_case_keys)]
+      self.train_cohort_df = self.train_df_raw.set_index('SURG_CASE_KEY').loc[self.train_case_keys]
     else:
       self.Xtrain, self.ytrain, self.train_case_keys = np.array([]), np.array([]), np.array([])
       self.train_cohort_df = self.train_df_raw
@@ -123,7 +154,7 @@ class Dataset(object):
 
       self.Xtest, _, self.test_case_keys = preprocess_Xtest(test_df, self.feature_names, ftr_cols,
                                                             ftrEng=self.FeatureEngineer, skip_cases_df_or_fp=o2m_df)
-      self.test_cohort_df = test_df[test_df['SURG_CASE_KEY'].isin(self.test_case_keys)]
+      self.test_cohort_df = test_df.set_index('SURG_CASE_KEY').loc[self.test_case_keys]
       self.ytest = self.test_cohort_df[outcome]
     else:
       self.Xtest, self.ytest, self.test_case_keys = np.array([]), np.array([]), np.array([])
@@ -137,12 +168,14 @@ class Dataset(object):
     idxs = np.where(np.in1d(self.test_case_keys, query_case_keys))[0]
     return self.Xtest[idxs, :]
 
-  def get_surgeon_pred_by_case_key(self, query_case_keys):
+  def get_surgeon_pred_df_by_case_key(self, query_case_keys):
     if query_case_keys is None or len(query_case_keys) == 0:
       return pd.DataFrame(columns=['SURG_CASE_KEY', globals.SPS_PRED])
-    surg_df = self.df[['SURG_CASE_KEY', globals.SPS_PRED]]
-    surg_df = surg_df[(surg_df['SURG_CASE_KEY'].isin(query_case_keys)) & (surg_df[globals.SPS_PRED].notnull())]
+    surg_df = self.df[['SURG_CASE_KEY', globals.SPS_PRED, self.outcome]]\
+      .set_index('SURG_CASE_KEY').loc[query_case_keys].reset_index()
+    surg_df = surg_df[surg_df[globals.SPS_PRED].notnull()]
     preprocess_y(surg_df, self.outcome, True, inplace=True)
+    preprocess_y(surg_df, self.outcome, False, inplace=True)
     return surg_df
 
   def __str__(self):
@@ -177,6 +210,7 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
 
   # Add decile-related columns to Xdf
   Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
+  print("After adding decile cols: Xdf - ", Xdf.shape)
 
   # TODO: Handle NaNs?? -- handle weight nan here?
 
@@ -184,18 +218,19 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy()
   if remove_nonnumeric:
     Xdf.drop(columns=globals.NON_NUMERIC_COLS + [ftrEng.decile_outcome], inplace=True, errors='ignore')
-
+  print("After removing nonnumeric cols: Xdf - ", Xdf.shape)
   # Convert dataframe to numerical numpy matrix and save the corresponding features' names
   X = Xdf.to_numpy(dtype=np.float64)
   target_features = Xdf.columns.to_list()
 
   # Remove cases that have multiple possible outcomes
-  o2m_df, y = None, df[df['SURG_CASE_KEY'].isin(X_case_keys)][outcome].to_numpy()
+  o2m_df, y = None, df.set_index('SURG_CASE_KEY').loc[X_case_keys][outcome].to_numpy()
   if remove_o2m:
     s = time()
     o2m_df, X, X_case_keys, y = discard_o2m_cases_from_self(X, X_case_keys, y, target_features)  # training set
     print("Removing o2m cases from self took %d sec" % (time() - s))
     # TODO: ??? regenerate decile if o2m_df.shape[0] > 0
+  print('After removing o2m cases: X - ', X.shape)
 
   if verbose:
     display(pd.DataFrame(X, columns=target_features).head(20))
@@ -261,24 +296,28 @@ def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeri
 
 
 def get_df_by_case_keys(df, case_keys):
-  return df[df['SURG_CASE_KEY'].isin(case_keys)]
+  return df.set_index('SURG_CASE_KEY').loc[case_keys].reset_index()
 
 
 def preprocess_y(df: pd.DataFrame, outcome, sps_y=False, inplace=False):
   # Generate an outcome vector y with shape: (n_samples, )
   df = df.copy() if not inplace else df
-  y = df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[globals.SPS_PRED].to_numpy()
+
   if outcome == globals.LOS:
-    return y
+    return df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[globals.SPS_PRED].to_numpy()
   elif outcome == ">12h":
+    y = df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[globals.SPS_PRED].to_numpy()
     y[y > 0.5] = 1
     y[y <= 0.5] = 0
   elif outcome == ">1d":
+    y = df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[globals.SPS_PRED].to_numpy()
     y[y > 1] = 1
     y[y <= 1] = 0
   elif outcome == globals.NNT:
+    y = df[globals.NNT].to_numpy() if not sps_y else df[globals.SPS_PRED].to_numpy()
     y = gen_y_nnt(y)
   elif outcome.endswith("nnt"):
+    y = df[globals.NNT].to_numpy() if not sps_y else df[globals.SPS_PRED].to_numpy()
     cutoff = int(outcome.split("nnt")[0])
     y = gen_y_nnt_binary(y, cutoff)
   else:
@@ -297,6 +336,7 @@ def gen_y_nnt(y):
     y = y.to_numpy()
   elif not isinstance(y, np.ndarray):
     y = np.array(y)
+  y = np.round(y)
   y[y > globals.MAX_NNT] = globals.MAX_NNT + 1
   return y
 
@@ -375,8 +415,8 @@ def discard_o2m_cases_from_self(X, X_case_keys, y, features):
   o2m_idx = o2m_df.index.to_list()
   #print("One-to-many cases index: ", o2m_idx)
   print("#O2M cases: ", len(o2m_idx))
-  idxs = np.delete(np.arange(X.shape[0]), o2m_idx)
-  X, X_case_keys, y = X[idxs, :], X_case_keys[idxs], y[idxs]
+  keep_idxs = np.delete(np.arange(X.shape[0]), o2m_idx)
+  X, X_case_keys, y = X[keep_idxs, :], X_case_keys[keep_idxs], y[keep_idxs]
   return o2m_df.drop_duplicates(subset=features), X, X_case_keys, y
 
 
@@ -386,6 +426,7 @@ def gen_o2m_cases(X, y, features, unique=True, save_fp=None, X_case_keys=None):
   Xydf = pd.DataFrame(X, columns=features)
   Xydf['Outcome'] = y
   if X_case_keys is not None:
+    assert len(X_case_keys) == Xydf.shape[0], '[gen_o2m_cases] X_case_keys must align with X, y'
     Xydf.insert(loc=0, column='SURG_CASE_KEY', value=X_case_keys)
   dup_mask = Xydf.duplicated(subset=features, keep=False)
   Xydf_dup = Xydf[dup_mask]
