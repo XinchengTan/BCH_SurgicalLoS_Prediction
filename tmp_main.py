@@ -11,6 +11,8 @@ from xgboost import XGBClassifier
 
 import globals
 from c4_model_perf import MyScorer
+import c0_data_prepare as dp
+from c1_data_preprocessing import Dataset
 
 DATA_HOME = Path("../Data_new_all")
 DATA_DIR = Path("../Data_new_all/ModelInput")
@@ -30,7 +32,7 @@ def xgb_cv(Xtrain, ytrain, scorers, refit=globals.SCR_ACC, kfold=5):
     'min_child_weight': [0.1, 0.3, 1],
   }
   grid_search = GridSearchCV(estimator=clf, param_grid=param_space, scoring=scorers, cv=kfold,
-                             refit=refit, return_train_score=True, verbose=0)  # n_jobs=-1,
+                             refit=refit, return_train_score=True, verbose=0)  # TODO: n_jobs=-1 or other numbers?
   grid_search.fit(Xtrain, ytrain)
   return grid_search
 
@@ -65,9 +67,9 @@ if __name__ == '__main__':
   data_df = data_df.sample(frac=1).reset_index(drop=True)
 
   # Load dataset
-  data = dpp.Dataset(data_df, outcome=globals.NNT, ftr_cols=globals.FEATURE_COLS_NO_WEIGHT_ALLMEDS,
-                     col2decile_ftrs2aggf=globals.DEFAULT_COL2DECILE_FTR2AGGF,
-                     test_pct=0.2, discretize_cols=['AGE_AT_PROC_YRS'], scaler='robust')
+  data = Dataset(data_df, outcome=globals.NNT, ftr_cols=globals.FEATURE_COLS_NO_WEIGHT_ALLMEDS,
+                 col2decile_ftrs2aggf=globals.DEFAULT_COL2DECILE_FTR2AGGF,
+                 test_pct=0.2, discretize_cols=['AGE_AT_PROC_YRS'], scaler='robust')
   print('Loaded historic data')
 
   # Def scorers

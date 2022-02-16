@@ -61,26 +61,29 @@ def gender_eda(dashboard_df):
   plt.show()
 
 # ---------------------------------------- Language-Interpreter & NNT ----------------------------------------
-def language_interpreter_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, topK_freq='all', interpreter_cat=False):
+def language_interpreter_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, freq_range='all', interpreter_cat=False):
   df = dashb_df.copy()
   if interpreter_cat == True:
     df.loc[df[globals.INTERPRETER] == 'Y', globals.LANGUAGE] = 'Foreign & Need Interpreter'
     print('Interpreter Need value count: ', df.groupby(globals.INTERPRETER).size().to_dict())
 
   if interpreter_cat != 'bipart':
-    language_interpreter_eda_violinplot(df, outcome, preprocess_y, topK_freq)
+    language_interpreter_eda_violinplot(df, outcome, preprocess_y, freq_range)
   else:
-    print('Interpreter Need value count: ', df.groupby(globals.INTERPRETER).size().to_dict())
-    language_interpreter_eda_violinplot(df, outcome, preprocess_y, topK_freq,
-                                        f'Interpreter-needed Language vs {outcome}', True)
+    language_interpreter_eda_violinplot(
+      df, outcome, preprocess_y, freq_range,
+      f'Interpreter-needed Language vs {outcome} -- frequency ranking between {freq_range}', True)
 
 
 # Helper function for plotting
-def language_interpreter_eda_violinplot(df, outcome, preprocess_y, topK_freq, title=None, bipart=False):
+def language_interpreter_eda_violinplot(df, outcome, preprocess_y, freq_range, title=None, bipart=False):
   lang2cnt = df.groupby(globals.LANGUAGE).size().to_dict()
+  # print('Interpreter Need value count: ', df.groupby(globals.INTERPRETER).size().to_dict())
+  print('Language set (#languages = %d): ' % len(lang2cnt), lang2cnt.keys())
   lang_cnt_sorted = sorted(lang2cnt.items(), key=lambda x: x[1], reverse=True)
-  if topK_freq != 'all':
-    lang_cnt_sorted = lang_cnt_sorted[:topK_freq]
+  x_order = np.array([x[0] for x in lang_cnt_sorted])
+  if freq_range != 'all':
+    x_order = x_order[freq_range[0]:freq_range[1]]
     df = df.loc[df[globals.LANGUAGE].isin([x[0] for x in lang_cnt_sorted])]
   y = df[outcome]
   if preprocess_y:
@@ -100,10 +103,10 @@ def language_interpreter_eda_violinplot(df, outcome, preprocess_y, topK_freq, ti
   # English, Spanish, ...
   fig, ax = plt.subplots(1, 1, figsize=(16, 9))
   sns.violinplot(x=globals.LANGUAGE, data=df, y=outcome, hue=hue, hue_order=hue_order, split=split, ax=ax,
-                 order=[x[0] for x in lang_cnt_sorted], palette=palette)
+                 order=x_order, palette=palette)
   ax.set_xlabel('Language (with count)', fontsize=16)
   ax.set_ylabel('Number of Nights', fontsize=16)
-  title = f'Language vs {globals.NNT}' if title is None else title
+  title = f'Language vs {globals.NNT} -- frequency ranking between {freq_range}' if title is None else title
   ax.set_title(title, fontsize=18, y=1.01)
   ax.set_xticklabels(xticklabels, fontsize=13)
   ax.yaxis.set_tick_params(labelsize=13)
@@ -120,15 +123,41 @@ def major_region_eda(dashb_df, outcome=globals.NNT, preprocess_y=True):
 
   region2cnt = dashb_df[[globals.REGION]].groupby(globals.REGION).size().to_dict()
   region_type = [k for k in region2cnt.keys()]
-  cnt_pct = [region2cnt[k] / dashb_df.shape[0] for k in region_type]
 
   fig, ax = plt.subplots(1, 1, figsize=(12, 8))
-  sns.violinplot(dashb_df[globals.REGION], y, order=region_type, scale='width')  # , widths=cnt_pct
+  sns.violinplot(x=dashb_df[globals.REGION], y=y, order=region_type)  # , scale='width'
   ax.set_xlabel('Major Region', fontsize=16)
   ax.set_ylabel('Number of Nights', fontsize=16)
   ax.set_title('NNT vs. Major Region', fontsize=18, y=1.01)
   ax.set_ylim([-1, 7])
   ax.set_xticklabels([f'{k}\n$n$={region2cnt[k]}' for k in region_type], fontsize=13)
+  plt.show()
+
+
+def state_code_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, freq_range='all'):
+  # print('State code count: ', dashb_df.groupby(globals.STATE).size().to_dict())
+  df = dashb_df.copy()  # df = dashb_df[dashb_df[globals.STATE] != '0']
+  state2cnt = df.groupby(globals.STATE).size().to_dict()
+  state_cnt_sorted = sorted(state2cnt.items(), key=lambda x: x[1], reverse=True)
+  x_order = np.array([x[0] for x in state_cnt_sorted])
+  # print('State code set (#codes = %d): ' % len(state2cnt), state2cnt.keys())
+  if freq_range != 'all':
+    x_order = x_order[freq_range[0]:freq_range[1]]
+    df = df.loc[df[globals.STATE].isin([x for x in x_order])]
+  y = df[outcome].to_numpy()
+  if preprocess_y:
+    y[y > globals.MAX_NNT] = globals.MAX_NNT + 1
+    df[outcome] = y
+
+  fig, ax = plt.subplots(1, 1, figsize=(18, 9))
+  sns.violinplot(data=df, x=globals.STATE, y=outcome, order=x_order)
+  ax.set_xlabel('State Code (with count)', fontsize=16)
+  ax.set_ylabel('Number of Nights', fontsize=16)
+  ax.set_title(f'State Code vs {globals.NNT} -- frequency ranking between {freq_range}', fontsize=18, y=1.01)
+  ax.set_ylim([-1, 7])
+  ax.set_xticklabels([f'{k} ({state2cnt[k]})' for k in x_order], fontsize=13)
+  ax.yaxis.set_tick_params(labelsize=13)
+  fig.autofmt_xdate(rotation=45)
   plt.show()
 
 
