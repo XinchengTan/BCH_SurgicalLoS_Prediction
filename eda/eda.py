@@ -134,6 +134,7 @@ def major_region_eda(dashb_df, outcome=globals.NNT, preprocess_y=True):
   plt.show()
 
 
+# ---------------------------------------- State Code & NNT ----------------------------------------
 def state_code_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, freq_range='all'):
   # print('State code count: ', dashb_df.groupby(globals.STATE).size().to_dict())
   df = dashb_df.copy()  # df = dashb_df[dashb_df[globals.STATE] != '0']
@@ -181,7 +182,6 @@ def miles_traveled_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, violin=
   ax.set_title('NNT vs. Miles traveled', fontsize=18)
 
   plt.show()
-
 
 
 # ---------------------------------------- Organ System Code ----------------------------------------
