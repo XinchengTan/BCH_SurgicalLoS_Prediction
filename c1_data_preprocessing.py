@@ -1,8 +1,6 @@
 """
 Helper functions to preprocess the data and generate data matrix with its corresponding labels
 """
-from collections import Counter
-
 from IPython.display import display
 from imblearn.over_sampling import SMOTENC
 import numpy as np
@@ -11,9 +9,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from time import time
 
-from . import globals
-from . import c0_data_prepare as dp
-from .c7_feature_engineering import FeatureEngineeringModifier, DecileGenerator
+import globals
+from c7_feature_engineering import FeatureEngineeringModifier, DecileGenerator
 
 
 def gen_cohort_df(df, cohort):

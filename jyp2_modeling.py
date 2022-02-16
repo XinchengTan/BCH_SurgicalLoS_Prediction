@@ -53,13 +53,13 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, Grad
 from statsmodels.miscmodels.ordinal_model import OrderedModel
 from xgboost import XGBClassifier
 
-from . import globals, jyp4_model_eval, c6_surgeon, utils
-from . import c1_data_preprocessing as dpp
-from .c1_data_preprocessing import Dataset
-from .jyp4_model_eval import ModelPerf
-from .c3_ensemble import Ensemble
-from .c8_models import OrdinalClassifier
-from . import utils_plot as pltutil
+import globals, jyp4_model_eval, c6_surgeon, utils
+import c1_data_preprocessing as dpp
+from c1_data_preprocessing import Dataset
+from jyp4_model_eval import ModelPerf
+from c3_ensemble import Ensemble
+from c8_models import OrdinalClassifier
+import utils_plot as pltutil
 
 
 class AllModels(object):
@@ -264,14 +264,14 @@ def run_classifier_cv(X, y, md, scorer, class_weight=None, kfold=5):
   # Define scorer
   refit = True
   if scorer == globals.SCR_ACC_ERR1:
-    scorer = make_scorer(c4_model_eval.MyScorer.scorer_1nnt_tol, greater_is_better=True)
+    scorer = make_scorer(jyp4_model_eval.MyScorer.scorer_1nnt_tol, greater_is_better=True)
   elif scorer == globals.SCR_1NNT_TOL_ACC:
     scorer = {globals.SCR_ACC: globals.SCR_ACC,
-              globals.SCR_ACC_ERR1: make_scorer(c4_model_eval.MyScorer.scorer_1nnt_tol, greater_is_better=True)}
+              globals.SCR_ACC_ERR1: make_scorer(jyp4_model_eval.MyScorer.scorer_1nnt_tol, greater_is_better=True)}
     refit = globals.SCR_ACC_ERR1
   elif scorer == globals.SCR_MULTI_ALL:
     scorer = {globals.SCR_ACC: globals.SCR_ACC, globals.SCR_AUC: globals.SCR_AUC,
-              globals.SCR_ACC_ERR1: make_scorer(c4_model_eval.MyScorer.scorer_1nnt_tol, greater_is_better=True)}
+              globals.SCR_ACC_ERR1: make_scorer(jyp4_model_eval.MyScorer.scorer_1nnt_tol, greater_is_better=True)}
     refit = globals.SCR_AUC
 
   # For each parameter, iterate through its param grid
@@ -296,11 +296,11 @@ def predict_nnt_regression_rounding(dataset: Dataset, model=None):
     for md, md_name in globals.reg2name.items():
       reg = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=md, eval=True)
       model2trained[md] = reg
-      c4_model_eval.eval_nnt_regressor(reg, dataset, md_name)
+      jyp4_model_eval.eval_nnt_regressor(reg, dataset, md_name)
   else:
     reg = run_regression_model(Xtrain, ytrain, Xtest, ytest, model=model)
     model2trained[model] = reg
-    c4_model_eval.eval_nnt_regressor(reg, dataset, md_name=globals.reg2name[model])
+    jyp4_model_eval.eval_nnt_regressor(reg, dataset, md_name=globals.reg2name[model])
 
   return model2trained
 
@@ -368,19 +368,19 @@ def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType, cohor
   for md, clf in model2trained_clf.items():
 
     if XType is None:  # evaluate both training and test set
-      md2ModelPerf[md][globals.XTRAIN] = c4_model_eval.eval_multiclf_on_Xy(clf, dataset.train_cohort_df, Xtrain, ytrain,
+      md2ModelPerf[md][globals.XTRAIN] = jyp4_model_eval.eval_multiclf_on_Xy(clf, dataset.train_cohort_df, Xtrain, ytrain,
                                                                            globals.clf2name_eval[md], globals.XTRAIN,
                                                                            cohort=cohort, plot=plot)
-      md2ModelPerf[md][globals.XTEST] = c4_model_eval.eval_multiclf_on_Xy(clf, dataset.test_cohort_df, Xtest, ytest,
+      md2ModelPerf[md][globals.XTEST] = jyp4_model_eval.eval_multiclf_on_Xy(clf, dataset.test_cohort_df, Xtest, ytest,
                                                                           globals.clf2name_eval[md], globals.XTEST,
                                                                           cohort=cohort, plot=plot)
 
     elif XType == globals.XTRAIN:
-      md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(clf, dataset.train_cohort_df, Xtrain, ytrain,
+      md2ModelPerf[md][XType] = jyp4_model_eval.eval_multiclf_on_Xy(clf, dataset.train_cohort_df, Xtrain, ytrain,
                                                                   globals.clf2name_eval[md], XType, cohort=cohort, plot=plot)
 
     elif XType == globals.XTEST:
-      md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(clf, dataset.test_cohort_df, Xtest, ytest,
+      md2ModelPerf[md][XType] = jyp4_model_eval.eval_multiclf_on_Xy(clf, dataset.test_cohort_df, Xtest, ytest,
                                                                   globals.clf2name_eval[md], XType, cohort=cohort, plot=plot)
 
     elif XType == globals.XAGREE:
@@ -389,7 +389,7 @@ def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType, cohor
         data_df, Xdata, ydata = c6_surgeon.gen_surgeon_model_agree_df_and_Xydata(dataset, clf, use_test=True)
       else:
         data_df, Xdata, ydata = dataset.test_cohort_df, Xtest, ytest
-      md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+      md2ModelPerf[md][XType] = jyp4_model_eval.eval_multiclf_on_Xy(
         clf, data_df, Xdata, ydata, globals.clf2name_eval[md], XType, cohort=cohort, pop_size=N, plot=plot)
 
     else:  # focus on the sample where surgeon and model disagree
@@ -398,9 +398,9 @@ def performance_eval_multiclfs(dataset: Dataset, model2trained_clf, XType, cohor
         if md != globals.SURGEON:
           data_df, Xdata, ydata = c6_surgeon.gen_surgeon_model_disagree_df_and_Xydata(
             dataset, clf, use_test=True, diff=xtype2diff[XType])
-          md2ModelPerf[md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+          md2ModelPerf[md][XType] = jyp4_model_eval.eval_multiclf_on_Xy(
             clf, data_df, Xdata, ydata, globals.clf2name_eval[md], XType, cohort=cohort, pop_size=N, plot=plot)
-          md2SurgeonPerf_disagree[md][XType] = c4_model_eval.eval_multiclf_on_Xy(
+          md2SurgeonPerf_disagree[md][XType] = jyp4_model_eval.eval_multiclf_on_Xy(
             None, data_df, Xdata, ydata, globals.clf2name_eval[globals.SURGEON], XType, cohort=cohort, pop_size=N, plot=plot)
       else:
         raise NotImplementedError("XType '%s' is not implemented yet!" % XType)
@@ -561,7 +561,7 @@ def predict_nnt_binary_clf(dataset: Dataset, cutoffs, metric=None, model=None, c
       cutoff2clf[cutoff] = clf
 
       # Evaluate model
-      c4_model_eval.eval_binary_clf(clf, cutoff, dataset, globals.binclf2name[model], metric=metric,
+      jyp4_model_eval.eval_binary_clf(clf, cutoff, dataset, globals.binclf2name[model], metric=metric,
                                     plot_roc=False, axs=[axs[(cutoff-1)//4][(cutoff-1)%4], axs[2+(cutoff-1)//4][(cutoff-1)%4]])
 
       # Generate feature importance
@@ -606,7 +606,7 @@ def run_all_eval_binclf(dataset, clf_cutoffs, model2binclfs, metric=None, plot_c
       dataset.ytest = dpp.gen_y_nnt_binary(ytest, cutoff)
       # Evaluate model
       confmat_axs = [md2confaxs[md][1][cutoff//4][cutoff%4], md2confaxs[md][1][2+cutoff//4][cutoff%4]]
-      pred_train, pred_test, ix = c4_model_eval.eval_binary_clf(clf, cutoff, dataset, md_name,
+      pred_train, pred_test, ix = jyp4_model_eval.eval_binary_clf(clf, cutoff, dataset, md_name,
                                                                 metric=metric, plot_roc=False, axs=confmat_axs)
       # # Generate feature importance
       # model_eval.gen_feature_importance_bin_clf(clf, md, Xtest, dataset.ytest, cutoff=cutoff)

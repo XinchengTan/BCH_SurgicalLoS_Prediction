@@ -14,8 +14,8 @@ from sklearn.metrics import accuracy_score, balanced_accuracy_score, make_scorer
 # from xgboost import XGBClassifier
 import shap
 
-from . import globals
-from .c1_data_preprocessing import Dataset
+import globals
+from c1_data_preprocessing import Dataset
 
 
 class MyScorer:

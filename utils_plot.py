@@ -7,7 +7,7 @@ import numpy as np
 import networkx as nx
 from sklearn import metrics
 
-from . import globals
+import globals
 
 
 def plot_learning_curve(gs, x_param_name, x_params, md, scorers):

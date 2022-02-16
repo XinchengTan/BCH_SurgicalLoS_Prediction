@@ -4,10 +4,9 @@ Definitions of ensemble models
 from typing import Dict, List, AnyStr
 import numpy as np
 import pandas as pd
-from sklearn.utils.validation import check_is_fitted
 from sklearn.metrics import accuracy_score
 
-from . import globals
+import globals
 
 
 # # This function tries to ensemble all binary classifiers into 1 prediction

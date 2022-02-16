@@ -13,10 +13,10 @@ from sklearn.metrics import make_scorer
 from sklearn.calibration import calibration_curve
 from sklearn.inspection import permutation_importance
 
-from . import globals
-from . import utils_plot as pltutil
-from . import c1_data_preprocessing as dpp
-from .c1_data_preprocessing import Dataset
+import c1_data_preprocessing as dpp
+from c1_data_preprocessing import Dataset
+import globals
+import utils_plot as pltutil
 
 
 @dataclass

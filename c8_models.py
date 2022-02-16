@@ -17,8 +17,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, GradientBoostingRegressor
 from xgboost import XGBClassifier
 
-from . import globals
-from .c4_model_perf import MyScorer
+import globals
 
 
 try:

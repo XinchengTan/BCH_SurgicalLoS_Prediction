@@ -8,8 +8,8 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from . import globals
-from .c1_data_preprocessing import Dataset
+import globals
+from c1_data_preprocessing import Dataset
 
 
 # Generate k dataset objects for k-fold cross validation

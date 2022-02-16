@@ -10,7 +10,7 @@ import pandas as pd
 import pickle
 import warnings
 
-from . import c1_data_preprocessing as dpp
+import c1_data_preprocessing as dpp
 
 
 # Generate a list of (unique) cases that have at least one identical case with a different outcome

@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from .. import globals
+import globals
 
 
 def med_category_vs_los(df: pd.DataFrame, level, level_decile: pd.DataFrame, freq_range=(0, 20), outcome=globals.LOS,

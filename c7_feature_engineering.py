@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-from . import globals
+import globals
 
 
 class FeatureEngineeringModifier(object):
@@ -359,7 +359,7 @@ class DecileGenerator(object):
     return pproc_decile
 
   def gen_ccsr_decile(self, data_df: pd.DataFrame, outcome=globals.LOS, save_fp=None):
-
+    # TODO: finish this!!
     pass
 
   def gen_cpt_decile(self, data_df: pd.DataFrame, outcome=globals.LOS, save_fp=None):

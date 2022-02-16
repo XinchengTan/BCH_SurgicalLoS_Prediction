@@ -9,11 +9,11 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from ..globals import diaglabels, DELTA
-from .. import globals
-from ..c1_data_preprocessing import preprocess_y
-from .. import utils_plot
-from .. import utils
+from globals import diaglabels, DELTA
+import globals
+from c1_data_preprocessing import preprocess_y
+import utils_plot
+import utils
 
 
 # -------------------------------------------- LOS --------------------------------------------

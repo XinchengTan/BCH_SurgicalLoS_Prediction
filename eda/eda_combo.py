@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from globals import diaglabels
-from .. import utils_plot
+import utils_plot
 
 
 def gen_cooccurrence_graph(dashboard_df, diagcode_type='OS', threshold=500):

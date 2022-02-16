@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from .. import globals
+import globals
 
 
 def pproc_cohort_ccsr_eda(ppcc_df, topK_ccsr=10, cohort=globals.COHORT_TO_PPROCS):

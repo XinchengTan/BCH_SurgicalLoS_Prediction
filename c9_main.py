@@ -8,13 +8,13 @@ import warnings
 
 from collections import defaultdict
 
-from . import globals, c6_surgeon, utils
-from . import c0_data_prepare as dp, c1_data_preprocessing as dpp
-from .c1_data_preprocessing import Dataset
-from .c3_ensemble import Ensemble
-from .c4_model_perf import *
-from .c7_feature_engineering import FeatureEngineeringModifier, DecileGenerator
-from .c8_models import *
+import globals, utils
+import c0_data_prepare as dp
+from c1_data_preprocessing import Dataset
+from c3_ensemble import Ensemble
+from c4_model_perf import *
+from c7_feature_engineering import FeatureEngineeringModifier, DecileGenerator
+from c8_models import *
 
 
 ### Goal: hyper parameter tuning for models with different feature sets

@@ -1,16 +1,16 @@
 """
 These functions makes predictions of all input trained models on the given dataset
 """
-
 import numpy as np
 import pandas as pd
-from . import c1_data_preprocessing as dpp
-from . import c2_modeling
-from . import globals
+import c1_data_preprocessing as dpp
+import jyp2_modeling
+import globals
 
 
-# TODO: Fix this with the updated Dataset object
-def gen_all_model_predictions(dataset: dpp.Dataset, all_models: c2_modeling.AllModels, from_train=False, subset_size=30):
+# TODO: Fix this with the updated Dataset object!!!
+@DeprecationWarning
+def gen_all_model_predictions(dataset: dpp.Dataset, all_models: jyp2_modeling.AllModels, from_train=False, subset_size=30):
   """
   Makes prediction for a subset of cases from using all models.
 

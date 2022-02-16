@@ -6,7 +6,7 @@ import seaborn as sn
 import hvplot
 import panel as pn
 
-from .. import globals
+import globals
 
 
 

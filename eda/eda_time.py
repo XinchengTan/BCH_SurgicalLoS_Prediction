@@ -5,7 +5,7 @@ such as time of admission, discharge, end of surgery, actual start (wheel-in), a
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .. import globals
+import globals
 
 
 # ---------------------------------- Patient hospital event time of day ----------------------------------
