@@ -10,7 +10,7 @@ from sklearn.model_selection import GridSearchCV
 from xgboost import XGBClassifier
 
 import globals
-from c5_model_perf import MyScorer
+from c4_model_perf import MyScorer
 
 DATA_HOME = Path("../Data_new_all")
 DATA_DIR = Path("../Data_new_all/ModelInput")

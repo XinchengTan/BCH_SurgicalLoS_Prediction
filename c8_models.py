@@ -18,7 +18,7 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier,
 from xgboost import XGBClassifier
 
 from . import globals
-from .c5_model_perf import MyScorer
+from .c4_model_perf import MyScorer
 
 
 try:

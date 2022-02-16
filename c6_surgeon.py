@@ -7,7 +7,7 @@ from sklearn import metrics
 
 from . import c1_data_preprocessing as dpp
 from . import utils_plot as pltutil
-from . import globals, c4_model_eval
+from . import globals, jyp4_model_eval
 
 
 def surgeon_model_agree_cases_eval(dataset: dpp.Dataset, md2multiclf, md, agree_nnt_diff):

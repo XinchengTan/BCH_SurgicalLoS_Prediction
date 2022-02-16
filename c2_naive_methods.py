@@ -6,7 +6,7 @@ from typing import List
 
 from .c1_data_preprocessing import Dataset
 from . import globals
-from . import c4_model_eval as model_eval
+from . import jyp4_model_eval as model_eval
 
 
 def gen_pproc_decile(train_df, decile_outcome=globals.LOS):

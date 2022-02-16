@@ -12,7 +12,7 @@ from . import globals, c6_surgeon, utils
 from . import c0_data_prepare as dp, c1_data_preprocessing as dpp
 from .c1_data_preprocessing import Dataset
 from .c3_ensemble import Ensemble
-from .c5_model_perf import *
+from .c4_model_perf import *
 from .c7_feature_engineering import FeatureEngineeringModifier, DecileGenerator
 from .c8_models import *
 

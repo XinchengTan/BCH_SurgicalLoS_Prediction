@@ -53,10 +53,10 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, Grad
 from statsmodels.miscmodels.ordinal_model import OrderedModel
 from xgboost import XGBClassifier
 
-from . import globals, c4_model_eval, c6_surgeon, utils
+from . import globals, jyp4_model_eval, c6_surgeon, utils
 from . import c1_data_preprocessing as dpp
 from .c1_data_preprocessing import Dataset
-from .c4_model_eval import ModelPerf
+from .jyp4_model_eval import ModelPerf
 from .c3_ensemble import Ensemble
 from .c8_models import OrdinalClassifier
 from . import utils_plot as pltutil

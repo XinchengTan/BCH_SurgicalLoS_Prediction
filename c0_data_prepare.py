@@ -10,7 +10,7 @@ import seaborn as sn
 from pathlib import Path, PosixPath
 from sklearn import metrics
 
-from . import globals, c4_model_eval
+from . import globals, jyp4_model_eval
 from . import c1_data_preprocessing as dpp
 from . import utils_plot as pltutil
 

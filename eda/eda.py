@@ -66,36 +66,46 @@ def language_interpreter_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, t
   if interpreter_cat == True:
     df.loc[df[globals.INTERPRETER] == 'Y', globals.LANGUAGE] = 'Foreign & Need Interpreter'
     print('Interpreter Need value count: ', df.groupby(globals.INTERPRETER).size().to_dict())
-  language_interpreter_eda_violinplot(df, outcome, topK_freq)
 
-  if interpreter_cat == 'separate':
+  if interpreter_cat != 'bipart':
+    language_interpreter_eda_violinplot(df, outcome, preprocess_y, topK_freq)
+  else:
     print('Interpreter Need value count: ', df.groupby(globals.INTERPRETER).size().to_dict())
-    df = dashb_df.loc[dashb_df[globals.INTERPRETER] == 'Y']
-    language_interpreter_eda_violinplot(df, outcome, topK_freq, f'Interpreter-needed Language vs {outcome}')
+    language_interpreter_eda_violinplot(df, outcome, preprocess_y, topK_freq,
+                                        f'Interpreter-needed Language vs {outcome}', True)
 
 
 # Helper function for plotting
-def language_interpreter_eda_violinplot(df, outcome, topK_freq, title=None):
+def language_interpreter_eda_violinplot(df, outcome, preprocess_y, topK_freq, title=None, bipart=False):
   lang2cnt = df.groupby(globals.LANGUAGE).size().to_dict()
   lang_cnt_sorted = sorted(lang2cnt.items(), key=lambda x: x[1], reverse=True)
-  lang_col = df[globals.LANGUAGE]
   if topK_freq != 'all':
     lang_cnt_sorted = lang_cnt_sorted[:topK_freq]
-    lang_df = df.loc[df[globals.LANGUAGE].isin([x[0] for x in lang_cnt_sorted])]
-    lang_col, y = lang_df[globals.LANGUAGE], lang_df[outcome]
-  else:
-    y = df[outcome]
+    df = df.loc[df[globals.LANGUAGE].isin([x[0] for x in lang_cnt_sorted])]
+  y = df[outcome]
   if preprocess_y:
     y[y > globals.MAX_NNT] = globals.MAX_NNT + 1
+    df[outcome] = y
+  hue, hue_order, split, palette, xticklabels = None, None, False, None, [f'{x[0]} ({x[1]})' for x in lang_cnt_sorted]
+  if bipart:
+    df = df[df[globals.INTERPRETER].isin(['N', 'Y'])]
+    df.loc[(df[globals.INTERPRETER] == 'N'), globals.INTERPRETER] = False
+    df.loc[(df[globals.INTERPRETER] == 'Y'), globals.INTERPRETER] = True
+    hue, hue_order, split, palette = globals.INTERPRETER, [True, False], True, {True: 'cornflowerblue', False: 'salmon'}
+    lang_cnt_sorted_interTrue = defaultdict(int)
+    lang_cnt_sorted_interTrue.update(df[df[globals.INTERPRETER]].groupby(globals.LANGUAGE).size().to_dict())
+    xticklabels = [f'{x[0]} {lang_cnt_sorted_interTrue[x[0]], x[1]-lang_cnt_sorted_interTrue[x[0]]}'
+                   for x in lang_cnt_sorted]
 
   # English, Spanish, ...
   fig, ax = plt.subplots(1, 1, figsize=(16, 9))
-  sns.violinplot(lang_col, y, ax=ax, order=[x[0] for x in lang_cnt_sorted])
+  sns.violinplot(x=globals.LANGUAGE, data=df, y=outcome, hue=hue, hue_order=hue_order, split=split, ax=ax,
+                 order=[x[0] for x in lang_cnt_sorted], palette=palette)
   ax.set_xlabel('Language (with count)', fontsize=16)
   ax.set_ylabel('Number of Nights', fontsize=16)
   title = f'Language vs {globals.NNT}' if title is None else title
   ax.set_title(title, fontsize=18, y=1.01)
-  ax.set_xticklabels([f'{x[0]} ({x[1]})' for x in lang_cnt_sorted], fontsize=13)
+  ax.set_xticklabels(xticklabels, fontsize=13)
   ax.yaxis.set_tick_params(labelsize=13)
   fig.autofmt_xdate(rotation=45)
   plt.show()
