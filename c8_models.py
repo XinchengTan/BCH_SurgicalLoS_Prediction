@@ -169,16 +169,16 @@ def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search
     if n_frts > 500:
       colsample_bytree_range = np.arange(0.3, 0.9, 0.1)
     else:
-      colsample_bytree_range = np.arange(0.8, 1, 0.05)
+      colsample_bytree_range = np.arange(0.8, 1.01, 0.05)
     # ?? define objective?? multi:softmax ???
     param_space = {
-      'n_estimators': np.arange(50, 501, 50),
+      'n_estimators': np.arange(50, 301, 50),
       'learning_rate': [0.01, 0.03, 0.06, 0.1, 0.2, 0.3],
       'subsample': np.arange(0.8, 1.01, 0.05),
       'colsample_bytree': colsample_bytree_range,
       'max_depth': [3, 4, 5, 6, 7],
-      'gamma': [0, 0.1, 0.3, 1, 2, 3, 5],
-      'min_child_weight': [0.1, 0.3, 0.6, 1, 1.5, 2],
+      'gamma': [0, 0.1, 0.3, 1, 3, 5],
+      'min_child_weight': [0.1, 0.3, 0.6, 1, 2],
     }
   else:
     raise NotImplementedError("Model %s is not supported!" % md)
@@ -186,6 +186,7 @@ def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search
   # Use GridSearchCV for hyperparameter tuning
   grid_search = GridSearchCV(estimator=clf, param_grid=param_space, scoring=scorers, cv=kfold, n_jobs=-1,
                              refit=refit, return_train_score=True, verbose=0)  # TODO: n_jobs??
+  grid_search.fit(X, y)
   return grid_search
 
 ## XGB other params:

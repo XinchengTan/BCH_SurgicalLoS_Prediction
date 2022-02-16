@@ -7,9 +7,11 @@ from collections import defaultdict, Counter
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 
 from ..globals import diaglabels, DELTA
 from .. import globals
+from ..c1_data_preprocessing import preprocess_y
 from .. import utils_plot
 from .. import utils
 
@@ -57,6 +59,90 @@ def gender_eda(dashboard_df):
 
   plt.legend()
   plt.show()
+
+# ---------------------------------------- Language-Interpreter & NNT ----------------------------------------
+def language_interpreter_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, topK_freq='all', interpreter_cat=False):
+  df = dashb_df.copy()
+  if interpreter_cat == True:
+    df.loc[df[globals.INTERPRETER] == 'Y', globals.LANGUAGE] = 'Foreign & Need Interpreter'
+    print('Interpreter Need value count: ', df.groupby(globals.INTERPRETER).size().to_dict())
+  language_interpreter_eda_violinplot(df, outcome, topK_freq)
+
+  if interpreter_cat == 'separate':
+    print('Interpreter Need value count: ', df.groupby(globals.INTERPRETER).size().to_dict())
+    df = dashb_df.loc[dashb_df[globals.INTERPRETER] == 'Y']
+    language_interpreter_eda_violinplot(df, outcome, topK_freq, f'Interpreter-needed Language vs {outcome}')
+
+
+# Helper function for plotting
+def language_interpreter_eda_violinplot(df, outcome, topK_freq, title=None):
+  lang2cnt = df.groupby(globals.LANGUAGE).size().to_dict()
+  lang_cnt_sorted = sorted(lang2cnt.items(), key=lambda x: x[1], reverse=True)
+  lang_col = df[globals.LANGUAGE]
+  if topK_freq != 'all':
+    lang_cnt_sorted = lang_cnt_sorted[:topK_freq]
+    lang_df = df.loc[df[globals.LANGUAGE].isin([x[0] for x in lang_cnt_sorted])]
+    lang_col, y = lang_df[globals.LANGUAGE], lang_df[outcome]
+  else:
+    y = df[outcome]
+  if preprocess_y:
+    y[y > globals.MAX_NNT] = globals.MAX_NNT + 1
+
+  # English, Spanish, ...
+  fig, ax = plt.subplots(1, 1, figsize=(16, 9))
+  sns.violinplot(lang_col, y, ax=ax, order=[x[0] for x in lang_cnt_sorted])
+  ax.set_xlabel('Language (with count)', fontsize=16)
+  ax.set_ylabel('Number of Nights', fontsize=16)
+  title = f'Language vs {globals.NNT}' if title is None else title
+  ax.set_title(title, fontsize=18, y=1.01)
+  ax.set_xticklabels([f'{x[0]} ({x[1]})' for x in lang_cnt_sorted], fontsize=13)
+  ax.yaxis.set_tick_params(labelsize=13)
+  fig.autofmt_xdate(rotation=45)
+  plt.show()
+
+
+# ---------------------------------------- Major Region & NNT ----------------------------------------
+# Major region VS NNT boxplot
+def major_region_eda(dashb_df, outcome=globals.NNT, preprocess_y=True):
+  y = dashb_df[outcome].to_numpy()
+  if preprocess_y:
+    y[y > globals.MAX_NNT] = globals.MAX_NNT + 1
+
+  region2cnt = dashb_df[[globals.REGION]].groupby(globals.REGION).size().to_dict()
+  region_type = [k for k in region2cnt.keys()]
+  cnt_pct = [region2cnt[k] / dashb_df.shape[0] for k in region_type]
+
+  fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+  sns.violinplot(dashb_df[globals.REGION], y, order=region_type, scale='width')  # , widths=cnt_pct
+  ax.set_xlabel('Major Region', fontsize=16)
+  ax.set_ylabel('Number of Nights', fontsize=16)
+  ax.set_title('NNT vs. Major Region', fontsize=18, y=1.01)
+  ax.set_ylim([-1, 7])
+  ax.set_xticklabels([f'{k}\n$n$={region2cnt[k]}' for k in region_type], fontsize=13)
+  plt.show()
+
+
+# ---------------------------------------- Miles Traveled & NNT ----------------------------------------
+def miles_traveled_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, violin=True):
+  fig, ax = plt.subplots(1, 1, figsize=(12, 9))
+  ax.set_xlim([0, 1000])
+  ax.set_ylim([-1, 40])
+  outy = dashb_df[outcome]
+  if preprocess_y:
+    outy[outy > globals.MAX_NNT] = globals.MAX_NNT + 1
+    ax.set_ylim([-1, 10])
+
+  if violin:
+    sns.violinplot(y=outy, x=dashb_df[globals.MILES], orient='h')
+    ax.set_xlim([-20, 500])
+  else:
+    ax.scatter(dashb_df[globals.MILES], outy)
+  ax.set_xlabel('Miles traveled', fontsize=16)
+  ax.set_ylabel('Number of Bed Nights', fontsize=16)
+  ax.set_title('NNT vs. Miles traveled', fontsize=18)
+
+  plt.show()
+
 
 
 # ---------------------------------------- Organ System Code ----------------------------------------

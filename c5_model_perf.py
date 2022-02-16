@@ -58,13 +58,13 @@ class MyScorer:
     return acc_1nnt_tol
 
   @staticmethod
-  def scorer_overpred_pct(ytrue, ypred, diff=2):
-    overpred_pct = len(np.where((ypred - ytrue) > diff)[0]) / len(ytrue)
+  def scorer_overpred_pct(ytrue, ypred):
+    overpred_pct = len(np.where((ypred - ytrue) > 2)[0]) / len(ytrue)
     return overpred_pct
 
   @staticmethod
-  def scorer_underpred_pct(ytrue, ypred, diff=2):
-    underpred_pct = len(np.where((ytrue - ypred) > diff)[0]) / len(ytrue)
+  def scorer_underpred_pct(ytrue, ypred):
+    underpred_pct = len(np.where((ytrue - ypred) > 2)[0]) / len(ytrue)
     return underpred_pct
 
   @staticmethod
@@ -79,7 +79,7 @@ class MyScorer:
         perf_row_dict[scorer_name] = None  # TODO: find a better solution to handle this
         # perf_row_dict[scorer_name] = roc_auc_score(ytrue, ypred)  # ypred is actually yscore: clf.predict_proba(X)[:, 1]
       else:
-        perf_row_dict[scorer_name] = scorer(ytrue, ypred)
+        perf_row_dict[scorer_name] = scorer(ytrue, ypred)  # TODO: error saying missing 1 pos arg!!
     return perf_row_dict
 
 

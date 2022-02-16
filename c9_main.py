@@ -341,7 +341,7 @@ if __name__ == '__main__':
                         scaler=hist_dataset.input_scaler)
 
     # Predict on out-of-sample dataset
-    
+
 
     # Surgeon prediction
 

@@ -13,8 +13,9 @@ from .c1_data_preprocessing import Dataset
 
 
 # Generate k dataset objects for k-fold cross validation
-def gen_kfolds_datasets(df, kfold, features, shuffle_df=False, outcome=globals.NNT, onehot_cols=None, discretize_cols=None,
-                        col2decile_ftr2aggf=None, cohort=globals.COHORT_ALL, remove_o2m=(True, True)):
+def gen_kfolds_datasets(df, kfold, features, shuffle_df=False, outcome=globals.NNT, onehot_cols=[],
+                        discretize_cols=None, col2decile_ftr2aggf=None, cohort=globals.COHORT_ALL,
+                        remove_o2m=(True, True), scaler='robust', scale_numeric_only=True):
   if shuffle_df:
     df = df.sample(frac=1).reset_index(drop=True)
   else:
@@ -25,8 +26,8 @@ def gen_kfolds_datasets(df, kfold, features, shuffle_df=False, outcome=globals.N
   for k in tqdm(range(kfold)):
     test_idxs = np.arange(int(k * test_pct * N), int((k+1) * test_pct * N))
     dataset_k = Dataset(df, outcome, features, onehot_cols=onehot_cols, discretize_cols=discretize_cols,
-                        col2decile_ftrs2aggf=col2decile_ftr2aggf, cohort=cohort,
-                        test_idxs=test_idxs, remove_o2m=remove_o2m)
+                        col2decile_ftrs2aggf=col2decile_ftr2aggf, cohort=cohort, test_idxs=test_idxs,
+                        remove_o2m=remove_o2m, scaler=scaler, scale_numeric_only=scale_numeric_only)
     datasets.append(dataset_k)
 
   return datasets
