@@ -36,7 +36,6 @@ def los_histogram(y, dataType='Training', ax=None):
                 ha='left', va='center', fontsize=15)
 
 
-
 # ---------------------------------------- Gender & LOS ----------------------------------------
 def gender_eda(dashboard_df):
   labels = ["Male", "Female"]
@@ -59,6 +58,7 @@ def gender_eda(dashboard_df):
 
   plt.legend()
   plt.show()
+
 
 # ---------------------------------------- Language-Interpreter & NNT ----------------------------------------
 def language_interpreter_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, freq_range='all', interpreter_cat=False):
@@ -84,12 +84,12 @@ def language_interpreter_eda_violinplot(df, outcome, preprocess_y, freq_range, t
   x_order = np.array([x[0] for x in lang_cnt_sorted])
   if freq_range != 'all':
     x_order = x_order[freq_range[0]:freq_range[1]]
-    df = df.loc[df[globals.LANGUAGE].isin([x[0] for x in lang_cnt_sorted])]
+    df = df[df[globals.LANGUAGE].isin(x_order)]
   y = df[outcome]
   if preprocess_y:
     y[y > globals.MAX_NNT] = globals.MAX_NNT + 1
     df[outcome] = y
-  hue, hue_order, split, palette, xticklabels = None, None, False, None, [f'{x[0]} ({x[1]})' for x in lang_cnt_sorted]
+  hue, hue_order, split, palette, xticklabels = None, None, False, None, [f'{x} ({lang2cnt[x]})' for x in x_order]
   if bipart:
     df = df[df[globals.INTERPRETER].isin(['N', 'Y'])]
     df.loc[(df[globals.INTERPRETER] == 'N'), globals.INTERPRETER] = False
@@ -97,10 +97,9 @@ def language_interpreter_eda_violinplot(df, outcome, preprocess_y, freq_range, t
     hue, hue_order, split, palette = globals.INTERPRETER, [True, False], True, {True: 'cornflowerblue', False: 'salmon'}
     lang_cnt_sorted_interTrue = defaultdict(int)
     lang_cnt_sorted_interTrue.update(df[df[globals.INTERPRETER]].groupby(globals.LANGUAGE).size().to_dict())
-    xticklabels = [f'{x[0]} {lang_cnt_sorted_interTrue[x[0]], x[1]-lang_cnt_sorted_interTrue[x[0]]}'
-                   for x in lang_cnt_sorted]
+    xticklabels = [f'{x} {lang_cnt_sorted_interTrue[x], lang2cnt[x]-lang_cnt_sorted_interTrue[x]}'
+                   for x in x_order]
 
-  # English, Spanish, ...
   fig, ax = plt.subplots(1, 1, figsize=(16, 9))
   sns.violinplot(x=globals.LANGUAGE, data=df, y=outcome, hue=hue, hue_order=hue_order, split=split, ax=ax,
                  order=x_order, palette=palette)
@@ -111,6 +110,21 @@ def language_interpreter_eda_violinplot(df, outcome, preprocess_y, freq_range, t
   ax.set_xticklabels(xticklabels, fontsize=13)
   ax.yaxis.set_tick_params(labelsize=13)
   fig.autofmt_xdate(rotation=45)
+  plt.show()
+
+
+def interpreter_eda(dashb_df, outcome=globals.NNT):
+  interp2cnt = dashb_df.groupby(globals.INTERPRETER).size.to_dict()
+  print('Interpreter_need type count: ', interp2cnt)
+
+  fig, ax = plt.subplots(1, 1, figsize=(12, 9))
+  sns.violinplot(data=dashb_df, x=globals.INTERPRETER, y=outcome, ax=ax)
+  ax.set_xlabel('Interpreter Flag (with count)', fontsize=16)
+  ax.set_ylabel('Number of Nights', fontsize=16)
+  ax.set_title(f'Interpreter Flag vs {globals.NNT}', fontsize=18, y=1.01)
+  ax.set_ylim([-1, 7])
+  ax.yaxis.set_tick_params(labelsize=13)
+  ax.set_xticklabels([f'{k} (n={v})' for k, v in interp2cnt.items()], fontsize=13)
   plt.show()
 
 
