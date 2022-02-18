@@ -113,6 +113,7 @@ class Dataset(object):
     return self.Xtest
 
   def preprocess_train(self, outcome, ftr_cols=globals.FEATURE_COLS, remove_o2m_train=True):
+    print('\n***** Start to preprocess Xtrain:')
     # I. Preprocess training set
     if self.train_df_raw is not None:
       # Preprocess outcome values / SPS prediction in df
@@ -129,6 +130,7 @@ class Dataset(object):
       self.train_cohort_df = self.train_df_raw
 
   def preprocess_test(self, outcome, ftr_cols=globals.FEATURE_COLS, target_features=None, remove_o2m_test=None):
+    print('\n***** Start to preprocess Xtest:')
     # II. Preprocess test set, if it's not empty
     if self.test_df_raw is not None:
       # Preprocess ytest & sps prediction
@@ -188,6 +190,9 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   # Make data matrix X numeric
   Xdf = df.copy()[feature_cols + [ftrEng.decile_outcome]]  # add outcome col for computing decile features
 
+  # Handle NaNs -- only remove NAs if the nullable column IS IN 'feature_cols'
+  Xdf = ftrEng.handle_nans(Xdf)
+
   # Discard unwanted CCSRs
   Xdf, onehot_cols = ftrEng.trim_ccsr_in_X(Xdf, ftrEng.onehot_cols, ftrEng.trimmed_ccsr)
 
@@ -208,8 +213,6 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   # Add decile-related columns to Xdf
   Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
   print("After adding decile cols: Xdf - ", Xdf.shape)
-
-  # TODO: Handle NaNs?? -- handle weight nan here?
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy()
@@ -248,6 +251,9 @@ def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeri
 
   Xdf = df.copy()[feature_cols]
 
+  # Handle NAs
+  Xdf = ftrEng.handle_nans(Xdf)
+
   # Add a column of trimmed CCSRs with/without a column of the corresponding trimmed ICD10s
   Xdf, onehot_cols = ftrEng.trim_ccsr_in_X(Xdf, ftrEng.onehot_cols, ftrEng.trimmed_ccsr)
 
@@ -267,7 +273,6 @@ def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeri
   # Join with existing deciles (do this step before match_Xdf_cols_to_target_features()) -- TODO: Test this
   Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
 
-  # TODO: Handle NaNs here?
   # TODO: Scan for uniform columns
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix

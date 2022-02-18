@@ -49,14 +49,12 @@ class FeatureEngineeringModifier(object):
     print("[dummy_code] 0. Xdf shape: ", Xdf.shape)
     # Interpreter need or not
     if globals.INTERPRETER in Xdf_cols:
-      Xdf = Xdf[(Xdf[globals.INTERPRETER] != 0) & Xdf[globals.INTERPRETER].notnull()]  # Drop rows
       Xdf.loc[(Xdf.INTERPRETER_NEED == 'N'), globals.INTERPRETER] = 0.0
       Xdf.loc[(Xdf.INTERPRETER_NEED == 'Y'), globals.INTERPRETER] = 1.0
     print("[dummy_code] 1. Xdf shape: ", Xdf.shape)
 
     # State code
     if 'STATE_CODE' in Xdf_cols:
-      Xdf = Xdf[(Xdf[globals.STATE] != 0) & (Xdf[globals.STATE].notnull())]
       Xdf[['IN_STATE', 'OUT_OF_STATE_US', 'FOREIGN']] = 0.0
       Xdf.loc[(Xdf.STATE_CODE == 'MA'), 'IN_STATE'] = 1.0
       Xdf.loc[(Xdf.STATE_CODE == 'Foreign'), 'FOREIGN'] = 1.0
@@ -65,14 +63,14 @@ class FeatureEngineeringModifier(object):
     print("[dummy_code] 2. Xdf shape: ", Xdf.shape)
 
     # Major region
-    if 'MAJOR_REGION' in Xdf_cols:  # TODO: should I remove, or infer based on Miles???
-      Xdf = Xdf[(Xdf[globals.REGION].notnull()) & (Xdf[globals.REGION] != 'Unknown')]
+    if 'MAJOR_REGION' in Xdf_cols:  # TODO: should I remove unknown?
+      # Xdf = Xdf[(Xdf[globals.REGION].notnull()) & (Xdf[globals.REGION] != 'Unknown')]
       Xdf = Xdf.join(pd.get_dummies(Xdf['MAJOR_REGION'], prefix='REGION'))\
         .drop(columns=['MAJOR_REGION'])
     print("[dummy_code] 3. Xdf shape: ", Xdf.shape)
 
     # Language
-    if 'LANGUAGE_DESC' in Xdf_cols:  # TODO: Should I just infer based on major region if it's 0?
+    if 'LANGUAGE_DESC' in Xdf_cols:
       Xdf[['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']] = 0.0
       Xdf.loc[(Xdf.LANGUAGE_DESC == 'English'), 'ENGLISH'] = 1.0
       Xdf.loc[(Xdf.LANGUAGE_DESC == 'Spanish'), 'SPANISH'] = 1.0
@@ -86,22 +84,22 @@ class FeatureEngineeringModifier(object):
     # Drop rows with NaN or its equivalent in the corresponding columns
     Xdf_cols = Xdf.columns.to_list()
     prevN = Xdf.shape[0]
-    # if globals.MILES in Xdf_cols:
-    #   Xdf = Xdf[Xdf[globals.MILES] != 0]
-    #   print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {globals.MILES}")
-    #   prevN = Xdf.shape[0]
+    if globals.MILES in Xdf_cols:
+      Xdf = Xdf[(Xdf[globals.MILES] != 0) & Xdf[globals.MILES].notnull()]
+      print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {globals.MILES}")
+      prevN = Xdf.shape[0]
     if globals.INTERPRETER in Xdf_cols:
-      Xdf = Xdf[Xdf[globals.INTERPRETER] != 0]
-      print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {globals.INTERPRETER}")
+      Xdf = Xdf[(Xdf[globals.INTERPRETER] != '0') & Xdf[globals.INTERPRETER].notnull()]
+      print(f"Removed {prevN - Xdf.shape[0]} more cases with NA in {globals.INTERPRETER}")
       prevN = Xdf.shape[0]
     if globals.STATE in Xdf_cols:
-      Xdf = Xdf[Xdf[globals.STATE] != 0]
+      Xdf = Xdf[(Xdf[globals.STATE] != '0') & Xdf[globals.STATE].notnull()]
       print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {globals.STATE}")
       prevN = Xdf.shape[0]
-    if globals.WEIGHT_ZS in Xdf_cols:
-      Xdf = Xdf[Xdf[globals.WEIGHT_ZS].notnull()]
-      print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {globals.WEIGHT_ZS}")
-      prevN = Xdf.shape[0]
+    # if globals.WEIGHT_ZS in Xdf_cols:
+    #   Xdf = Xdf[Xdf[globals.WEIGHT_ZS].notnull()]
+    #   print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {globals.WEIGHT_ZS}")
+    #   prevN = Xdf.shape[0]
     # TODO: get columns that end with '_SD' and filter out NA entries, or assign 0?
 
     print('Xdf shape after handling NAs: ', Xdf.shape)
@@ -126,6 +124,8 @@ class FeatureEngineeringModifier(object):
         Xdf = self.join_with_pproc_decile(Xdf, self.decile_generator.pproc_decile, ftr2aggf)
       elif col == globals.CPT:
         Xdf = self.join_with_cpt_decile(Xdf, self.decile_generator.cpt_decile, ftr2aggf)
+      elif col == globals.CCSR:
+        Xdf = self.join_with_ccsr_decile(Xdf, self.decile_generator.ccsr_decile, ftr2aggf)
       elif col == globals.MED1:
         Xdf = self.join_with_med_decile(Xdf, self.decile_generator.med_level2decile[1], 1, ftr2aggf)
       elif col == globals.MED2:
@@ -137,8 +137,22 @@ class FeatureEngineeringModifier(object):
     return Xdf
 
   def join_with_ccsr_decile(self, Xdf: pd.DataFrame, ccsr_decile: pd.DataFrame,
-                           decile_col2aggf={globals.CCSR_DECILE: 'max'}):
-    pass
+                            decile_col2aggf={globals.CCSR_DECILE: 'max'}):
+    Xdf_w_decile = Xdf[['SURG_CASE_KEY', globals.CCSRS]]\
+      .explode('CCSRS')\
+      .fillna({'CCSRS': globals.ZERO_CCSR})\
+      .rename(columns={'CCSRS': 'CCSR'})\
+      .join(ccsr_decile.set_index('CCSR')[decile_col2aggf.keys()], on='CCSR', how='inner')\
+      .groupby('SURG_CASE_KEY')\
+      .agg(decile_col2aggf)
+    # Drop any placeholder column added by match_Xdf_cols_to_target_ftrs()
+    Xdf.drop(columns=decile_col2aggf.keys(), inplace=True, errors='ignore')
+    # Join selected columns in the decile df on 'SURG_CASE_KEY' with the input Xdf
+    Xdf_ret = Xdf.join(Xdf_w_decile, on='SURG_CASE_KEY', how='inner')
+
+    print("[FtrEng-join_CCSR_dcl] Input Xdf shape: ", Xdf.shape, '; Output Xdf shape: ', Xdf_ret.shape,
+          "\nAdded decile columns: ", decile_col2aggf.keys())
+    return Xdf_ret
 
   def join_with_cpt_decile(self, Xdf: pd.DataFrame, cpt_decile: pd.DataFrame,
                            decile_col2aggf={globals.CPT_DECILE: 'max'}):
@@ -324,6 +338,8 @@ class DecileGenerator(object):
         self.pproc_decile = self.gen_pproc_decile(Xdf, outcome)
       elif col == globals.CPT:
         self.cpt_decile = self.gen_cpt_decile(Xdf, outcome)
+      elif col == globals.CCSR:
+        self.ccsr_decile = self.gen_ccsr_decile(Xdf, outcome)
       elif col == globals.MED1:
         med1_decile = self.gen_medication_decile(Xdf, outcome, level=1)
         self.med_level2decile[1] = med1_decile
@@ -345,7 +361,7 @@ class DecileGenerator(object):
     pproc_decile = pproc_groupby[outcome].median().reset_index(name='PPROC_MEDIAN') \
       .join(pproc_groupby[outcome].mean().reset_index(name='PPROC_MEAN').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left') \
       .join(pproc_groupby.size().reset_index(name='PPROC_COUNT').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left') \
-      .join(pproc_groupby[outcome].std().reset_index(name='PPROC_SD').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left') \
+      .join(pproc_groupby[outcome].std(ddof=0).reset_index(name='PPROC_SD').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left') \
       .join(pproc_groupby[outcome].min().reset_index(name='PPROC_MIN').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left') \
       .join(pproc_groupby[outcome].max().reset_index(name='PPROC_MAX').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left') \
       .join(pproc_groupby[outcome].quantile(0.25).reset_index(name='PPROC_QT25').set_index('PRIMARY_PROC'), on='PRIMARY_PROC', how='left') \
@@ -359,17 +375,35 @@ class DecileGenerator(object):
     return pproc_decile
 
   def gen_ccsr_decile(self, data_df: pd.DataFrame, outcome=globals.LOS, save_fp=None):
-    # TODO: finish this!!
-    pass
+    ccsr_df = data_df[[globals.CCSRS, outcome]]
+    exp_ccsr2outcome_df = ccsr_df.explode(globals.CCSRS)\
+      .rename(columns={'CCSRS': 'CCSR'})\
+      .fillna({'CCSR': globals.ZERO_CCSR})  # Add a separate ccsr category: zero_ccsrs
+    ccsr_groupby = exp_ccsr2outcome_df.groupby(globals.CCSR)
+    ccsr_decile = ccsr_groupby[outcome].median().reset_index(name='CCSR_MEDIAN').set_index(globals.CCSR) \
+      .join(ccsr_groupby[outcome].mean().reset_index(name='CCSR_MEAN').set_index('CCSR'), on='CCSR', how='left') \
+      .join(ccsr_groupby.size().reset_index(name='CCSR_COUNT').set_index('CCSR'), on='CCSR', how='left') \
+      .join(ccsr_groupby[outcome].std(ddof=0).reset_index(name='CCSR_SD').set_index('CCSR'), on='CCSR', how='left') \
+      .join(ccsr_groupby[outcome].min().reset_index(name='CCSR_MIN').set_index('CCSR'), on='CCSR', how='left') \
+      .join(ccsr_groupby[outcome].max().reset_index(name='CCSR_MAX').set_index('CCSR'), on='CCSR', how='left') \
+      .join(ccsr_groupby[outcome].quantile(0.25).reset_index(name='CCSR_QT25').set_index('CCSR'), on='CCSR', how='left') \
+      .join(ccsr_groupby[outcome].quantile(0.75).reset_index(name='CCSR_QT75').set_index('CCSR'), on='CCSR', how='left')
+
+    ccsr_decile[globals.CCSR_DECILE] = ccsr_decile['CCSR_MEDIAN'].apply(lambda x: float(min(round(x), globals.MAX_NNT + 1)))
+    ccsr_decile.reset_index(inplace=True)
+
+    if save_fp:
+      ccsr_decile.to_csv(save_fp, index=False)
+    return ccsr_decile
 
   def gen_cpt_decile(self, data_df: pd.DataFrame, outcome=globals.LOS, save_fp=None):
-    cpt_df = data_df[['CPTS', outcome]]
-    exp_cpt2outcome_df = cpt_df.explode('CPTS').dropna(subset=['CPTS']).rename(columns={'CPTS': 'CPT'})
+    cpt_df = data_df[[globals.CPTS, outcome]]
+    exp_cpt2outcome_df = cpt_df.explode(globals.CPTS).dropna(subset=['CPTS']).rename(columns={'CPTS': 'CPT'})
     cpt_groupby = exp_cpt2outcome_df.groupby('CPT')
     cpt_decile = cpt_groupby[outcome].median().reset_index(name='CPT_MEDIAN').set_index('CPT') \
       .join(cpt_groupby[outcome].mean().reset_index(name='CPT_MEAN').set_index('CPT'), on='CPT', how='left') \
       .join(cpt_groupby.size().reset_index(name='CPT_COUNT').set_index('CPT'), on='CPT', how='left') \
-      .join(cpt_groupby[outcome].std().reset_index(name='CPT_SD').set_index('CPT'), on='CPT', how='left') \
+      .join(cpt_groupby[outcome].std(ddof=0).reset_index(name='CPT_SD').set_index('CPT'), on='CPT', how='left') \
       .join(cpt_groupby[outcome].min().reset_index(name='CPT_MIN').set_index('CPT'), on='CPT', how='left') \
       .join(cpt_groupby[outcome].max().reset_index(name='CPT_MAX').set_index('CPT'), on='CPT', how='left') \
       .join(cpt_groupby[outcome].quantile(0.25).reset_index(name='CPT_QT25').set_index('CPT'), on='CPT', how='left') \
@@ -391,7 +425,7 @@ class DecileGenerator(object):
     med_decile = med_groupby[outcome].median().reset_index(name='MED%d_MEDIAN' % level).set_index(med_col) \
       .join(med_groupby[outcome].mean().reset_index(name='MED%d_MEAN' % level).set_index(med_col), on=med_col, how='left') \
       .join(med_groupby.size().reset_index(name='MED%d_COUNT' % level).set_index(med_col), on=med_col, how='left')\
-      .join(med_groupby[outcome].std().reset_index(name='MED%d_SD' % level).set_index(med_col), on=med_col, how='left')\
+      .join(med_groupby[outcome].std(ddof=0).reset_index(name='MED%d_SD' % level).set_index(med_col), on=med_col, how='left')\
       .join(med_groupby[outcome].min().reset_index(name='MED%d_MIN' % level).set_index(med_col), on=med_col, how='left') \
       .join(med_groupby[outcome].max().reset_index(name='MED%d_MAX' % level).set_index(med_col), on=med_col, how='left') \
       .join(med_groupby[outcome].quantile(0.25).reset_index(name='MED%d_QT25' % level).set_index(med_col), on=med_col, how='left') \
