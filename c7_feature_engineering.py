@@ -251,7 +251,7 @@ class FeatureEngineeringModifier(object):
       return Xdf
 
     for oh_col, dtype in zip(onehot_cols, onehot_dtypes):
-      oh_prefix = oh_col if oh_col not in globals.DRUG_COLS else 'MED%s_' % list(filter(str.isdigit, oh_col))[0]
+      oh_prefix = oh_col + '_OHE' if oh_col not in globals.DRUG_COLS else 'MED%s_OHE_' % list(filter(str.isdigit, oh_col))[0]
       if dtype == str:
         dummies = pd.get_dummies(Xdf[oh_col], prefix=oh_prefix)
       elif dtype == list:  # Expand list to (row_id, oh_col indicator) first

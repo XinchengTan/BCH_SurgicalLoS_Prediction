@@ -1,15 +1,69 @@
 from collections import defaultdict, Counter
 
 from IPython.display import display
+from sklearn.utils import shuffle
 from time import time
 from tqdm import tqdm
-from typing import Dict
+from typing import Dict, List, Tuple
 import joblib
 import numpy as np
 import pandas as pd
 
 import globals
+from globals import *
 from c1_data_preprocessing import Dataset
+
+
+def make_k_all_feature_datasets(dashb_df: pd.DataFrame,
+                                k=1,
+                                outcome=globals.NNT,
+                                discretize_cols=None,
+                                remove_o2m=(True, True),
+                                scaler='robust',
+                                scale_numeric_only=True):
+  code2decile_ftrs2aggf = {
+    CCSR: {
+      CCSR_DECILE: 'max', f'{CCSR}_COUNT': 'max',
+      f'{CCSR}_MEDIAN': 'max', f'{CCSR}_SD': 'mean',
+      f'{CCSR}_QT25': 'max', f'{CCSR}_QT75': 'max'
+    },
+    CPT: {
+      CPT_DECILE: 'max', f'{CPT}_COUNT': 'max',
+      f'{CPT}_MEDIAN': 'max', f'{CPT}_SD': 'mean',
+      f'{CPT}_QT25': 'max', f'{CPT}_QT75': 'max'
+    },
+    PPROC: {
+      PPROC_DECILE: 'max', f'{PPROC}_COUNT': 'max',
+      f'{PPROC}_MEDIAN': 'max', f'{PPROC}_SD': 'mean',
+      f'{PPROC}_QT25': 'max', f'{PPROC}_QT75': 'max'
+    },
+    MED3: {
+      MED3_DECILE: 'max', f'{MED3}_COUNT': 'max',
+      f'{MED3}_MEDIAN': 'max', f'{MED3}_SD': 'mean',
+      f'{MED3}_QT25': 'max', f'{MED3}_QT75': 'max'
+    },
+  }
+  datasets = []
+  for i in range(k):
+    df = dashb_df.sample(frac=1).reset_index(drop=True)
+    dataset = Dataset(df, outcome, FEATURES_ALL_NO_WEIGHT, onehot_cols=[PRIMARY_PROC, CPTS, CCSRS],
+                      discretize_cols=discretize_cols, col2decile_ftrs2aggf=code2decile_ftrs2aggf,
+                      remove_o2m=remove_o2m, scaler=scaler, scale_numeric_only=scale_numeric_only)
+    datasets.append(dataset)
+  return datasets
+
+
+def exclude_onehot_cols(onehot_cols, feature_names, Xtrain, Xtest):
+  full_oh_mask = np.zeros(len(feature_names)).astype(bool)
+  feature_names = np.array(feature_names)
+  for oh_col in onehot_cols:
+    oh_prefix = oh_col + '_OHE' if oh_col not in DRUG_COLS else 'MED%s_OHE_' % list(filter(str.isdigit, oh_col))[0]
+    oh_mask = np.char.startswith(feature_names, oh_prefix)
+    full_oh_mask = np.ma.mask_or(full_oh_mask, oh_mask)
+    print(oh_prefix, ': ', np.sum(oh_mask))
+  keep_idxs = np.flatnonzero(~full_oh_mask)
+  Xtrain, Xtest = Xtrain[:, keep_idxs], Xtest[:, keep_idxs]
+  return Xtrain, Xtest
 
 
 # Generate k dataset objects for k-fold cross validation
@@ -31,6 +85,24 @@ def gen_kfolds_datasets(df, kfold, features, shuffle_df=False, outcome=globals.N
     datasets.append(dataset_k)
 
   return datasets
+
+
+def gen_kfolds_Xytrain(Xtrain, ytrain, kfold, shuffle_data=True) -> List[Tuple]:
+  if shuffle_data:
+    Xtrain, ytrain = shuffle(Xtrain, ytrain, random_state=0)
+  N = Xtrain.shape[0]
+  val_pct = 1. / kfold
+  kfolds_Xytrain = []
+  sample_cnt = 0
+  for k in range(kfold):
+    if k < kfold - 1:
+      val_idxs = np.arange(int(k * val_pct * N), int((k+1) * val_pct * N))
+    else:
+      val_idxs = np.arange(int(k * val_pct * N), N)
+    kfolds_Xytrain.append((Xtrain[val_idxs, :], ytrain[val_idxs]))
+    sample_cnt += len(val_idxs)
+  assert N == sample_cnt, "%d samples are discarded" % (abs(N - sample_cnt))
+  return kfolds_Xytrain
 
 
 # Drop outliers (i.e. patient who has an extremely long LOS)

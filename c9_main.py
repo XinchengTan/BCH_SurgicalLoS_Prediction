@@ -224,7 +224,7 @@ def make_feature_cols(args):  # TODO: make folder name here!
     col2decile_ftrs2aggf = load_decile_features(globals.MED3, args.med3, col2decile_ftrs2aggf)
 
   if args.os:
-    feature_cols.extend(globals.OS_CODES)
+    feature_cols.extend(globals.OS_CODE_LIST)
 
   return feature_cols, col2decile_ftrs2aggf, onehot_cols, discretize_cols
 

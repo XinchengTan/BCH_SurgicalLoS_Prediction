@@ -1,16 +1,21 @@
 import numpy as np
 import pandas as pd
+from sklearn.feature_selection import SelectKBest, SequentialFeatureSelector, chi2, mutual_info_classif
+from sklearn.utils import shuffle
 from typing import List, Dict, Optional
 
-import globals
+import utils
+from globals import *
 from c1_data_preprocessing import Dataset
+from c4_model_perf import MyScorer
 from jyp2_modeling import run_classifier
 
-# TODO 0. Double check for nans in miles traveld, state code
+# [done] 0. Double check for nans in miles traveld, state code
 # TODO 1. Finish stepwise addition func & Generate result tables & performance
-# TODO 2. Add CCSR deciles & Test
-# TODO 3. Add violin plot across **pproc**, cpt, ccsrs
-# TODO 4. Think about how to handle one-to-many cases in the stepwise addition process
+# [done] 2. Add CCSR deciles & Test
+# TODO 3. Add combined medication level based decile features (fillna with the previous level, e.g. level1_medx_generic)
+# TODO 4. Add violin plot across **pproc**, cpt, ccsrs
+# TODO 5. Think about how to handle one-to-many cases in the stepwise addition process
 
 
 class FeatureSelector(object):
@@ -19,76 +24,90 @@ class FeatureSelector(object):
     pass
 
   @staticmethod
-  def stepwise_addition():
+  def selectKBest_fs(dataset: Dataset, n_features_to_select, score_func, cv=10):
+    assert score_func in {chi2, mutual_info_classif}
+    feature_to_select_times = np.zeros(len(dataset.feature_names))
+    X, y = np.copy(dataset.Xtrain), np.copy(dataset.ytrain)
+    for i in range(cv):
+      X, y = shuffle(X, y, random_state=0)
+      skb = SelectKBest(score_func=score_func, k=n_features_to_select)
+      skb.fit(X, y)
+      feature_to_select_times += skb.get_support().astype(int)
+
+    # Return the top K features
+    selected_feature_idxs = (-feature_to_select_times).argsort()[:n_features_to_select]  # descending order, pick topK frequent ones
+    return selected_feature_idxs, np.array(dataset.feature_names)[selected_feature_idxs]
+
+  @ staticmethod
+  def sequential_fs_sklearn(estimator,
+                            dataset: Dataset,
+                            n_features_to_select,
+                            direction='forward',
+                            scoring='accuracy',
+                            cv=10):
+    # Xdata, ydata should be the training data (with validation proportion) for modeling
+    # TODO: potential data loss/bias given that it can't handle NAs by feature set (cases are excluded altogether)
+    sfs = SequentialFeatureSelector(estimator, n_features_to_select=n_features_to_select, direction=direction,
+                                    scoring=scoring, cv=cv, n_jobs=-1)
+    sfs.fit(dataset.Xtrain, dataset.ytrain)
+    selected_features = np.array(dataset.feature_names)[sfs.get_support()]
+    print("\nSelected features: ", selected_features)
+
+    # Compute train & test accuracy on selected features
+    Xtrain, Xtest = sfs.transform(dataset.Xtrain), sfs.transform(dataset.Xtest)
+    estimator.fit(Xtrain, dataset.ytrain)
+    train_pred, test_pred = estimator.predict(Xtrain), estimator.predict(Xtest)
+    return sfs.get_support(), selected_features, sfs, estimator
+
+  @staticmethod
+  def stepwise_batch_addition_fs(estimator,
+                                 dashb_df: pd.DataFrame,
+                                 ktrials: int,
+                                 base_features=None,
+                                 add_features=None,
+                                 rand_state=SEED):
+
     pass
 
   @staticmethod
-  def simulated_annealing():
+  def simulated_annealing_fs():
     pass
 
   @staticmethod
-  def resampled_simulated_annealing():
+  def resampled_simulated_annealing_fs():
     pass
 
-
-
-
-def feature_selection_ktrials(dataset: Dataset, ktrials=10, scaler=None):
-  # change seed in every trial OR generate k-fold datasets
-
-  # TODO: update the following dict to
-  col2decile_ftrs2aggf = {
-    globals.CPT: {
-      globals.CPT_DECILE: 'max', f'{globals.CPT}_COUNT': 'max',
-      f'{globals.CPT}_MEDIAN': 'max',
-      f'{globals.CPT}_QT25': 'max', f'{globals.CPT}_QT75': 'max'
-    },
-    globals.PPROC: {
-      globals.PPROC_DECILE: 'max', f'{globals.PPROC}_COUNT': 'max',
-      f'{globals.PPROC}_MEDIAN': 'max',
-      f'{globals.PPROC}_QT25': 'max', f'{globals.PPROC}_QT75': 'max'
-    },
-    globals.MED3: {
-      globals.MED3_DECILE: 'max', f'{globals.MED3}_COUNT': 'max',
-      f'{globals.MED3}_MEDIAN': 'max',
-      f'{globals.MED3}_QT25': 'max', f'{globals.MED3}_QT75': 'max'
-    },
-  }
-  #
-
-  return
 
 
 def stepwise_addition_single_trial(clf,
-                                   dataset: Dataset,
+                                   dashb_df: pd.DataFrame,
                                    base_features: Optional[List[str]],
                                    features_to_add: Optional[List[str]],
-                                   rand_state=globals.SEED):
+                                   rand_state=SEED):
   """
   This function iteratively adds features, one at a time, to a pre-defined classifier trained on dataset.Xtrain
   and evaluated on dataset.Xtest.
 
-  :param dataset:
-  :param base_features:
-  :param features_to_add:
-  :param rand_state:
+  :param clf: a classifier (sklearn Model object)
+  :param dashb_df: a prepared dataframe
+  :param base_features: starting feature set
+  :param features_to_add: features to add, must not overlap with 'base_features'
+  :param rand_state: seed
   :return:
   """
   if base_features is None:
-    base_features = [globals.PPROC_DECILE]
+    base_features = [PPROC_DECILE]
   if features_to_add is None:
     features_to_add = [
-      globals.CPT_DECILE, globals.MED3_DECILE,
-      f'{globals.PPROC}_COUNT', f'{globals.CPT}_COUNT', f'{globals.MED3}_COUNT',
-      f'{globals.PPROC}_MEDIAN', f'{globals.CPT}_MEDIAN', f'{globals.MED3}_MEDIAN',
-      f'{globals.PPROC}_QT25', f'{globals.CPT}_QT25', f'{globals.MED3}_QT25',
-      f'{globals.PPROC}_QT75', f'{globals.CPT}_QT75', f'{globals.MED3}_QT75',
-      # f'{globals.PPROC}_SD', f'{globals.CPT}_SD', f'{globals.MED3}_SD',  (TODO: fix sd = 0 -- ddof=0, or fillna(0) )
-      globals.AGE, globals.GENDER, globals.REGION, globals.STATE, globals.MILES,
-      globals.LANGUAGE, globals.INTERPRETER
+      CPT_DECILE, MED3_DECILE,
+      f'{PPROC}_COUNT', f'{CPT}_COUNT', f'{MED3}_COUNT',
+      f'{PPROC}_MEDIAN', f'{CPT}_MEDIAN', f'{MED3}_MEDIAN',
+      f'{PPROC}_QT25', f'{CPT}_QT25', f'{MED3}_QT25',
+      f'{PPROC}_QT75', f'{CPT}_QT75', f'{MED3}_QT75',
+      f'{PPROC}_SD', f'{CPT}_SD', f'{MED3}_SD',
+      AGE, GENDER, REGION, STATE, MILES, LANGUAGE, INTERPRETER, PROBLEM_CNT,
+      OS_CODES, PRIMARY_PROC, CPTS, CCSRS, DRUG_COLS[2]
     ]
-    features_to_add.extend(globals.OS_CODES)
-    features_to_add.extend([globals.PRIMARY_PROC, globals.CPT, globals.CCSRS, globals.DRUG_COLS[2]])
 
 
 
