@@ -17,6 +17,7 @@ from c1_data_preprocessing import Dataset
 def make_k_all_feature_datasets(dashb_df: pd.DataFrame,
                                 k=1,
                                 outcome=globals.NNT,
+                                onehot_cols=[],
                                 discretize_cols=None,
                                 remove_o2m=(True, True),
                                 scaler='robust',
@@ -46,11 +47,17 @@ def make_k_all_feature_datasets(dashb_df: pd.DataFrame,
   datasets = []
   for i in range(k):
     df = dashb_df.sample(frac=1).reset_index(drop=True)
-    dataset = Dataset(df, outcome, FEATURES_ALL_NO_WEIGHT, onehot_cols=[PRIMARY_PROC, CPTS, CCSRS],
+    dataset = Dataset(df, outcome, FEATURES_ALL_NO_WEIGHT, onehot_cols=onehot_cols,
                       discretize_cols=discretize_cols, col2decile_ftrs2aggf=code2decile_ftrs2aggf,
                       remove_o2m=remove_o2m, scaler=scaler, scale_numeric_only=scale_numeric_only)
     datasets.append(dataset)
   return datasets
+
+
+def get_onehot_column_idxs(onehot_col, feature_names):
+  oh_prefix = onehot_col + '_OHE' if onehot_col not in DRUG_COLS else 'MED%s_OHE_' % list(filter(str.isdigit, onehot_col))[0]
+  oh_mask = np.char.startswith(feature_names, oh_prefix)
+  return np.flatnonzero(oh_mask)
 
 
 def exclude_onehot_cols(onehot_cols, feature_names, Xtrain, Xtest):

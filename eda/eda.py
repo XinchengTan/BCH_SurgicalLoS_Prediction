@@ -177,23 +177,30 @@ def state_code_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, freq_range=
 
 
 # ---------------------------------------- Miles Traveled & NNT ----------------------------------------
-def miles_traveled_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, violin=True):
-  fig, ax = plt.subplots(1, 1, figsize=(12, 9))
-  ax.set_xlim([0, 1000])
+def miles_traveled_eda(dashb_df, q=15, outcome=globals.NNT, preprocess_y=True, violin=True):
+  fig, ax = plt.subplots(1, 1, figsize=(20, 9))
+  Xdf = dashb_df[[globals.MILES, outcome]]
+  Xdf = Xdf[Xdf[globals.MILES].notnull()]
+  qs = pd.qcut(Xdf[globals.MILES], q=q)
+  qs = [round(qval.right, 1) for qval in qs.values]
+  Xdf[globals.MILES] = qs
+  #ax.set_xlim([0, 1000])
   ax.set_ylim([-1, 40])
-  outy = dashb_df[outcome]
+  outy = Xdf[outcome].to_numpy()
   if preprocess_y:
     outy[outy > globals.MAX_NNT] = globals.MAX_NNT + 1
-    ax.set_ylim([-1, 10])
+    Xdf[outcome] = outy
+    ax.set_ylim([-1, 8])
 
   if violin:
-    sns.violinplot(y=outy, x=dashb_df[globals.MILES], orient='h')
-    ax.set_xlim([-20, 500])
+    sns.violinplot(data=Xdf, x=globals.MILES, y=outcome)
+    #ax.set_xlim([-20, 500])
   else:
     ax.scatter(dashb_df[globals.MILES], outy)
-  ax.set_xlabel('Miles traveled', fontsize=16)
+  ax.set_xlabel(f'Miles traveled ({q}-quantile upperbound)', fontsize=16)
   ax.set_ylabel('Number of Bed Nights', fontsize=16)
-  ax.set_title('NNT vs. Miles traveled', fontsize=18)
+  ax.set_title('NNT vs. Miles traveled', fontsize=18, y=1.01)
+  ax.yaxis.set_tick_params(labelsize=13)
 
   plt.show()
 

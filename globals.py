@@ -26,6 +26,10 @@ MED3, MED3_DECILE = 'MED3', 'MED3_DECILE'
 MED123, MED123_DECILE = 'MED123', 'MED123_DECILE'
 PPROC, PPROC_DECILE = 'PPROC', 'PPROC_DECILE'
 
+# COL to Dummy coded column names
+COL2DUMMIES = {STATE: ['IN_STATE', 'OUT_OF_STATE_US', 'FOREIGN'],
+               REGION: ['International', 'Local', 'Regional', 'Unknown'],
+               LANGUAGE: ['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']}
 
 # Column list for feature selection
 OS_CODE_LIST = ['Cardiovascular', 'Digestive', 'Endocrine',
@@ -277,6 +281,7 @@ SCR_AUC = 'roc_auc'
 SCR_ACC_BAL = 'balanced_accuracy'
 SCR_ACC_ERR1 = 'Accuracy (tol = 1 NNT)'
 SCR_ACC_ERR2 = 'Accuracy (tol = 2 NNT)'
+SCR_RMSE = 'rooted MSE'
 SCR_UNDERPRED = 'underprediction rate'
 SCR_OVERPRED = 'overprediction rate'
 # TODO: Remove these

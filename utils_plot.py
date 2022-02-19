@@ -1,13 +1,74 @@
 from collections import Counter
+from typing import Dict
 
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 import networkx as nx
+import pandas as pd
 from sklearn import metrics
 
 import globals
+
+
+def plot_ftr_imp_heatmap(perf_df: pd.DataFrame, metrics, Xtype='train'):
+  fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+
+  return
+
+
+def plot_fs_stepwise_batch(model2perf_df: Dict[str, pd.DataFrame], metrics, Xtype='train', figs=None, axs_list=None):
+  if figs is None:
+    figs, axs = plt.subplots(2, 2, figsize=(25, 20))
+    axs_list = [axs[0][0], axs[0][1], axs[1][0], axs[1][1]]
+  colors = ['tab:blue', 'darkorange', 'tab:green', 'tab:purple', 'tab:pink']
+
+  for metric, ax in zip(metrics, axs_list):
+    print('\n')
+    max_y = 1
+    i = 0
+    for model, perf_df in model2perf_df.items():
+      color = colors[i]
+      i += 1
+      features = perf_df[perf_df['Trial'] == 0]['nth_feature'].to_list()
+      perf_groupby = perf_df.groupby('nth_feature')
+      ftr_perfstat_df = perf_groupby.agg({metric: [np.nanmean, np.nanstd]}).loc[features]
+      xaxis = ftr_perfstat_df.index.to_list()
+      metric_mean, metric_std = ftr_perfstat_df[metric]['nanmean'], ftr_perfstat_df[metric]['nanstd']
+      ax.fill_between(
+        xaxis,
+        metric_mean - metric_std,
+        metric_mean + metric_std,
+        alpha=0.25,
+        label=model,
+        color=color,
+      )
+      ax.plot(xaxis, metric_mean, '.-', alpha=0.95, label=model, color=color)
+      best_mean_idx = np.argmax(metric_mean) if 'accuracy' in metric.lower() else np.argmin(metric_mean)
+      best_mean_metric = metric_mean[best_mean_idx]
+      print(f'[{model}] Best average {metric}', round(best_mean_metric, 3))
+      ax.vlines(x=xaxis[best_mean_idx], ymin=0, ymax=best_mean_metric, alpha=0.7, ls='--', color=color)
+      ax.plot(
+        [xaxis[best_mean_idx]],
+        [best_mean_metric],
+        linestyle="-.",
+        marker="*",
+        markeredgewidth=3,
+        ms=10,
+        color=color
+      )
+      max_y = max(np.max(metric_mean), max_y)
+    ax.set_ylim([0.15, 1.01 * max_y])
+    ax.set_title(f'{Xtype} set {metric}', fontsize=18, y=1.01)
+    ax.set_xlabel('n-th added feature', fontsize=15)
+    ax.set_ylabel(f'{Xtype} {metric}', fontsize=15)
+    ax.legend()
+    ax.tick_params(labelbottom=True)
+
+  figs.autofmt_xdate(rotation=55)
+  plt.tight_layout(pad=4)
+  plt.show()
 
 
 def plot_learning_curve(gs, x_param_name, x_params, md, scorers):

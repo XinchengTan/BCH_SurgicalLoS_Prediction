@@ -4,6 +4,7 @@ import numpy as np
 from collections import Counter
 
 import xgboost
+from imblearn.ensemble import BalancedBaggingClassifier, BalancedRandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 from sklearn.metrics import mean_squared_error, make_scorer, accuracy_score
@@ -65,6 +66,34 @@ class PoissonClassifier(PoissonRegressor):
   def score(self, X, y, sample_weight=None):
     preds = self.predict(X)
     return accuracy_score(y, preds, sample_weight=sample_weight)
+
+
+def get_model(model, cls_weight='balanced'):
+  if model == globals.LGR:
+    #clf = LogisticRegressionCV(Cs=[0.001, 0.01, 0.03, 0.1, 0.3, 1, 3, 10], cv=5, class_weight=cls_weight, max_iter=300, random_state=0)
+    clf = LogisticRegression(C=0.1, class_weight=cls_weight, max_iter=300, random_state=0)
+  elif model == globals.SVC:
+    clf = SVC(gamma='auto', class_weight=cls_weight, probability=False)
+  elif model == globals.KNN:
+    clf = KNeighborsClassifier(n_neighbors=11)
+  elif model == globals.DTCLF:
+    clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight=cls_weight)
+  elif model == globals.RMFCLF:
+    clf = RandomForestClassifier(random_state=0, class_weight=cls_weight)
+  elif model == globals.GBCLF:
+    clf = GradientBoostingClassifier(random_state=0, max_depth=3)
+  elif model == globals.XGBCLF:
+    clf = XGBClassifier(max_depth=4, learning_rate=0.1, n_estimators=150, random_state=0, use_label_encoder=False)
+  elif model == globals.ORDCLF_LOGIT:
+    clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True)
+  elif model == globals.ORDCLF_PROBIT:
+    clf = OrdinalClassifier(distr='probit', solver='bfgs', disp=True)
+  elif model == globals.BAL_BAGCLF:
+    clf = BalancedBaggingClassifier(random_state=0)
+  else:
+    raise NotImplementedError("Model %s is not supported!" % model)
+
+  return clf
 
 
 def train_model(md, params, X, y):

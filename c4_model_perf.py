@@ -5,7 +5,7 @@ import pandas as pd
 from collections import defaultdict
 from typing import Dict
 
-from sklearn.metrics import accuracy_score, balanced_accuracy_score, make_scorer, roc_auc_score
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, make_scorer, roc_auc_score, mean_squared_error
 # from sklearn.linear_model import LogisticRegression, PoissonRegressor, Ridge, RidgeCV
 # from sklearn.neighbors import KNeighborsClassifier
 # from sklearn.svm import SVC, SVR
@@ -33,6 +33,8 @@ class MyScorer:
         scr_dict[scorer] = 'balanced_accuracy'
       elif scorer == globals.SCR_AUC:
         scr_dict[scorer] = 'roc_auc'
+      elif scorer == globals.SCR_RMSE:
+        scr_dict[scorer] = make_scorer(MyScorer.scorer_rmse, greater_is_better=False)
       elif scorer == globals.SCR_ACC_ERR1:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_1nnt_tol, greater_is_better=True)
       elif scorer == globals.SCR_ACC_ERR2:
@@ -44,6 +46,11 @@ class MyScorer:
       else:
         raise Warning(f"Scorer {scorer} is not supported yet!")
     return scr_dict
+
+  @staticmethod
+  def scorer_rmse(ytrue, ypred):
+    mse = mean_squared_error(ytrue, ypred)
+    return np.sqrt(mse)
 
   @staticmethod
   def scorer_1nnt_tol(ytrue, ypred):
@@ -68,18 +75,28 @@ class MyScorer:
     return underpred_pct
 
   @staticmethod
-  def apply_scorers(scorers: Dict, ytrue, ypred):
+  def apply_scorers(scorer_names, ytrue, ypred):
     perf_row_dict = {}
-    for scorer_name, scorer in scorers.items():
+    for scorer_name in scorer_names:
       if scorer_name == globals.SCR_ACC:
         perf_row_dict[scorer_name] = accuracy_score(ytrue, ypred)
       elif scorer_name == globals.SCR_ACC_BAL:
         perf_row_dict[scorer_name] = balanced_accuracy_score(ytrue, ypred)
+      elif scorer_name == globals.SCR_RMSE:
+        perf_row_dict[scorer_name] = MyScorer.scorer_rmse(ytrue, ypred)
+      elif scorer_name == globals.SCR_ACC_ERR1:
+        perf_row_dict[scorer_name] = MyScorer.scorer_1nnt_tol(ytrue, ypred)
+      elif scorer_name == globals.SCR_ACC_ERR2:
+        perf_row_dict[scorer_name] = MyScorer.scorer_2nnt_tol(ytrue, ypred)
+      elif scorer_name == globals.SCR_OVERPRED:
+        perf_row_dict[scorer_name] = MyScorer.scorer_overpred_pct(ytrue, ypred)
+      elif scorer_name == globals.SCR_UNDERPRED:
+        perf_row_dict[scorer_name] = MyScorer.scorer_underpred_pct(ytrue, ypred)
       elif scorer_name == globals.SCR_AUC:
         perf_row_dict[scorer_name] = None  # TODO: find a better solution to handle this
         # perf_row_dict[scorer_name] = roc_auc_score(ytrue, ypred)  # ypred is actually yscore: clf.predict_proba(X)[:, 1]
       else:
-        perf_row_dict[scorer_name] = scorer(ytrue, ypred)  # TODO: error saying missing 1 pos arg!!
+        raise NotImplementedError('%s not implemented' % scorer_name)
     return perf_row_dict
 
 
@@ -108,6 +125,16 @@ def eval_surgeon_perf(dataset: Dataset, scorers):
     test_surg_pred = dataset.get_surgeon_pred_df_by_case_key(dataset.test_case_keys)[globals.SPS_PRED]
     test_scores_row_dict = MyScorer.apply_scorers(scorers, dataset.ytest, test_surg_pred)
   return train_scores_row_dict, test_scores_row_dict
+
+
+# if __name__ == '__main__':
+#   ytrue = np.ones(10)
+#   ypred = np.array([0, 1] * 5)
+#   scorers = MyScorer.get_scorer_dict([globals.SCR_ACC, globals.SCR_ACC_BAL, globals.SCR_ACC_ERR1, globals.SCR_ACC_ERR2,
+#                                       globals.SCR_OVERPRED, globals.SCR_UNDERPRED, globals.SCR_RMSE])
+#   perf_row_dict = MyScorer.apply_scorers(scorers, ytrue, ypred)
+#
+#   print(perf_row_dict)
 
 
 # def init_perf_df(md, scorers):
