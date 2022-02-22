@@ -4,31 +4,57 @@ such as time of admission, discharge, end of surgery, actual start (wheel-in), a
 """
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 
 import globals
+from globals import *
+
+Event2DatetimeCol = {ADMIT: 'HAR_ADMIT_DATE', DISCHARGE: 'HAR_DISCHARGE_DATE',
+                     SURGEONSTART: 'SURGEON_START_DT_TM', SURGEONEND: 'SURGERY_END_DT_TM'}
 
 
-# ---------------------------------- Patient hospital event time of day ----------------------------------
+# -------------------------------- Patient hospital event time of day & NNT --------------------------------
+def plot_event_time_of_day_los(dashb_df, event=globals.ADMIT, outcome=globals.NNT):
+  event_col = Event2DatetimeCol.get(event, None)
+  if event_col is None:
+    raise ValueError(f'{event} column is not available yet!')
+  df = dashb_df[[event_col, outcome]]
+  df[event_col+'_HOUR'] = df[event_col].dt.hour
+  hr2cnt = df.groupby(by=event_col+'_HOUR').size().to_dict()
+  print(hr2cnt)
+
+  fig, ax = plt.subplots(1, 1, figsize=(15, 10))
+  if outcome == globals.NNT:
+    ax.set_yticklabels(globals.NNT_CLASS_LABELS)
+    df.loc[df[outcome] > MAX_NNT] = MAX_NNT + 1
+  sns.violinplot(data=df, x=event_col+'_HOUR', y=outcome, ax=ax)
+  ax.set_title(f'{event} Hour of Day & {outcome} Distribution', fontsize=19)
+  ax.set_xlabel('Hour of Day', fontsize=16)
+  ax.set_ylabel(outcome, fontsize=16)
+  plt.show()
+
+
+# ---------------------------------- Patient hospital event & time of day ----------------------------------
 # histograms (admit, discharge, end of surgery, wheel-out time ...)
 def time_of_day_historgram(df, event='ADMIT'):
   total = df.SURG_CASE_KEY.nunique()
-  if event == event == globals.ADMIT:
-    event_df = df.groupby(df.ACTUAL_START_DATE_TIME.dt.hour).SURG_CASE_KEY.count()
+  if event == globals.ADMIT:
+    event_df = df.groupby(df['HAR_ADMIT_DATE'].dt.hour).SURG_CASE_KEY.count()
     event_txt = "Admission"
   elif event == globals.WHEELOUT:
     event_df = df.groupby(df.ACTUAL_STOP_DATE_TIME.dt.hour).SURG_CASE_KEY.count()
     event_txt = "Wheel-out"
   elif event == globals.DISCHARGE:
-    event_df = df.groupby(df.DISCHARGE_DATE_TIME.dt.hour).SURG_CASE_KEY.count()
+    event_df = df.groupby(df['HAR_DISCHARGE_DATE'].dt.hour).SURG_CASE_KEY.count()
     event_txt = "Discharge"
   elif event == globals.IPSTART:
     event_df = df.groupby(df.INCISION_PROCEDURE_START_DATE_TIME.dt.hour).SURG_CASE_KEY.count()
     event_txt = "Incision Procedure Start"
   elif event == globals.STARTOS:
-    event_df = df.groupby(df.SURGEON_START_DATE_TIME.dt.hour).SURG_CASE_KEY.count()
+    event_df = df.groupby(df['SURGEON_START_DT_TM'].dt.hour).SURG_CASE_KEY.count()
     event_txt = "Surgeon Start"
   elif event == globals.ENDOS:
-    event_df = df.groupby(df.SURGERY_END_DATE_TIME.dt.hour).SURG_CASE_KEY.count()
+    event_df = df.groupby(df['SURGERY_END_DT_TM'].dt.hour).SURG_CASE_KEY.count()
     event_txt = "Surgery End"
   else:
     raise KeyError("%s is not supported for EDA" % event)
@@ -62,7 +88,7 @@ def time_of_day_historgram(df, event='ADMIT'):
 
 
 # ---------------------------------- Postoperative LoS Histogram ----------------------------------
-# Calculate postoperative LoS
+# Calculate post-operative LoS
 def gen_postop_los(df, counting_unit="H"):
   post_los_df = (df.DISCHARGE_DATE_TIME - df.ACTUAL_STOP_DATE_TIME).astype('timedelta64[ns]')
   # print("before rounding", post_los_df.head(6))
