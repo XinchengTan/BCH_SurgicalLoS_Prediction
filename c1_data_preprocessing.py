@@ -177,6 +177,11 @@ class Dataset(object):
     preprocess_y(surg_df, self.outcome, False, inplace=True)
     return surg_df
 
+  def get_raw_nnt(self, xtype='train'):
+    case_keys = self.train_case_keys if xtype.lower() == 'train' else self.test_case_keys
+    df = self.df.set_index('SURG_CASE_KEY').loc[case_keys]
+    return df[globals.NNT]
+
   def __str__(self):
     res = "Training set size: %d\n" \
           "Test set size: %d\n"\
@@ -212,13 +217,13 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
 
   # Add decile-related columns to Xdf
   Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
-  print("After adding decile cols: Xdf - ", Xdf.shape)
+  print("\nAfter adding decile cols: Xdf - ", Xdf.shape)
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy()
   if remove_nonnumeric:
     Xdf.drop(columns=globals.NON_NUMERIC_COLS + [ftrEng.decile_outcome], inplace=True, errors='ignore')
-  print("After removing nonnumeric cols: Xdf - ", Xdf.shape)
+  print("\nAfter droppping nonnumeric cols: Xdf - ", Xdf.shape)
   # Convert dataframe to numerical numpy matrix and save the corresponding features' names
   X = Xdf.to_numpy(dtype=np.float64)
   target_features = Xdf.columns.to_list()
@@ -228,9 +233,9 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   if remove_o2m:
     s = time()
     o2m_df, X, X_case_keys, y = discard_o2m_cases_from_self(X, X_case_keys, y, target_features)  # training set
-    print("Removing o2m cases from self took %d sec" % (time() - s))
+    print("\nRemoving o2m cases from self took %d sec" % (time() - s))
     # TODO: ??? regenerate decile if o2m_df.shape[0] > 0
-  print('After removing o2m cases: X - ', X.shape)
+  print('\nAfter removing o2m cases: X - ', X.shape)
 
   if verbose:
     display(pd.DataFrame(X, columns=target_features).head(20))

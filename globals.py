@@ -60,7 +60,7 @@ FEATURE_COLS = FEATURE_COLS_NO_WEIGHT + [WEIGHT_ZS]  # , 'ICD10S'
 
 #FEATURE_COLS_PPROC_NO_WEIGHT_OLD = FEATURE_COLS_NO_WEIGHT + [PPROC_DECILE]  # , 'ICD10S'
 
-FEATURE_COLS_NO_WEIGHT_STATE_LANG_INTERP = FEATURE_COLS_NO_WEIGHT + [STATE, LANGUAGE, INTERPRETER] # , 'ICD10S'
+FEATURE_COLS_NO_WEIGHT_STATE_LANG_INTERP = FEATURE_COLS_NO_WEIGHT + [STATE, LANGUAGE, INTERPRETER]  # , 'ICD10S'
 FEATURE_COLS_NO_WEIGHT_ALLMEDS = FEATURE_COLS_NO_WEIGHT + DRUG_COLS + \
                                  [LANGUAGE, INTERPRETER, STATE, REGION, MILES, PROBLEM_CNT]  # , 'ICD10S'
 
@@ -73,10 +73,10 @@ FEATURE_COLS_NO_OS_SPS = FEATURE_COLS_NO_OS + [SPS_PRED]
 
 # Default medical code to decile feature to aggregation function
 DEFAULT_COL2DECILE_FTR2AGGF = {
-  CPT: {CPT_DECILE: 'max', f'{CPT}_COUNT': 'max', f'{CPT}_SD': 'mean'},
-  PPROC: {PPROC_DECILE: 'max', f'{PPROC}_COUNT': 'max', f'{PPROC}_SD': 'mean'},
-  CCSR: {CCSR_DECILE: 'max', f'{CCSR}_COUNT': 'max', f'{CCSR}_SD': 'mean'},
-  MED3: {MED3_DECILE: 'max', f'{MED3}_COUNT': 'max', f'{MED3}_SD': 'mean'},
+  CPT: {CPT_DECILE: 'max', f'{CPT}_COUNT': 'max', f'{CPT}_SD': 'mean', f'{CPT}_QT25': 'max', f'{CPT}_QT75': 'max'},
+  PPROC: {PPROC_DECILE: 'max', f'{PPROC}_COUNT': 'max', f'{PPROC}_SD': 'mean', f'{PPROC}_QT25': 'max', f'{PPROC}_QT75': 'max'},
+  CCSR: {CCSR_DECILE: 'max', f'{CCSR}_COUNT': 'max', f'{CCSR}_SD': 'mean', f'{CCSR}_QT25': 'max', f'{CCSR}_QT75': 'max'},
+  MED3: {MED3_DECILE: 'max', f'{MED3}_COUNT': 'max', f'{MED3}_SD': 'mean', f'{MED3}_QT25': 'max', f'{MED3}_QT75': 'max'},
 }
 # MED1: {MED1_DECILE: 'max'},
 # MED2: {MED2_DECILE: 'max'},

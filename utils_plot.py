@@ -54,23 +54,26 @@ def plot_confusion_matrix(yTrue, yPred, md_name, Xtype, axis_ticklabels=None, no
   confmat = metrics.confusion_matrix(yTrue, yPred, labels=np.arange(0, globals.MAX_NNT + 2, 1), normalize=normalize)
 
   cmap = sns.color_palette("ch:start=.2,rot=-.3") if str(Xtype).lower() == 'train' else 'rocket_r'
+  fmt = 'd' if normalize is None else '.2%'
   title = 'Confusion Matrix (%s - %s)' % (md_name, Xtype)
 
-  # plot confusion matrix - todo: if normalize == None, fix count rendering! Add arg for axis tick labels
+  # plot confusion matrix - todo: Add arg for axis tick labels
   figs, axs = plt.subplots(1, 1, figsize=(12, 10))
   sns.set(font_scale=1.3)  # for label size
-  sns.heatmap(confmat, fmt='d', cmap=cmap, linecolor='white', linewidths=0.5,
+  sns.heatmap(confmat, fmt=fmt, cmap=cmap, linecolor='white', linewidths=0.5,
               annot=True, annot_kws={"size": 15}, ax=axs)  # font size
   axs.set_title(title_note + title, fontsize=20, y=1.02)
   axs.set_xlabel("Predicted outcome", fontsize=16)
   axs.set_ylabel("True outcome", fontsize=16)
   if axis_ticklabels is None:
+
     axs.set_xticks(np.arange(globals.MAX_NNT + 2) + 0.5)
     axs.set_xticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
     axs.set_yticks(np.arange(globals.MAX_NNT + 2) + 0.5)
     axs.set_yticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
   else:
-    pass  # todo!!
+    axs.set_xticklabels(axis_ticklabels, fontsize=13)
+    axs.set_yticklabels(axis_ticklabels, fontsize=13)
 
   if savefig:
     extent = axs[0].get_window_extent().transformed(figs.dpi_scale_trans.inverted())

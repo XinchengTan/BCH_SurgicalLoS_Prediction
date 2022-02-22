@@ -55,8 +55,6 @@ class FeatureSelector(object):
     print("\nSelected features: ", selected_features)
     return sfs  # sfs.get_support(), selected_features,
 
-
-  # TODO: following methods
   @staticmethod
   def stepwise_batch_addition_fs(estimator,
                                  ktrial_datasets: List[Dataset],
@@ -68,12 +66,12 @@ class FeatureSelector(object):
       base_features = [PPROC_DECILE]
     if add_features is None:
       add_features = [
-                       CPT_DECILE, MED3_DECILE,
-                       f'{PPROC}_COUNT', f'{CPT}_COUNT', f'{MED3}_COUNT',
-                       f'{PPROC}_MEDIAN', f'{CPT}_MEDIAN', f'{MED3}_MEDIAN',
-                       f'{PPROC}_QT25', f'{CPT}_QT25', f'{MED3}_QT25',
-                       f'{PPROC}_QT75', f'{CPT}_QT75', f'{MED3}_QT75',
-                       f'{PPROC}_SD', f'{CPT}_SD', f'{MED3}_SD',
+                       CPT_DECILE, MED3_DECILE, CCSR_DECILE,
+                       f'{PPROC}_COUNT', f'{CPT}_COUNT', f'{MED3}_COUNT', f'{CCSR}_COUNT',
+                       f'{PPROC}_MEDIAN', f'{CPT}_MEDIAN', f'{MED3}_MEDIAN', f'{CCSR}_MEDIAN',
+                       f'{PPROC}_QT25', f'{CPT}_QT25', f'{MED3}_QT25', f'{CCSR}_QT25',
+                       f'{PPROC}_QT75', f'{CPT}_QT75', f'{MED3}_QT75', f'{CCSR}_QT75',
+                       f'{PPROC}_SD', f'{CPT}_SD', f'{MED3}_SD', f'{CCSR}_SD',
                        AGE, GENDER, MILES, STATE, REGION, LANGUAGE, INTERPRETER, PROBLEM_CNT,
                      ] + OS_CODE_LIST + [PRIMARY_PROC, CPTS, CCSRS, DRUG_COLS[2]]
     if scorers is None:
@@ -83,7 +81,7 @@ class FeatureSelector(object):
     test_perf_df = pd.DataFrame(columns=['Trial', 'nth_feature'] + list(scorers.keys()))
     for trial_i, dataset in tqdm(enumerate(ktrial_datasets), 'trial'):
       print('Trial %d' % trial_i)
-      train_perf_df, test_perf_df = stepwise_batch_addition_single_trial(
+      train_perf_df, test_perf_df = FeatureSelector._stepwise_batch_addition_single_trial(
         trial_i, estimator, dataset, base_features=base_features, features_to_add=add_features,
         scorers=scorers, train_perf_df=train_perf_df, test_perf_df=test_perf_df, rand_state=rand_state)
 
@@ -96,6 +94,63 @@ class FeatureSelector(object):
   @staticmethod
   def resampled_simulated_annealing_fs():
     pass
+
+  @staticmethod
+  def _stepwise_batch_addition_single_trial(trial_i: int,
+                                            estimator,
+                                            dataset: Dataset,
+                                            base_features=None,
+                                            features_to_add=None,
+                                            scorers=None,
+                                            train_perf_df=None,
+                                            test_perf_df=None,
+                                            rand_state=SEED):
+    """
+    This function iteratively adds features, one type at a time, to a pre-defined classifier trained on dataset.Xtrain
+    and evaluated on dataset.Xtest.
+
+    Each feature batch corresponds to a raw column in a prepared dataframe, except for all decile-related features.
+
+    :param estimator: a classifier (sklearn Model object)
+    :param dataset: a Dataset object with full feature set
+    :param base_features: starting feature set
+    :param features_to_add: features to add, must not overlap with 'base_features'
+    :param rand_state: seed
+    :return:
+    """
+    full_features = np.array(dataset.feature_names)
+    cur_feature, ftr_in_use_idxs = base_features[0], np.where(np.in1d(full_features, base_features))[0]
+    if train_perf_df is None:
+      train_perf_df = pd.DataFrame(columns=['Trial', 'nth_feature'] + list(scorers.keys()))
+    if test_perf_df is None:
+      test_perf_df = pd.DataFrame(columns=['Trial', 'nth_feature'] + list(scorers.keys()))
+    for new_feature in tqdm(features_to_add, f'Trial {trial_i} - features'):
+      # Train on features in use
+      Xtrain, Xtest = dataset.Xtrain[:, ftr_in_use_idxs], dataset.Xtest[:, ftr_in_use_idxs]
+      estimator.fit(Xtrain, dataset.ytrain)
+
+      # Evaluate on Xtrain and Xtest, using only the selected features
+      train_pred, test_pred = estimator.predict(Xtrain), estimator.predict(Xtest)
+      train_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytrain, train_pred)
+      test_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytest, test_pred)
+
+      # Save the results to a dataframe
+      train_score_dict['Trial'], test_score_dict['Trial'] = trial_i, trial_i
+      train_score_dict['nth_feature'], test_score_dict['nth_feature'] = cur_feature, cur_feature
+      train_perf_df = train_perf_df.append(train_score_dict, ignore_index=True)
+      test_perf_df = test_perf_df.append(test_score_dict, ignore_index=True)
+
+      # Add a new feature
+      if new_feature in {STATE, REGION, LANGUAGE}:
+        ftr_col_idxs = np.where(np.in1d(full_features, COL2DUMMIES[new_feature]))[0]
+      elif new_feature in {PRIMARY_PROC, CPTS, CCSRS, DRUG_COLS[2]}:
+        ftr_col_idxs = utils.get_onehot_column_idxs(new_feature, full_features)
+      else:
+        ftr_col_idxs = np.where(np.in1d(full_features, new_feature))[0]
+      ftr_in_use_idxs = np.concatenate([ftr_in_use_idxs, ftr_col_idxs])
+      cur_feature = new_feature
+
+    return train_perf_df, test_perf_df
 
 
 # Apply feature selection technique and evaluate on test data
@@ -135,69 +190,6 @@ def feature_selection_with_eval(estimator, ktrial_datasets, scorers, fs_scorer, 
       raise NotImplementedError
 
   return train_perf_df, test_perf_df, {ktrial_datasets[0].feature_names[i]: feature_select_counts[i] for i in range(len(feature_select_counts))}
-
-
-# TODO: add visualization (1. Line plot of num_features ~ Test perfs -- diff color for diff models,
-#                          2. Heatmap of selected feature count)
-
-
-
-def stepwise_batch_addition_single_trial(trial_i: int,
-                                         estimator,
-                                         dataset: Dataset,
-                                         base_features=None,
-                                         features_to_add=None,
-                                         scorers=None,
-                                         train_perf_df=None,
-                                         test_perf_df=None,
-                                         rand_state=SEED):
-  """
-  This function iteratively adds features, one type at a time, to a pre-defined classifier trained on dataset.Xtrain
-  and evaluated on dataset.Xtest.
-
-  Each feature batch corresponds to a raw column in a prepared dataframe, except for all decile-related features.
-
-  :param estimator: a classifier (sklearn Model object)
-  :param dataset: a Dataset object with full feature set
-  :param base_features: starting feature set
-  :param features_to_add: features to add, must not overlap with 'base_features'
-  :param rand_state: seed
-  :return:
-  """
-  full_features = np.array(dataset.feature_names)
-  cur_feature, ftr_in_use_idxs = base_features[0], np.where(np.in1d(full_features, base_features))[0]
-  if train_perf_df is None:
-    train_perf_df = pd.DataFrame(columns=['Trial', 'nth_feature'] + list(scorers.keys()))
-  if test_perf_df is None:
-    test_perf_df = pd.DataFrame(columns=['Trial', 'nth_feature'] + list(scorers.keys()))
-  for new_feature in tqdm(features_to_add, f'Trial {trial_i} - features'):
-    # Train on features in use
-    Xtrain, Xtest = dataset.Xtrain[:, ftr_in_use_idxs], dataset.Xtest[:, ftr_in_use_idxs]
-    estimator.fit(Xtrain, dataset.ytrain)
-
-    # Evaluate on Xtrain and Xtest, using only the selected features
-    train_pred, test_pred = estimator.predict(Xtrain), estimator.predict(Xtest)
-    train_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytrain, train_pred)
-    test_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytest, test_pred)
-
-    # Save the results to a dataframe
-    train_score_dict['Trial'], test_score_dict['Trial'] = trial_i, trial_i
-    train_score_dict['nth_feature'], test_score_dict['nth_feature'] = cur_feature, cur_feature
-    train_perf_df = train_perf_df.append(train_score_dict, ignore_index=True)
-    test_perf_df = test_perf_df.append(test_score_dict, ignore_index=True)
-
-    # Add a new feature
-    if new_feature in {STATE, REGION, LANGUAGE}:
-      ftr_col_idxs = np.where(np.in1d(full_features, COL2DUMMIES[new_feature]))[0]
-    elif new_feature in {PRIMARY_PROC, CPTS, CCSRS, DRUG_COLS[2]}:
-      ftr_col_idxs = utils.get_onehot_column_idxs(new_feature, full_features)
-    else:
-      ftr_col_idxs = np.where(np.in1d(full_features, new_feature))[0]
-    ftr_in_use_idxs = np.concatenate([ftr_in_use_idxs, ftr_col_idxs])
-    cur_feature = new_feature
-
-  return train_perf_df, test_perf_df
-
 
 
   # TODO: What to do with removing o2m along the step-wise addition???
