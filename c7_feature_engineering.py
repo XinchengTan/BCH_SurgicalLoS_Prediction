@@ -132,6 +132,8 @@ class FeatureEngineeringModifier(object):
         Xdf = self.join_with_med_decile(Xdf, self.decile_generator.med_level2decile[2], 2, ftr2aggf)
       elif col == globals.MED3:
         Xdf = self.join_with_med_decile(Xdf, self.decile_generator.med_level2decile[3], 3, ftr2aggf)
+      elif col == globals.MED123:
+        Xdf = self.join_with_med_decile(Xdf, self.decile_generator.med_level2decile[123], 123, ftr2aggf)
       else:
         raise NotImplementedError("%s decile is not implemented yet!" % col)
     return Xdf
@@ -178,7 +180,7 @@ class FeatureEngineeringModifier(object):
                            decile_col2aggf={globals.MED1_DECILE: 'max'}):
     # Note: Assume Xdf contains the medication column (dtype is list) before one-hot encoding
     # 1. Explode Xdf on column 'LEVEL#_DRUG_CLASS_NAME'; 2. Groupby 'SURG_CASE_KEY' and apply agg func
-    med_col = globals.DRUG_COLS[level-1]
+    med_col = globals.DRUG_COLS[level-1] if level <= 3 else globals.DRUG_COLS[-1]
     Xdf_w_decile = Xdf[['SURG_CASE_KEY', med_col]]\
       .explode(med_col)\
       .join(med_decile.set_index(med_col), on=med_col, how='left')\
@@ -237,13 +239,15 @@ class FeatureEngineeringModifier(object):
     print("#%s CPTs: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.CPT), feature_set)))))
     print("#%s CPT Groups: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.CPT_GROUP), feature_set)))))
     print("#%s CCSRs: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.CCSR), feature_set)))))
-    print("#%s MED1s: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.MED1), feature_set)))))
+    med123_cnt = len(list(filter(lambda x: x.startswith(globals.MED123), feature_set)))
+    print("#%s MED123s: %d" % (ftr_type, med123_cnt))
+    print("#%s MED1s: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.MED1), feature_set))) - med123_cnt))
     print("#%s MED2s: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.MED2), feature_set)))))
     print("#%s MED3s: %d" % (ftr_type, len(list(filter(lambda x: x.startswith(globals.MED3), feature_set)))))
     print("#%s Others: " % ftr_type, list(filter(
       lambda x: not (x.startswith(globals.PRIMARY_PROC) or x.startswith(globals.CPT) or x.startswith(globals.CPT_GROUP)
                      or x.startswith(globals.CCSR) or x.startswith(globals.MED1) or x.startswith(globals.MED2)
-                     or x.startswith(globals.MED3)), feature_set)))
+                     or x.startswith(globals.MED3)) or x.startswith(globals.MED123), feature_set)))
 
   # Apply one-hot encoding to the designated columns
   def onehot_encode_cols(self, Xdf, onehot_cols, onehot_dtypes):
@@ -251,7 +255,7 @@ class FeatureEngineeringModifier(object):
       return Xdf
 
     for oh_col, dtype in zip(onehot_cols, onehot_dtypes):
-      oh_prefix = oh_col + '_OHE' if oh_col not in globals.DRUG_COLS else 'MED%s_OHE_' % list(filter(str.isdigit, oh_col))[0]
+      oh_prefix = oh_col + '_OHE' if oh_col not in globals.DRUG_COLS else 'MED%s_OHE_' % ''.join(filter(str.isdigit, oh_col))
       if dtype == str:
         dummies = pd.get_dummies(Xdf[oh_col], prefix=oh_prefix)
       elif dtype == list:  # Expand list to (row_id, oh_col indicator) first
@@ -349,6 +353,9 @@ class DecileGenerator(object):
       elif col == globals.MED3:
         med3_decile = self.gen_medication_decile(Xdf, outcome, level=3)
         self.med_level2decile[3] = med3_decile
+      elif col == globals.MED123:
+        med123_decile = self.gen_medication_decile(Xdf, outcome, level=123)
+        self.med_level2decile[123] = med123_decile
       else:
         raise NotImplementedError("%s decile is not implemented yet!" % col)
       X_dcl_features.extend(dcl_ftrs2aggf.keys())
@@ -417,7 +424,7 @@ class DecileGenerator(object):
     return cpt_decile
 
   def gen_medication_decile(self, data_df: pd.DataFrame, outcome=globals.LOS, level=1, save_dir=None):
-    med_col = globals.DRUG_COLS[level-1]
+    med_col = globals.DRUG_COLS[level-1] if level <= 3 else globals.DRUG_COLS[-1]
     med_outcome_df = data_df[[med_col, outcome]]
     # Explode df by medication type col and groupby
     exp_med_out_df = med_outcome_df.explode(med_col).dropna(subset=[med_col])

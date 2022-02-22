@@ -45,7 +45,7 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=N
   # Medication data -- join by surg case key
   if medication_fp is not None:
     med_df = pd.read_csv(medication_fp)
-    dashb_df, _ = join_med_df_list_rep(med_df, dashb_df, levels=(1, 2, 3))
+    dashb_df, _ = join_med_df_list_rep(med_df, dashb_df, levels=(1, 2, 3, 123))
     print_df_info(dashb_df, dfname='Dashboard df with Medication')
 
   # Load datetime dataset
@@ -137,16 +137,20 @@ def print_df_info(df, dfname="Dashboard", other_cols=None):
 
 
 def join_med_df_list_rep(med_df, dashb_df, levels=(1,)):
-  med_levels = ['LEVEL%d_DRUG_CLASS_NAME' % l for l in levels]
+  med_levels = [f'LEVEL{l}_DRUG_CLASS_NAME' for l in levels[:3]]
   med_df = med_df[['SURG_CASE_KEY', 'HNA_ORDER_MNEMONIC'] + med_levels]
-  med_df.loc[med_df['LEVEL1_DRUG_CLASS_NAME'].isna(), med_levels] = med_df['HNA_ORDER_MNEMONIC']
+  med_df.loc[med_df['LEVEL1_DRUG_CLASS_NAME'].isna(), med_levels] = med_df['HNA_ORDER_MNEMONIC']  # use mnemonic if level3 med == null
+  if 123 in levels:  # composite level
+    med_df['LEVEL123_DRUG_CLASS_NAME'] = med_df['LEVEL3_DRUG_CLASS_NAME']
+    med_df.loc[med_df['LEVEL123_DRUG_CLASS_NAME'].isna(), 'LEVEL123_DRUG_CLASS_NAME'] = med_df['LEVEL2_DRUG_CLASS_NAME']
+    med_df.loc[med_df['LEVEL123_DRUG_CLASS_NAME'].isna(), 'LEVEL123_DRUG_CLASS_NAME'] = med_df['LEVEL1_DRUG_CLASS_NAME']
 
   med_df = med_df.groupby(by='SURG_CASE_KEY')\
-    .agg({'LEVEL%d_DRUG_CLASS_NAME' % l: lambda x: list({d for d in x if not pd.isna(d)}) for l in levels})\
+    .agg({f'LEVEL{l}_DRUG_CLASS_NAME': lambda x: list({d for d in x if not pd.isna(d)}) for l in levels})\
     .reset_index()
   dashb_df = dashb_df.join(med_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='left')
   for l in levels:
-    dashb_df['LEVEL%d_DRUG_CLASS_NAME' % l] = dashb_df['LEVEL%d_DRUG_CLASS_NAME' % l]\
+    dashb_df[f'LEVEL{l}_DRUG_CLASS_NAME'] = dashb_df[f'LEVEL{l}_DRUG_CLASS_NAME']\
       .apply(lambda x: x if isinstance(x, list) else [])
   # TODO: if levels starts at 2, and some are Nan at this level & are not DME, then what?
   return dashb_df, med_df

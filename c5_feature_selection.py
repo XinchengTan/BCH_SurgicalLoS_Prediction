@@ -66,14 +66,14 @@ class FeatureSelector(object):
       base_features = [PPROC_DECILE]
     if add_features is None:
       add_features = [
-                       CPT_DECILE, MED3_DECILE, CCSR_DECILE,
-                       f'{PPROC}_COUNT', f'{CPT}_COUNT', f'{MED3}_COUNT', f'{CCSR}_COUNT',
-                       f'{PPROC}_MEDIAN', f'{CPT}_MEDIAN', f'{MED3}_MEDIAN', f'{CCSR}_MEDIAN',
-                       f'{PPROC}_QT25', f'{CPT}_QT25', f'{MED3}_QT25', f'{CCSR}_QT25',
-                       f'{PPROC}_QT75', f'{CPT}_QT75', f'{MED3}_QT75', f'{CCSR}_QT75',
-                       f'{PPROC}_SD', f'{CPT}_SD', f'{MED3}_SD', f'{CCSR}_SD',
+                       CPT_DECILE, MED123_DECILE, CCSR_DECILE,
+                       f'{PPROC}_COUNT', f'{CPT}_COUNT', f'{MED123}_COUNT', f'{CCSR}_COUNT',
+                       f'{PPROC}_MEDIAN', f'{CPT}_MEDIAN', f'{MED123}_MEDIAN', f'{CCSR}_MEDIAN',
+                       f'{PPROC}_QT25', f'{CPT}_QT25', f'{MED123}_QT25', f'{CCSR}_QT25',
+                       f'{PPROC}_QT75', f'{CPT}_QT75', f'{MED123}_QT75', f'{CCSR}_QT75',
+                       f'{PPROC}_SD', f'{CPT}_SD', f'{MED123}_SD', f'{CCSR}_SD',
                        AGE, GENDER, MILES, STATE, REGION, LANGUAGE, INTERPRETER, PROBLEM_CNT,
-                     ] + OS_CODE_LIST + [PRIMARY_PROC, CPTS, CCSRS, DRUG_COLS[2]]
+                     ] + OS_CODE_LIST + [PRIMARY_PROC, CPTS, CCSRS, DRUG_COLS[3]]
     if scorers is None:
       scorers = MyScorer.get_scorer_dict([SCR_ACC, SCR_ACC_BAL, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED, SCR_UNDERPRED,
                                           SCR_RMSE])

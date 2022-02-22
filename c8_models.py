@@ -59,7 +59,7 @@ class RegressionBasedClassifier(object):
   def __init__(self, md, **kwargs):
     self.regressor = None
     if md == globals.PR:
-      self.regressor = PoissonRegressor(**kwargs)
+      self.regressor = PoissonRegressor(**kwargs)  # alpha=0.01, max_iter=300
     elif md == globals.SVR:
       self.regressor = SVR(**kwargs)
     elif md == globals.KNR:
@@ -92,8 +92,9 @@ class RegressionBasedClassifier(object):
 
 def get_model(model, cls_weight='balanced'):
   if model == globals.LGR:
-    #clf = LogisticRegressionCV(Cs=[0.001, 0.01, 0.03, 0.1, 0.3, 1, 3, 10], cv=5, class_weight=cls_weight, max_iter=300, random_state=0)
-    clf = LogisticRegression(C=0.1, class_weight=cls_weight, max_iter=300, random_state=0)
+    clf = LogisticRegression(C=0.03, class_weight=None, max_iter=500, random_state=0)
+  elif model == globals.PR:
+    clf = RegressionBasedClassifier(globals.PR, alpha=0.01, max_iter=300)
   elif model == globals.SVC:
     clf = SVC(gamma='auto', class_weight=cls_weight, probability=False)
   elif model == globals.KNN:
@@ -105,7 +106,8 @@ def get_model(model, cls_weight='balanced'):
   elif model == globals.GBCLF:
     clf = GradientBoostingClassifier(random_state=0, max_depth=3)
   elif model == globals.XGBCLF:
-    clf = XGBClassifier(max_depth=4, learning_rate=0.1, n_estimators=150, random_state=0, use_label_encoder=False)
+    clf = XGBClassifier(max_depth=4, learning_rate=0.1, n_estimators=150, random_state=0, use_label_encoder=False,
+                        eval_metric='mlogloss')
   elif model == globals.ORDCLF_LOGIT:
     clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True)
   elif model == globals.ORDCLF_PROBIT:
