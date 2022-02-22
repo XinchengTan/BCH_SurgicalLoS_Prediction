@@ -1,5 +1,5 @@
-from collections import Counter
-from typing import Dict
+from collections import Counter, defaultdict
+from typing import Dict, List
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -7,15 +7,109 @@ import matplotlib.patches as mpatches
 import numpy as np
 import networkx as nx
 import pandas as pd
+import seaborn as sns
 from sklearn import metrics
 
 import globals
 
 
-def plot_ftr_imp_heatmap(perf_df: pd.DataFrame, metrics, Xtype='train'):
-  fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+# TODO: in future iterations, make sure class labels are always consecutive range starting at 0!!
+def plot_predicted_proba_over_class(ytrue, yproba, md_name, Xtype='train', class_labels=None, violin=True):
+  """
+  Scatter plot of predicted probability over true class (blue dots - correct, red dots - wrong)
+  - only applicable to classifiers that have a 'predict_proba()' method
 
-  return
+  :param ytrue: 1d array of true class labels
+  :param yproba: 2d array of predicted probability for each sample under each class (n_samples, n_classes)
+  :param Xtype: 'train' of 'test'
+  :return:
+  """
+  if class_labels is None:
+    class_labels = globals.NNT_CLASS_LABELS
+  yproba_max = np.max(yproba, axis=1)
+  correct_mask = np.argmax(yproba, axis=1) == ytrue
+  ytrue_correct, yprobaMax_correct = ytrue[correct_mask], yproba_max[correct_mask]
+  ytrue_wrong, yprobaMax_wrong = ytrue[~correct_mask], yproba_max[~correct_mask]
+
+  plt.rcdefaults()
+  fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+  if violin:
+    df = pd.DataFrame({'true_label': ytrue, 'max_proba': yproba_max,
+                       'correct': ['Correct' if b else 'Incorrect' for b in correct_mask]})
+    sns.violinplot(data=df, x='true_label', y='max_proba', hue='correct', hue_order=['Correct', 'Incorrect'], split='Correct',
+                   palette={'Correct': 'forestgreen', 'Incorrect': 'orangered'}, ax=ax)
+  else:
+    ax.scatter(ytrue_correct, yprobaMax_correct, marker='.', c='r', label='Correct Prediction')
+    ax.scatter(ytrue_wrong, yprobaMax_wrong, marker='.', c='b', label='Incorrect Prediction')
+    ax.set_xticks(np.arange(np.max(ytrue) + 1) + 0.5)
+  ax.set_title(f'Predicted Class Probability Distribution ({md_name} - {Xtype})', fontsize=20, y=1.02)
+  ax.set_xlabel('Class Name', fontsize=16)
+  ax.set_ylabel('Predicted Class Probability')
+  ax.set_xticklabels(class_labels, fontsize=13)
+  ax.legend(title='Predictions')
+  plt.show()
+
+
+def plot_confusion_matrix(yTrue, yPred, md_name, Xtype, axis_ticklabels=None, normalize='true', savefig=False, title_note=''):
+  confmat = metrics.confusion_matrix(yTrue, yPred, labels=np.arange(0, globals.MAX_NNT + 2, 1), normalize=normalize)
+
+  cmap = sns.color_palette("ch:start=.2,rot=-.3") if str(Xtype).lower() == 'train' else 'rocket_r'
+  title = 'Confusion Matrix (%s - %s)' % (md_name, Xtype)
+
+  # plot confusion matrix - todo: if normalize == None, fix count rendering! Add arg for axis tick labels
+  figs, axs = plt.subplots(1, 1, figsize=(12, 10))
+  sns.set(font_scale=1.3)  # for label size
+  sns.heatmap(confmat, fmt='d', cmap=cmap, linecolor='white', linewidths=0.5,
+              annot=True, annot_kws={"size": 15}, ax=axs)  # font size
+  axs.set_title(title_note + title, fontsize=20, y=1.02)
+  axs.set_xlabel("Predicted outcome", fontsize=16)
+  axs.set_ylabel("True outcome", fontsize=16)
+  if axis_ticklabels is None:
+    axs.set_xticks(np.arange(globals.MAX_NNT + 2) + 0.5)
+    axs.set_xticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
+    axs.set_yticks(np.arange(globals.MAX_NNT + 2) + 0.5)
+    axs.set_yticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
+  else:
+    pass  # todo!!
+
+  if savefig:
+    extent = axs[0].get_window_extent().transformed(figs.dpi_scale_trans.inverted())
+    figs.savefig(savefig, bbox_inches=extent.expanded(1.1, 1.2))
+  plt.show()
+
+  return confmat
+
+
+# Plot a stacked histogram of feature ranking over k trials
+def plot_ktrials_ftr_rank_count(feature_imps: List, feature_names, topK=15):
+  ktrials = len(feature_imps)
+  # Build a mapping of {ftr_x: {rank_1: cnt_1, rank_3: cnt_3, ...}} where rank starts from 1
+  ftr_to_rankcount = defaultdict(lambda: {k: 0 for k in range(1, topK + 1)})
+  for ftr_imp in feature_imps:
+    ftr2imp_topK = sorted(zip(feature_names, ftr_imp), reverse=True, key=lambda x: x[1])[:topK]
+    for i in range(topK):
+      f, _ = ftr2imp_topK[i]
+      ftr_to_rankcount[f][i + 1] += 1
+
+  # Build a df for plot, sort by topK occurrences and then by rank
+  ftr2rankcount_df = pd.DataFrame.from_dict(ftr_to_rankcount, orient='index')
+  weighted_sum = np.matmul(ftr2rankcount_df.to_numpy(), np.arange(1, topK + 1))
+  ftr2rankcount_df['rowsum'] = ftr2rankcount_df.sum(axis=1)
+  ftr2rankcount_df['weighted_rowsum'] = weighted_sum
+  ftr2rankcount_df = ftr2rankcount_df.sort_values(
+    by=['rowsum', 'weighted_rowsum'], ascending=[False, True]) \
+    .drop(columns=['rowsum', 'weighted_rowsum'])
+
+  # Stacked barplot of top 20 selected features & rank frequency
+  fig, ax = plt.subplots(1, 1, figsize=(15, 8))
+  cmap = sns.color_palette("Spectral", as_cmap=True)  # sns.color_palette("rocket", as_cmap=True)
+  ftr2rankcount_df.plot(kind='bar', stacked=True, cmap=cmap, ax=ax)
+  ax.set_title('Top %d Important Feature Selection Tally (XGBoost - %d trials)' % (topK, ktrials), fontsize=18,
+               y=1.01)
+  ax.set_ylabel('Selected Counts', fontsize=16)
+  ax.legend(title='Importance Rank')
+  fig.autofmt_xdate(rotation=60)
+  plt.show()
 
 
 def plot_fs_stepwise_batch(model2perf_df: Dict[str, pd.DataFrame], metrics, Xtype='train', figs=None, axs_list=None):

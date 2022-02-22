@@ -5,18 +5,18 @@ from collections import Counter
 
 import xgboost
 from imblearn.ensemble import BalancedBaggingClassifier, BalancedRandomForestClassifier
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import make_pipeline
 from sklearn.metrics import mean_squared_error, make_scorer, accuracy_score
 from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV, PoissonRegressor, Ridge, RidgeCV
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.svm import SVC, SVR
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, GradientBoostingRegressor
-from xgboost import XGBClassifier
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.neural_network import MLPRegressor, MLPClassifier
+from xgboost import XGBClassifier, XGBRegressor
 
 import globals
 
@@ -51,6 +51,41 @@ except ModuleNotFoundError as e:
 except ImportError as e:
   print(e)
   print('OrderedClassifier() is not defined!')
+
+
+class RegressionBasedClassifier(object):
+
+  def __init__(self, md, **kwargs):
+    self.regressor = None
+    if md == globals.PR:
+      self.regressor = PoissonRegressor(**kwargs)
+    elif md == globals.SVR:
+      self.regressor = SVR(**kwargs)
+    elif md == globals.KNR:
+      self.regressor = KNeighborsRegressor(**kwargs)
+    elif md == globals.DT:
+      self.regressor = DecisionTreeRegressor(**kwargs)
+    elif md == globals.RMF:
+       self.regressor = RandomForestRegressor(**kwargs)
+    elif md == globals.GB:
+      self.regressor = GradientBoostingRegressor(**kwargs)
+    elif md == globals.XGB:
+      self.regressor = XGBRegressor(**kwargs)
+    elif md == globals.MLP:
+      self.regressor = MLPRegressor(**kwargs)
+    else:
+      raise NotImplementedError
+
+  def predict(self, X):
+    reg_pred = np.rint(self.regressor.predict(X))
+    reg_pred[reg_pred > globals.MAX_NNT] = globals.MAX_NNT + 1
+    return reg_pred
+
+  def score(self, X, y, sample_weight=None):
+    preds = self.predict(X)
+    return accuracy_score(y, preds, sample_weight=sample_weight)
+
+
 
 
 class PoissonClassifier(PoissonRegressor):

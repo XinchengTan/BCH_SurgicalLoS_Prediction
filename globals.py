@@ -204,9 +204,14 @@ SURGEON = 'SPS Surgeon'
 # Model types
 LR = 'lr-reg'
 RIDGECV = 'ridgecv-reg'
+PR = 'poisson-reg'
+SVR = 'sv-reg'
+KNR = 'knn-reg'
 DT = 'dt-reg'
 RMF = 'rmf-reg'
 GB = 'gb-reg'
+XGB = 'xgb-reg'
+MLP = 'mlp-reg'
 
 reg2name = {LR: "Linear Regression",
             RIDGECV: "RidgeCV",
@@ -216,19 +221,19 @@ reg2name = {LR: "Linear Regression",
             }
 
 LGR = 'lgr'
-PR = 'pr'
 SVC = 'svc'
 KNN = 'knn'
 DTCLF = 'dt'
 RMFCLF = 'rmf'
 GBCLF = 'gb'
 XGBCLF = 'xgb'
+MLPCLF = 'mlp'
 ORDCLF_LOGIT = 'ord-clf-logit'
 ORDCLF_PROBIT = 'ord-clf-probit'
 BAL_BAGCLF = 'bal-bagging'
 ENSEMBLE_MAJ_EQ = 'ensemble-maj-eq'
 
-#             SVC: "Support Vector Classifier",
+#             SVC: "Support Vector Classifier" --- very time-consuming
 clf2name = {LGR: "Logistic Regression",
             PR: "Poisson Regression",
             KNN: "K Nearest Neighbor",
