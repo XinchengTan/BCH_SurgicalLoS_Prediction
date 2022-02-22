@@ -58,7 +58,7 @@ import c1_data_preprocessing as dpp
 from c1_data_preprocessing import Dataset
 from jyp4_model_eval import ModelPerf
 from c3_ensemble import Ensemble
-from c8_models import OrdinalClassifier, PoissonClassifier
+from c8_models import OrdinalClassifier, RegressionBasedClassifier
 import utils_plot as pltutil
 
 
@@ -153,7 +153,7 @@ def run_classifier(Xtrain, ytrain, model, cls_weight=None, calibrate_method=None
   if model == globals.LGR:
     clf = LogisticRegression(random_state=0, class_weight=cls_weight, max_iter=300).fit(Xtrain, ytrain)
   elif model == globals.PR:
-    clf = PoissonClassifier(max_iter=200).fit(Xtrain, ytrain)
+    clf = RegressionBasedClassifier(globals.PR, max_iter=200).fit(Xtrain, ytrain)
   elif model == globals.SVC:
     clf = SVC(gamma='auto', class_weight=cls_weight, probability=True).fit(Xtrain, ytrain)  # TODO: consider probability=False to speed up
   elif model == globals.KNN:

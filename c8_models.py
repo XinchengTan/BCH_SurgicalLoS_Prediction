@@ -53,6 +53,7 @@ except ImportError as e:
   print('OrderedClassifier() is not defined!')
 
 
+# Regression-based classifier (regressor + round to nearest int)
 class RegressionBasedClassifier(object):
 
   def __init__(self, md, **kwargs):
@@ -76,25 +77,11 @@ class RegressionBasedClassifier(object):
     else:
       raise NotImplementedError
 
+  def fit(self, X, y):
+    self.regressor.fit(X, y)
+
   def predict(self, X):
     reg_pred = np.rint(self.regressor.predict(X))
-    reg_pred[reg_pred > globals.MAX_NNT] = globals.MAX_NNT + 1
-    return reg_pred
-
-  def score(self, X, y, sample_weight=None):
-    preds = self.predict(X)
-    return accuracy_score(y, preds, sample_weight=sample_weight)
-
-
-
-
-class PoissonClassifier(PoissonRegressor):
-
-  def __init__(self, alpha=1, fit_intercept=True, max_iter=100, tol=1e-4):
-    super().__init__(alpha=alpha, fit_intercept=fit_intercept, max_iter=max_iter, tol=tol)
-
-  def predict(self, X):
-    reg_pred = np.rint(super().predict(X))
     reg_pred[reg_pred > globals.MAX_NNT] = globals.MAX_NNT + 1
     return reg_pred
 
