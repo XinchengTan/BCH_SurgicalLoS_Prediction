@@ -119,38 +119,66 @@ class FeatureSelector(object):
     :return:
     """
     full_features = np.array(dataset.feature_names)
-    cur_feature, ftr_in_use_idxs = base_features[0], np.where(np.in1d(full_features, base_features))[0]
     if train_perf_df is None:
       train_perf_df = pd.DataFrame(columns=['Trial', 'nth_feature'] + list(scorers.keys()))
     if test_perf_df is None:
       test_perf_df = pd.DataFrame(columns=['Trial', 'nth_feature'] + list(scorers.keys()))
-    for new_feature in tqdm(features_to_add, f'Trial {trial_i} - features'):
-      # Train on features in use
-      Xtrain, Xtest = dataset.Xtrain[:, ftr_in_use_idxs], dataset.Xtest[:, ftr_in_use_idxs]
-      estimator.fit(Xtrain, dataset.ytrain)
+    # Train and get performance on base features
+    ftr_in_use_idxs = np.where(np.in1d(full_features, base_features))[0]
+    estimator, train_perf_df, test_perf_df = train_and_get_perf_df(
+      trial_i, base_features[-1], estimator, dataset.Xtrain[:, ftr_in_use_idxs], dataset.ytrain,
+      dataset.Xtest[:, ftr_in_use_idxs], dataset.ytest, scorers, train_perf_df, test_perf_df
+    )
 
-      # Evaluate on Xtrain and Xtest, using only the selected features
-      train_pred, test_pred = estimator.predict(Xtrain), estimator.predict(Xtest)
-      train_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytrain, train_pred)
-      test_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytest, test_pred)
+    # todo: fix me and remove debugging code
+    idxs = list(range(60)) + list(range(3750, len(full_features)))
+    for i in idxs:
+      print('i=', i, full_features[i])
+    print('\nInitial features in use', ftr_in_use_idxs)
+    print('\nFull XTrain shape', dataset.Xtrain.shape, 'Full Xtest shape', dataset.Xtest.shape)
+    cum_ftr_cnt = len(ftr_in_use_idxs)
 
-      # Save the results to a dataframe
-      train_score_dict['Trial'], test_score_dict['Trial'] = trial_i, trial_i
-      train_score_dict['nth_feature'], test_score_dict['nth_feature'] = cur_feature, cur_feature
-      train_perf_df = train_perf_df.append(train_score_dict, ignore_index=True)
-      test_perf_df = test_perf_df.append(test_score_dict, ignore_index=True)
-
-      # Add a new feature
-      if new_feature in {STATE, REGION, LANGUAGE}:
-        ftr_col_idxs = np.where(np.in1d(full_features, COL2DUMMIES[new_feature]))[0]
-      elif new_feature in {PRIMARY_PROC, CPTS, CCSRS, DRUG_COLS[2]}:
-        ftr_col_idxs = utils.get_onehot_column_idxs(new_feature, full_features)
+    # Add one feature (batch) at a time to base_features
+    for nth_feature in tqdm(features_to_add, f'Trial {trial_i} - features'):
+      # Get feature indices of 'nth_feature'
+      if nth_feature in {STATE, REGION, LANGUAGE}:
+        ftr_col_idxs = np.where(np.in1d(full_features, COL2DUMMIES[nth_feature]))[0]
+      elif nth_feature in {PRIMARY_PROC, CPTS, CCSRS, DRUG_COLS[2], DRUG_COLS[3]}:
+        ftr_col_idxs = utils.get_onehot_column_idxs(nth_feature, full_features)
       else:
-        ftr_col_idxs = np.where(np.in1d(full_features, new_feature))[0]
+        ftr_col_idxs = np.where(np.in1d(full_features, nth_feature))[0]
+      print('\n', nth_feature, ": ", ftr_col_idxs)
+      cum_ftr_cnt += len(ftr_col_idxs)
       ftr_in_use_idxs = np.concatenate([ftr_in_use_idxs, ftr_col_idxs])
-      cur_feature = new_feature
 
+      # Get Xtrain based on selected features
+      Xtrain, Xtest = dataset.Xtrain[:, ftr_in_use_idxs], dataset.Xtest[:, ftr_in_use_idxs]
+      print('Xtrain shape:', Xtrain.shape, 'Xtest shape:', Xtest.shape)
+
+      # Train on Xtrain and evaluate on Xtrain & Xtest, and save perf to df
+      estimator, train_perf_df, test_perf_df = train_and_get_perf_df(
+        trial_i, nth_feature, estimator, Xtrain, dataset.ytrain, Xtest, dataset.ytest, scorers, train_perf_df, test_perf_df)
+
+    print('Total utilized features: ', cum_ftr_cnt)
+    print('Total available features: ', len(full_features))
     return train_perf_df, test_perf_df
+
+
+def train_and_get_perf_df(trial_i, nth_ftr, estimator, Xtrain, ytrain, Xtest, ytest, scorers, train_perf_df, test_perf_df):
+  # Train estimator on Xtrain
+  estimator.fit(Xtrain, ytrain)
+
+  # Evaluate on Xtrain and Xtest, using only the selected features
+  train_pred, test_pred = estimator.predict(Xtrain), estimator.predict(Xtest)
+  train_score_dict = MyScorer.apply_scorers(scorers.keys(), ytrain, train_pred)
+  test_score_dict = MyScorer.apply_scorers(scorers.keys(), ytest, test_pred)
+
+  # Save the results to a dataframe
+  train_score_dict['Trial'], test_score_dict['Trial'] = trial_i, trial_i
+  train_score_dict['nth_feature'], test_score_dict['nth_feature'] = nth_ftr, nth_ftr
+  train_perf_df = train_perf_df.append(train_score_dict, ignore_index=True)
+  test_perf_df = test_perf_df.append(test_score_dict, ignore_index=True)
+  return estimator, train_perf_df, test_perf_df
 
 
 # Apply feature selection technique and evaluate on test data

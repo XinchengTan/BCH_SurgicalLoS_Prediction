@@ -48,12 +48,13 @@ if __name__ == '__main__':
   # Define Feature selection Experiment Details
   suffix = f'kt{args.ktrials}'
   disc_cols = []
-  if args.discr is None:
+  if args.discretize is None:
     disc_cols = None
-    suffix += 'discrNA'
+    suffix += '_discrNA'
   else:
-    suffix += 'discr'
+    suffix += '_discr'
     for col in disc_cols:
+      col = col.lower()
       if col == 'age':
         disc_cols.append(AGE)
         suffix += 'Age'
@@ -65,18 +66,19 @@ if __name__ == '__main__':
         suffix += 'Wt'
       else:
         continue
-  suffix += str(args.scaler)
+  suffix += '_' + str(args.scaler)
   print('Input Scaler: ', args.scaler)
 
   # Generate 'ktrials' of datasets
-  model_abbrs = [LGR, KNN, RMFCLF, XGBCLF]
-  ktrial_datasets1 = utils.make_k_all_feature_datasets(data_df, k=args.ktrials,
-                                                       onehot_cols=[PRIMARY_PROC, CPTS, CCSRS],
+  #model_abbrs = [LGR, KNN, RMFCLF, XGBCLF]
+  model_abbrs = [KNN]
+  ktrial_datasets = utils.make_k_all_feature_datasets(data_df, k=args.ktrials,
+                                                       onehot_cols=[PRIMARY_PROC, CPTS, CCSRS, DRUG_COLS[3]],
                                                        discretize_cols=disc_cols, scaler=args.scaler)
   # For each model, stepwise add features from training data, and evaluate performance
   for model in model_abbrs:
     print('Model %s' % model)
     clf = get_model(model)
-    train_perf_df, test_perf_df = ftr_select.FeatureSelector.stepwise_batch_addition_fs(clf, ktrial_datasets1)
+    train_perf_df, test_perf_df = ftr_select.FeatureSelector.stepwise_batch_addition_fs(clf, ktrial_datasets)
     train_perf_df.to_csv(FS_RESULTS_TRAIN_DIR / f'{model}_{suffix}.csv', index=False)
     test_perf_df.to_csv(FS_RESULTS_TEST_DIR / f'{model}_{suffix}.csv', index=False)

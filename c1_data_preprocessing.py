@@ -275,7 +275,7 @@ def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeri
     # Match Xdf to the target features from the training data matrix (for now, only medical codes lead to such need)
     Xdf = ftrEng.match_Xdf_cols_to_target_features(Xdf, target_features)
 
-  # Join with existing deciles (do this step before match_Xdf_cols_to_target_features()) -- TODO: Test this
+  # Join with existing deciles (do this step before match_Xdf_cols_to_target_features())
   Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
 
   # TODO: Scan for uniform columns

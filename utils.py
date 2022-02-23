@@ -38,10 +38,10 @@ def make_k_all_feature_datasets(dashb_df: pd.DataFrame,
       f'{PPROC}_MEDIAN': 'max', f'{PPROC}_SD': 'mean',
       f'{PPROC}_QT25': 'max', f'{PPROC}_QT75': 'max'
     },
-    MED3: {
-      MED3_DECILE: 'max', f'{MED3}_COUNT': 'max',
-      f'{MED3}_MEDIAN': 'max', f'{MED3}_SD': 'mean',
-      f'{MED3}_QT25': 'max', f'{MED3}_QT75': 'max'
+    MED123: {
+      MED123_DECILE: 'max', f'{MED123}_COUNT': 'max',
+      f'{MED123}_MEDIAN': 'max', f'{MED123}_SD': 'mean',
+      f'{MED123}_QT25': 'max', f'{MED123}_QT75': 'max'
     },
   }
   datasets = []
@@ -55,19 +55,21 @@ def make_k_all_feature_datasets(dashb_df: pd.DataFrame,
 
 
 def get_onehot_column_idxs(onehot_col, feature_names):
-  oh_prefix = onehot_col + '_OHE' if onehot_col not in DRUG_COLS else 'MED%s_OHE_' % list(filter(str.isdigit, onehot_col))[0]
+  oh_prefix = onehot_col + '_OHE' if onehot_col not in DRUG_COLS else 'MED%s_OHE' % ''.join(filter(str.isdigit, onehot_col))
   oh_mask = np.char.startswith(feature_names, oh_prefix)
-  return np.flatnonzero(oh_mask)
+  ret = np.flatnonzero(oh_mask)
+  print('get onehot column idxs', onehot_col, ret)
+  return ret
 
 
 def exclude_onehot_cols(onehot_cols, feature_names, Xtrain, Xtest):
   full_oh_mask = np.zeros(len(feature_names)).astype(bool)
   feature_names = np.array(feature_names)
   for oh_col in onehot_cols:
-    oh_prefix = oh_col + '_OHE' if oh_col not in DRUG_COLS else 'MED%s_OHE_' % list(filter(str.isdigit, oh_col))[0]
+    oh_prefix = oh_col + '_OHE' if oh_col not in DRUG_COLS else 'MED%s_OHE' % ''.join(filter(str.isdigit, oh_col))
     oh_mask = np.char.startswith(feature_names, oh_prefix)
     full_oh_mask = np.ma.mask_or(full_oh_mask, oh_mask)
-    print(oh_prefix, ': ', np.sum(oh_mask))
+    #print(oh_prefix, ': ', np.sum(oh_mask))
   keep_idxs = np.flatnonzero(~full_oh_mask)
   Xtrain, Xtest = Xtrain[:, keep_idxs], Xtest[:, keep_idxs]
   return Xtrain, Xtest

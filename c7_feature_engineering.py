@@ -255,12 +255,12 @@ class FeatureEngineeringModifier(object):
       return Xdf
 
     for oh_col, dtype in zip(onehot_cols, onehot_dtypes):
-      oh_prefix = oh_col + '_OHE' if oh_col not in globals.DRUG_COLS else 'MED%s_OHE_' % ''.join(filter(str.isdigit, oh_col))
+      oh_prefix = oh_col + '_OHE_' if oh_col not in globals.DRUG_COLS else 'MED%s_OHE_' % ''.join(filter(str.isdigit, oh_col))
       if dtype == str:
         dummies = pd.get_dummies(Xdf[oh_col], prefix=oh_prefix)
       elif dtype == list:  # Expand list to (row_id, oh_col indicator) first
         s = Xdf[oh_col].explode()
-        dummies = pd.crosstab(s.index, s).add_prefix(oh_prefix[:-1] + '_')
+        dummies = pd.crosstab(s.index, s).add_prefix(oh_prefix)
         dummies[dummies > 1] = 1  # in case a list contains duplicates  TODO: double check
       else:
         raise NotImplementedError("Cannot encode column '%s' with a data type of '%s'" % (oh_col, dtype))
