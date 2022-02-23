@@ -60,8 +60,8 @@ def deidentify_model_input_data(dashb_fp, cpt_fp, ccsr_fp, med_fp, dtime_fp=None
 
 
 if __name__ == '__main__':
-  data_dir = Path('../Data_new_all/ModelInput')
-  save_dir = Path('../Data_new_all/ModelInput-cloud')
+  data_dir = Path('../../Data_new_all/ModelInput')
+  save_dir = Path('../../Data_new_all/ModelInput-cloud')
 
   # Historical Data
   new_dfs, surg_ckeys_mapping_df = deidentify_model_input_data(

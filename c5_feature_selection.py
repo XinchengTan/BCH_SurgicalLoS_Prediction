@@ -9,12 +9,11 @@ import utils
 from globals import *
 from c1_data_preprocessing import Dataset
 from c4_model_perf import MyScorer
-from jyp2_modeling import run_classifier
 
 # [done] 0. Double check for nans in miles traveld, state code
-# TODO 1. Finish stepwise addition func & Generate result tables & performance
+# [done] 1. Finish stepwise addition func & Generate result tables & performance
 # [done] 2. Add CCSR deciles & Test
-# TODO 3. Add combined medication level based decile features (fillna with the previous level, e.g. level1_medx_generic)
+# [done] 3. Add combined medication level based decile features (fillna with the previous level, e.g. level1_medx_generic)
 # TODO 4. Add violin plot across **pproc**, cpt, ccsrs
 # TODO 5. Think about how to handle one-to-many cases in the stepwise addition process
 

@@ -127,28 +127,30 @@ COHORT_TO_PPROCS = {COHORT_TONSIL: {'TONSILLECTOMY WITH ADENOIDECTOMY, ORL', 'TO
 
 CCSRS_TONSIL = {'Chronic respiratory insufficiency',
                 'Epilepsy',
-                 'Malacia of trachea or larynx',
-                 'Down syndrome',
-                 'Austism spectrum disorder',
-                 'Cerebral palsy',
-                 'Esophageal reflux',
-                 'Enterostomy',
-                 'Neurodevelopmental disorder',
-                 'Chronic rhinitis',
-                 'Asthma',
-                 'Obesity',
-                 'Hearing loss'}
+                'Malacia of trachea or larynx',
+                'Down syndrome',
+                'Austism spectrum disorder',
+                'Cerebral palsy',
+                'Esophageal reflux',
+                'Enterostomy',
+                'Neurodevelopmental disorder',
+                'Chronic rhinitis',
+                'Asthma',
+                'Obesity',
+                'Hearing loss'
+                }
 
 CCSRS_SPINE = {'Chronic respiratory insufficiency',
-              'Bladder dysfunction',
-              'Dysphagia',
-              'Anxiety disorder',
-              'Esophageal reflux',
-              'Enterostomy',
-              'Intellectual disability',
-              'Epilepsy',
-              'Asthma',
-              'Tracheostomy'}
+               'Bladder dysfunction',
+               'Dysphagia',
+               'Anxiety disorder',
+               'Esophageal reflux',
+               'Enterostomy',
+               'Intellectual disability',
+               'Epilepsy',
+               'Asthma',
+               'Tracheostomy'
+               }
 
 COHORT_TO_CCSRS = {COHORT_TONSIL: CCSRS_TONSIL,
                    COHORT_SPINE: CCSRS_SPINE}

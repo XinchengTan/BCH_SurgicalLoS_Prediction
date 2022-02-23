@@ -15,15 +15,7 @@ import c5_feature_selection as ftr_select
 from c7_feature_engineering import FeatureEngineeringModifier, DecileGenerator
 from c2_models import get_model
 from globals import *
-
-
-DATA_HOME = Path("../Data_new_all")
-DATA_DIR = Path("../Data_new_all/ModelInput")
-DEPLOY_DATA_DIR = Path("../Deployment_test_data")
-DEPLOY_DEP_FILES_DIR = Path('../Deployment_dep_files')
-FS_RESULTS_DIR = Path('../FS_results/stepwise')
-FS_RESULTS_TRAIN_DIR = Path('../FS_results/stepwise/train')
-FS_RESULTS_TEST_DIR = Path('../FS_results/stepwise/test')
+from globals_fs import *
 
 
 if __name__ == '__main__':
