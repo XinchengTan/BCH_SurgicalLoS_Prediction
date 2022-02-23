@@ -6,6 +6,7 @@ from typing import List
 
 from c1_data_preprocessing import Dataset
 import globals
+from c4_model_perf import MyScorer
 import jyp4_model_eval as model_eval
 
 
@@ -40,7 +41,7 @@ def predict_with_pproc_decile_cv(datasets: List[Dataset], decile_outcome, pred_o
   # Basic evaluation
   preds, y_true = np.array(preds), np.array(y_true)
   print("Accuracy: %.2f%%" % (100 * accuracy_score(y_true, preds)))
-  print("Accuracy (tol=1 night): %.2f%%" % (100 * model_eval.scorer_1nnt_tol(y_true, preds)))
+  print("Accuracy (tol=1 night): %.2f%%" % (100 * MyScorer.scorer_1nnt_tol(y_true, preds)))
 
   _ = model_eval.gen_confusion_matrix(y_true, preds, 'PPROC Decile', Xtype='Full dataset (%d-fold)' % len(datasets))
   return preds

@@ -13,6 +13,7 @@ REGION = 'MAJOR_REGION'
 MILES = 'MILES_TRAVELED'
 PROBLEM_CNT = 'PROBLEM_COUNT'
 PRIMARY_PROC = 'PRIMARY_PROC'
+SURG_GROUP = 'SURG_GROUP'
 
 # Customized new column names during dataframe preprocessing
 NNT = "NUM_OF_NIGHTS"
@@ -33,10 +34,10 @@ COL2DUMMIES = {STATE: ['IN_STATE', 'OUT_OF_STATE_US', 'FOREIGN'],
 
 # Column list for feature selection
 OS_CODE_LIST = ['Cardiovascular', 'Digestive', 'Endocrine',
-            'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
-            'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic',
-            'Nutrition', 'Optic', 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin',
-            'Uncategorized', 'Urogenital']
+                'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
+                'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic',
+                'Nutrition', 'Optic', 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin',
+                'Uncategorized', 'Urogenital']
 diaglabels = OS_CODE_LIST
 
 DASHDATA_COLS = ['SURG_CASE_KEY', 'LENGTH_OF_STAY', 'SPS_PREDICTED_LOS', 'BOOKING_DATE',

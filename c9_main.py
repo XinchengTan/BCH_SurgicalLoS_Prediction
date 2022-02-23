@@ -14,7 +14,7 @@ from c1_data_preprocessing import Dataset
 from c3_ensemble import Ensemble
 from c4_model_perf import *
 from c7_feature_engineering import FeatureEngineeringModifier, DecileGenerator
-from c8_models import *
+from c2_models import *
 
 
 ### Goal: hyper parameter tuning for models with different feature sets

@@ -9,14 +9,13 @@ from sklearn.metrics import accuracy_score
 from sklearn.model_selection import GridSearchCV
 
 
-import c0_data_prepare as dp, c1_data_preprocessing as dpp
+import c0_data_prepare as dp
 import utils
-import c2_modeling as modeling, jyp4_model_eval as model_eval
 from c3_ensemble import Ensemble
 from c4_model_perf import MyScorer
 import c5_feature_selection as ftr_select
 from c7_feature_engineering import FeatureEngineeringModifier, DecileGenerator
-from c8_models import get_model
+from c2_models import get_model
 from globals import *
 
 

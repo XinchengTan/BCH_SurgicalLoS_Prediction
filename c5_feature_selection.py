@@ -147,9 +147,10 @@ class FeatureSelector(object):
         ftr_col_idxs = utils.get_onehot_column_idxs(nth_feature, full_features)
       else:
         ftr_col_idxs = np.where(np.in1d(full_features, nth_feature))[0]
+      ftr_in_use_idxs = np.concatenate([ftr_in_use_idxs, ftr_col_idxs])
+
       print('\n', nth_feature, ": ", ftr_col_idxs)
       cum_ftr_cnt += len(ftr_col_idxs)
-      ftr_in_use_idxs = np.concatenate([ftr_in_use_idxs, ftr_col_idxs])
 
       # Get Xtrain based on selected features
       Xtrain, Xtest = dataset.Xtrain[:, ftr_in_use_idxs], dataset.Xtest[:, ftr_in_use_idxs]

@@ -134,7 +134,7 @@ def train_model(md, params, X, y):
   elif md == globals.GBCLF:
     clf = GradientBoostingClassifier(random_state=globals.SEED)
   elif md == globals.XGBCLF:
-    clf = XGBClassifier(random_state=globals.SEED)
+    clf = XGBClassifier(random_state=globals.SEED, eval_metric='mlogloss')
   else:
     raise NotImplementedError(f"Model {md} is not implemented yet!")
 
@@ -222,7 +222,6 @@ def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search
       colsample_bytree_range = np.arange(0.3, 0.9, 0.1)
     else:
       colsample_bytree_range = np.arange(0.8, 1.01, 0.05)
-    # ?? define objective?? multi:softmax ???
     param_space = {
       'n_estimators': np.arange(50, 301, 50),
       'learning_rate': [0.01, 0.03, 0.06, 0.1, 0.2, 0.3],
@@ -231,6 +230,7 @@ def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search
       'max_depth': [3, 4, 5, 6, 7],
       'gamma': [0, 0.1, 0.3, 1, 3, 5],
       'min_child_weight': [0.1, 0.3, 0.6, 1, 2],
+      'eval_metric': 'mlogloss',
     }
   else:
     raise NotImplementedError("Model %s is not supported!" % md)
