@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 from collections import defaultdict
-from typing import Dict
+from typing import Dict, Any
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, make_scorer, roc_auc_score, mean_squared_error
 # from sklearn.linear_model import LogisticRegression, PoissonRegressor, Ridge, RidgeCV
@@ -98,6 +98,12 @@ class MyScorer:
       else:
         raise NotImplementedError('%s not implemented' % scorer_name)
     return perf_row_dict
+
+
+def append_perf_row_generic(perf_df, score_dict: Dict, add_col_dict: Dict[str, Any]):
+  score_dict.update(add_col_dict)
+  perf_df.append(score_dict, ignore_index=True)
+  return perf_df
 
 
 def append_perf_row(perf_df, trial, md, scores_row_dict: Dict):

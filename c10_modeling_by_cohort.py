@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
-from typing import Dict, Hashable
+from typing import Dict, Hashable, Any
 
 from globals import *
 from c1_data_preprocessing import Dataset
-from c4_model_perf import MyScorer
+from c4_model_perf import MyScorer, append_perf_row_generic
 from c2_models import get_model
 
 
@@ -38,16 +38,27 @@ def gen_cohort_datasets(dashb_df: pd.DataFrame, cohort_col: str, min_cohort_size
   return cohort_to_dataset
 
 
-def train_cohort_models(md, class_weight, cohort2dataset):
+def train_cohort_models(md, class_weight, cohort_to_dataset):
   cohort_to_clf = {}
-  for cohort, dataset in cohort2dataset:
+  for cohort, dataset in cohort_to_dataset:
     clf = get_model(md, class_weight)
     clf.fit(dataset.Xtrain, dataset.ytrain)
     cohort_to_clf[cohort] = clf
   return cohort_to_clf
 
 
-def eval_cohort_models():
-
-  return
+def eval_cohort_models(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[str, Any], scorers: Dict[str, Any]):
+  train_perf_df = pd.DataFrame(columns=['Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
+  test_perf_df = train_perf_df.copy()
+  for cohort, dataset in cohort_to_dataset.items():
+    clf = cohort_to_clf.get(cohort)
+    if clf is not None:
+      train_pred, test_pred = clf.predict(dataset.Xtrain), clf.predict(dataset.Xtest)
+      train_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytrain, train_pred)
+      train_perf_df = append_perf_row_generic(train_perf_df, train_score_dict, {'Xtype': 'train', 'Cohort': cohort,
+                                                                                'Model': clf.__class__.__name__})
+      test_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytest, test_pred)
+      test_perf_df = append_perf_row_generic(test_perf_df, test_score_dict, {'Xtype': 'test', 'Cohort': cohort,
+                                                                             'Model': clf.__class__.__name__})
+  return train_perf_df, test_perf_df
 
