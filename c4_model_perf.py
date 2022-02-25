@@ -102,14 +102,14 @@ class MyScorer:
 
 def append_perf_row_generic(perf_df, score_dict: Dict, add_col_dict: Dict[str, Any]):
   score_dict.update(add_col_dict)
-  perf_df.append(score_dict, ignore_index=True)
+  perf_df = perf_df.append(score_dict, ignore_index=True)
   return perf_df
 
 
 def append_perf_row(perf_df, trial, md, scores_row_dict: Dict):
   scores_row_dict['Model'] = md
   scores_row_dict['Trial'] = trial
-  perf_df.append(scores_row_dict, ignore_index=True)
+  perf_df = perf_df.append(scores_row_dict, ignore_index=True)
   return perf_df
 
 
@@ -118,7 +118,7 @@ def append_perf_row_surg(surg_perf_df: pd.DataFrame, trial, scores_row_dict):
     return surg_perf_df
   scores_row_dict['Trial'] = trial
   scores_row_dict['Model'] = 'Surgeon-train'
-  surg_perf_df.append(scores_row_dict, ignore_index=True)
+  surg_perf_df = surg_perf_df.append(scores_row_dict, ignore_index=True)
   return surg_perf_df
 
 

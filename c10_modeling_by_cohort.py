@@ -5,7 +5,7 @@ from typing import Dict, Hashable, Any
 from globals import *
 from c1_data_preprocessing import Dataset
 from c4_model_perf import MyScorer, append_perf_row_generic
-from c2_models import get_model
+from c2_models import get_model_by_cohort
 
 
 def gen_cohort_datasets(dashb_df: pd.DataFrame, cohort_col: str, min_cohort_size=10, **kwargs) -> Dict[Hashable, Dataset]:
@@ -33,32 +33,63 @@ def gen_cohort_datasets(dashb_df: pd.DataFrame, cohort_col: str, min_cohort_size
   # Generate cohort to Dataset() mapping
   cohort_to_dataset = {}
   for cohort, data_df in cohort_groupby:
+    print('\n\n***Cohort: ', cohort, '\n\n')
     cohort_to_dataset[cohort] = Dataset(data_df, **kwargs)  # 'cohort_col' should not exist in onehot_cols in **kwargs
 
   return cohort_to_dataset
 
 
-def train_cohort_models(md, class_weight, cohort_to_dataset):
+def train_cohort_clf(md, class_weight, cohort_to_dataset):
   cohort_to_clf = {}
-  for cohort, dataset in cohort_to_dataset:
-    clf = get_model(md, class_weight)
-    clf.fit(dataset.Xtrain, dataset.ytrain)
+  for cohort, dataset in cohort_to_dataset.items():
+    clf = get_model_by_cohort(md, class_weight)
+    if md == XGBCLF:  # generate a mapping with continuous label class
+      xgb_cls = sorted(set(dataset.ytrain))
+      xgb_cls_to_label = {xgb_cls[i]: i for i in range(len(xgb_cls))}
+      ytrain = np.array([xgb_cls_to_label[y] for y in dataset.ytrain])
+    else:
+      ytrain = np.array(dataset.ytrain)
+    clf.fit(dataset.Xtrain, ytrain)
     cohort_to_clf[cohort] = clf
   return cohort_to_clf
 
 
-def eval_cohort_models(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[str, Any], scorers: Dict[str, Any]):
-  train_perf_df = pd.DataFrame(columns=['Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
-  test_perf_df = train_perf_df.copy()
+def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[str, Any], scorers: Dict[str, Any],
+                    train_perf_df=None, test_perf_df=None):
+  if scorers is None:
+    scorers = MyScorer.get_scorer_dict([SCR_ACC, SCR_ACC_BAL, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED, SCR_UNDERPRED,
+                                        SCR_RMSE])
+  if train_perf_df is None:
+    train_perf_df = pd.DataFrame(columns=['Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
+  if test_perf_df is None:
+    test_perf_df = pd.DataFrame(columns=['Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
   for cohort, dataset in cohort_to_dataset.items():
     clf = cohort_to_clf.get(cohort)
     if clf is not None:
       train_pred, test_pred = clf.predict(dataset.Xtrain), clf.predict(dataset.Xtest)
+      md_name = clf.__class__.__name__
+      if 'XGB' in md_name:
+        xgb_cls = sorted(set(dataset.ytrain))
+        label_to_xgb_cls = {i: xgb_cls[i] for i in range(len(xgb_cls))}
+        train_pred = np.array([label_to_xgb_cls[lb] for lb in train_pred])
+        test_pred = np.array([label_to_xgb_cls[lb] for lb in test_pred])
+      if not set(train_pred).issubset(set(dataset.ytrain)):
+        print(cohort, 'training', set(train_pred), set(dataset.ytrain))
+      if not set(test_pred).issubset(set(dataset.ytest)):
+        print(cohort, 'test', set(test_pred), set(dataset.ytest))
       train_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytrain, train_pred)
-      train_perf_df = append_perf_row_generic(train_perf_df, train_score_dict, {'Xtype': 'train', 'Cohort': cohort,
-                                                                                'Model': clf.__class__.__name__})
+      train_perf_df = append_perf_row_generic(
+        train_perf_df, train_score_dict, {'Xtype': 'train', 'Cohort': cohort, 'Model': clf.__class__.__name__,
+                                          'Count': dataset.Xtrain.shape[0]})
       test_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytest, test_pred)
-      test_perf_df = append_perf_row_generic(test_perf_df, test_score_dict, {'Xtype': 'test', 'Cohort': cohort,
-                                                                             'Model': clf.__class__.__name__})
-  return train_perf_df, test_perf_df
+      test_perf_df = append_perf_row_generic(
+        test_perf_df, test_score_dict, {'Xtype': 'test', 'Cohort': cohort, 'Model': clf.__class__.__name__,
+                                        'Count': dataset.Xtest.shape[0]})
+  # Format perf df
+  formatter = {scr: SCR_FORMATTER[scr] for scr in scorers.keys()}
+  formatter['Count'] = '{:.0f}'.format
+  train_styler = train_perf_df.style.format(formatter)
+  test_styler = test_perf_df.style.format(formatter)
+  # TODO: add overall perf eval
+  return train_perf_df, test_perf_df, train_styler, test_styler
 

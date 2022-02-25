@@ -11,7 +11,7 @@ from time import time
 from typing import Dict
 
 import globals
-from c7_feature_engineering import FeatureEngineeringModifier, DecileGenerator
+from c1_feature_engineering import FeatureEngineeringModifier, DecileGenerator
 
 
 def gen_cohort_df(df, cohort):

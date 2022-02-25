@@ -13,7 +13,7 @@ import c0_data_prepare as dp
 from c1_data_preprocessing import Dataset
 from c3_ensemble import Ensemble
 from c4_model_perf import *
-from c7_feature_engineering import FeatureEngineeringModifier, DecileGenerator
+from c1_feature_engineering import FeatureEngineeringModifier, DecileGenerator
 from c2_models import *
 
 

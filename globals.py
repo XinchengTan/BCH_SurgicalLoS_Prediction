@@ -1,4 +1,4 @@
-from pathlib import Path
+from collections import defaultdict
 
 # Default built-in column names
 SPS_PRED = 'SPS_PREDICTED_LOS'
@@ -293,19 +293,17 @@ SCR_AUC = 'roc_auc'
 SCR_ACC_BAL = 'balanced_accuracy'
 SCR_ACC_ERR1 = 'Accuracy (tol = 1 NNT)'
 SCR_ACC_ERR2 = 'Accuracy (tol = 2 NNT)'
-SCR_RMSE = 'rooted MSE'
-SCR_UNDERPRED = 'underprediction rate'
-SCR_OVERPRED = 'overprediction rate'
+SCR_RMSE = 'Rooted MSE'
+SCR_UNDERPRED = 'Underprediction rate'
+SCR_OVERPRED = 'Overprediction rate'
+
+# Scorer formatter for pd output
+SCR_FORMATTER = defaultdict(lambda: "{:.2f}".format)
+SCR_FORMATTER.update({SCR_ACC: "{:.2%}".format, SCR_ACC_BAL: "{:.2%}".format, SCR_ACC_ERR1: "{:.2%}".format,
+                      SCR_ACC_ERR2: "{:.2%}".format, SCR_OVERPRED: "{:.2%}".format, SCR_UNDERPRED: "{:.2%}".format,
+                      SCR_RMSE: "{:.2f}".format})
+
 # TODO: Remove these
 SCR_1NNT_TOL_ACC = 'Accuracy (Hit rate and tol=1NNT)'
 SCR_MULTI_ALL = 'multiple scorers (all)'
 
-
-# File path of evaluation results
-RESULTS = Path('./results')
-RES_SPS_DATA_ALL = RESULTS / 'sps_data_all'
-RES_SPS_DATA_AGREE = RESULTS / 'sps_data_agree'
-RES_SPS_DATA_DISAGREE = RESULTS / 'sps_data_disagree'
-RES_SPS_DATA_TONSIL = RESULTS / 'sps_data_tonsil'
-RES_SPS_DATA_SPINE = RESULTS / 'sps_data_spine'
-RES_SPS_DATA_HIP = RESULTS / 'sps_data_hip'

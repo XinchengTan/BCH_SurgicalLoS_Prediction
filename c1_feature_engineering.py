@@ -183,7 +183,9 @@ class FeatureEngineeringModifier(object):
     med_col = globals.DRUG_COLS[level-1] if level <= 3 else globals.DRUG_COLS[-1]
     Xdf_w_decile = Xdf[['SURG_CASE_KEY', med_col]]\
       .explode(med_col)\
-      .join(med_decile.set_index(med_col), on=med_col, how='left')\
+      .join(med_decile.set_index(med_col), on=med_col, how='left')
+    print('1. Xdf_w_decile shape', Xdf_w_decile.shape)
+    Xdf_w_decile = Xdf_w_decile\
       .groupby('SURG_CASE_KEY')\
       .agg(decile_col2aggf)\
       .fillna(0)  # TODO: carefully handle NaN here! Think about how different agg functions would handle NA
