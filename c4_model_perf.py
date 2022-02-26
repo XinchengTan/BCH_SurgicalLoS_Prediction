@@ -14,7 +14,7 @@ from sklearn.metrics import accuracy_score, balanced_accuracy_score, make_scorer
 # from xgboost import XGBClassifier
 import shap
 
-import globals
+from globals import *
 from c1_data_preprocessing import Dataset
 
 
@@ -27,21 +27,21 @@ class MyScorer:
   def get_scorer_dict(scorer_names):
     scr_dict = {}
     for scorer in scorer_names:
-      if scorer == globals.SCR_ACC:
+      if scorer == SCR_ACC:
         scr_dict[scorer] = 'accuracy'
-      elif scorer == globals.SCR_ACC_BAL:
+      elif scorer == SCR_ACC_BAL:
         scr_dict[scorer] = 'balanced_accuracy'
-      elif scorer == globals.SCR_AUC:
+      elif scorer == SCR_AUC:
         scr_dict[scorer] = 'roc_auc'
-      elif scorer == globals.SCR_RMSE:
+      elif scorer == SCR_RMSE:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_rmse, greater_is_better=False)
-      elif scorer == globals.SCR_ACC_ERR1:
+      elif scorer == SCR_ACC_ERR1:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_1nnt_tol, greater_is_better=True)
-      elif scorer == globals.SCR_ACC_ERR2:
+      elif scorer == SCR_ACC_ERR2:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_2nnt_tol, greater_is_better=True)
-      elif scorer == globals.SCR_OVERPRED:
+      elif scorer == SCR_OVERPRED:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_overpred_pct, greater_is_better=False)
-      elif scorer == globals.SCR_UNDERPRED:
+      elif scorer == SCR_UNDERPRED:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_underpred_pct, greater_is_better=False)
       else:
         raise Warning(f"Scorer {scorer} is not supported yet!")
@@ -78,21 +78,21 @@ class MyScorer:
   def apply_scorers(scorer_names, ytrue, ypred):
     perf_row_dict = {}
     for scorer_name in scorer_names:
-      if scorer_name == globals.SCR_ACC:
+      if scorer_name == SCR_ACC:
         perf_row_dict[scorer_name] = accuracy_score(ytrue, ypred)
-      elif scorer_name == globals.SCR_ACC_BAL:
+      elif scorer_name == SCR_ACC_BAL:
         perf_row_dict[scorer_name] = balanced_accuracy_score(ytrue, ypred)
-      elif scorer_name == globals.SCR_RMSE:
+      elif scorer_name == SCR_RMSE:
         perf_row_dict[scorer_name] = MyScorer.scorer_rmse(ytrue, ypred)
-      elif scorer_name == globals.SCR_ACC_ERR1:
+      elif scorer_name == SCR_ACC_ERR1:
         perf_row_dict[scorer_name] = MyScorer.scorer_1nnt_tol(ytrue, ypred)
-      elif scorer_name == globals.SCR_ACC_ERR2:
+      elif scorer_name == SCR_ACC_ERR2:
         perf_row_dict[scorer_name] = MyScorer.scorer_2nnt_tol(ytrue, ypred)
-      elif scorer_name == globals.SCR_OVERPRED:
+      elif scorer_name == SCR_OVERPRED:
         perf_row_dict[scorer_name] = MyScorer.scorer_overpred_pct(ytrue, ypred)
-      elif scorer_name == globals.SCR_UNDERPRED:
+      elif scorer_name == SCR_UNDERPRED:
         perf_row_dict[scorer_name] = MyScorer.scorer_underpred_pct(ytrue, ypred)
-      elif scorer_name == globals.SCR_AUC:
+      elif scorer_name == SCR_AUC:
         perf_row_dict[scorer_name] = None  # TODO: find a better solution to handle this
         # perf_row_dict[scorer_name] = roc_auc_score(ytrue, ypred)  # ypred is actually yscore: clf.predict_proba(X)[:, 1]
       else:
@@ -100,8 +100,62 @@ class MyScorer:
     return perf_row_dict
 
 
-def append_perf_row_generic(perf_df, score_dict: Dict, add_col_dict: Dict[str, Any]):
-  score_dict.update(add_col_dict)
+def eval_surgeon_perf(dataset: Dataset, scorers):
+  train_scores_row_dict, test_scores_row_dict = {}, {}
+  if dataset.Xtrain:
+    train_surg_pred = dataset.get_surgeon_pred_df_by_case_key(dataset.train_case_keys)[SPS_PRED]
+    train_scores_row_dict = MyScorer.apply_scorers(scorers, dataset.ytrain, train_surg_pred)
+  if dataset.Xtest:
+    test_surg_pred = dataset.get_surgeon_pred_df_by_case_key(dataset.test_case_keys)[SPS_PRED]
+    test_scores_row_dict = MyScorer.apply_scorers(scorers, dataset.ytest, test_surg_pred)
+  return train_scores_row_dict, test_scores_row_dict
+
+
+def eval_model_perf(dataset: Dataset, clf, scorers=None, by_cohort=None, trial_i=None, train_perf_df=None, test_perf_df=None):
+  if scorers is None:
+    scorers = MyScorer.get_scorer_dict(DEFAULT_SCORERS)
+  if train_perf_df is None:
+    train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
+  if test_perf_df is None:
+    test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
+
+  if by_cohort == SURG_GROUP or by_cohort == PRIMARY_PROC:
+    cohort_to_Xytrain = dataset.get_cohort_to_Xytrains(by_cohort)
+    cohort_to_Xytest = dataset.get_cohort_to_Xytests(by_cohort)
+    for cohort in cohort_to_Xytrain.keys():
+      Xtrain, ytrain = cohort_to_Xytrain[cohort]
+      Xtest, ytest = cohort_to_Xytest.get(cohort, (None, None))
+      train_pred = clf.predict(Xtrain)
+      train_scores = MyScorer.apply_scorers(scorers.keys(), ytrain, train_pred)
+      train_perf_df = append_perf_row_generic(
+        train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': clf.__class__.__name__,
+                                      'Count': Xtrain.shape[0], 'Trial': trial_i})
+      if Xtest is not None:
+        test_pred = clf.predict(Xtest)
+        test_scores = MyScorer.apply_scorers(scorers.keys(), ytest, test_pred)
+        test_perf_df = append_perf_row_generic(
+          test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': cohort, 'Model': clf.__class__.__name__,
+                                      'Count': Xtest.shape[0], 'Trial': trial_i})
+  else:
+    train_pred, test_pred = clf.predict(dataset.Xtrain), clf.predict(dataset.Xtest)
+    train_scores = MyScorer.apply_scorers(scorers.keys(), dataset.ytrain, train_pred)
+    test_scores = MyScorer.apply_scorers(scorers.keys(), dataset.ytest, test_pred)
+    train_perf_df = append_perf_row_generic(
+      train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': 'All', 'Model': clf.__class__.__name__})
+    test_perf_df = append_perf_row_generic(
+      test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': 'All', 'Model': clf.__class__.__name__})
+
+  train_perf_df.sort_values(by='accuracy', ascending=False, inplace=True)
+  test_perf_df.sort_values(by='accuracy', ascending=False, inplace=True)
+
+  # Add formatter
+  formatter = {scr: SCR_FORMATTER[scr] for scr in scorers.keys()}
+  formatter['Count'] = '{:.0f}'.format
+  return train_perf_df, test_perf_df, train_perf_df.style.format(formatter), test_perf_df.style.format(formatter)
+
+
+def append_perf_row_generic(perf_df, score_dict: Dict, info_col_dict: Dict[str, Any]):
+  score_dict.update(info_col_dict)
   perf_df = perf_df.append(score_dict, ignore_index=True)
   return perf_df
 
@@ -122,43 +176,3 @@ def append_perf_row_surg(surg_perf_df: pd.DataFrame, trial, scores_row_dict):
   return surg_perf_df
 
 
-def eval_surgeon_perf(dataset: Dataset, scorers):
-  train_scores_row_dict, test_scores_row_dict = {}, {}
-  if dataset.Xtrain:
-    train_surg_pred = dataset.get_surgeon_pred_df_by_case_key(dataset.train_case_keys)[globals.SPS_PRED]
-    train_scores_row_dict = MyScorer.apply_scorers(scorers, dataset.ytrain, train_surg_pred)
-  if dataset.Xtest:
-    test_surg_pred = dataset.get_surgeon_pred_df_by_case_key(dataset.test_case_keys)[globals.SPS_PRED]
-    test_scores_row_dict = MyScorer.apply_scorers(scorers, dataset.ytest, test_surg_pred)
-  return train_scores_row_dict, test_scores_row_dict
-
-
-# if __name__ == '__main__':
-#   ytrue = np.ones(10)
-#   ypred = np.array([0, 1] * 5)
-#   scorers = MyScorer.get_scorer_dict([globals.SCR_ACC, globals.SCR_ACC_BAL, globals.SCR_ACC_ERR1, globals.SCR_ACC_ERR2,
-#                                       globals.SCR_OVERPRED, globals.SCR_UNDERPRED, globals.SCR_RMSE])
-#   perf_row_dict = MyScorer.apply_scorers(scorers, ytrue, ypred)
-#
-#   print(perf_row_dict)
-
-
-# def init_perf_df(md, scorers):
-#   # acc, acc_1nnt_tol, overpred_rate, underpred_rate
-#   md2Classifier = {globals.LGR: LogisticRegression(), globals.SVC: SVC(), globals.KNN: KNeighborsClassifier(),
-#                    globals.DTCLF: DecisionTreeClassifier(), globals.RMFCLF: RandomForestClassifier(),
-#                    globals.GBCLF: GradientBoostingClassifier(), globals.XGBCLF: XGBClassifier()}
-#   params = md2Classifier.get(md, [])
-#   perf_df = pd.DataFrame(columns=params)
-#   # top K most important features [optional, since some models do not have this]
-#   return
-#
-#
-# def add_perf_row(perf_df, new_entry):
-#
-#   return perf_df
-#
-#
-# def make_perf_row(clf, X, y, fold):
-#
-#   return

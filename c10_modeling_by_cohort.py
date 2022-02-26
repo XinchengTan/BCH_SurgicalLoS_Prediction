@@ -34,8 +34,9 @@ def gen_cohort_datasets(dashb_df: pd.DataFrame, cohort_col: str, min_cohort_size
   cohort_to_dataset = {}
   for cohort, data_df in cohort_groupby:
     print('\n\n***Cohort: ', cohort, '\n\n')
-    cohort_to_dataset[cohort] = Dataset(data_df, **kwargs)  # 'cohort_col' should not exist in onehot_cols in **kwargs
-
+    dataset = Dataset(data_df, **kwargs)  # 'cohort_col' should not exist in onehot_cols in **kwargs
+    if dataset.Xtrain.shape[0] > 0 and dataset.Xtest.shape[0] > 0:
+      cohort_to_dataset[cohort] = dataset
   return cohort_to_dataset
 
 
@@ -55,14 +56,13 @@ def train_cohort_clf(md, class_weight, cohort_to_dataset):
 
 
 def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[str, Any], scorers: Dict[str, Any],
-                    train_perf_df=None, test_perf_df=None):
+                    trial_i=None, train_perf_df=None, test_perf_df=None):
   if scorers is None:
-    scorers = MyScorer.get_scorer_dict([SCR_ACC, SCR_ACC_BAL, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED, SCR_UNDERPRED,
-                                        SCR_RMSE])
+    scorers = MyScorer.get_scorer_dict(DEFAULT_SCORERS)
   if train_perf_df is None:
-    train_perf_df = pd.DataFrame(columns=['Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
+    train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
   if test_perf_df is None:
-    test_perf_df = pd.DataFrame(columns=['Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
+    test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
   for cohort, dataset in cohort_to_dataset.items():
     clf = cohort_to_clf.get(cohort)
     if clf is not None:
@@ -75,21 +75,31 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
         test_pred = np.array([label_to_xgb_cls[lb] for lb in test_pred])
       if not set(train_pred).issubset(set(dataset.ytrain)):
         print(cohort, 'training', set(train_pred), set(dataset.ytrain))
-      if not set(test_pred).issubset(set(dataset.ytest)):
-        print(cohort, 'test', set(test_pred), set(dataset.ytest))
+      if not set(test_pred).issubset(set(dataset.ytrain)):
+        print('!!!', cohort, 'test', set(test_pred), set(dataset.ytest))
       train_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytrain, train_pred)
       train_perf_df = append_perf_row_generic(
         train_perf_df, train_score_dict, {'Xtype': 'train', 'Cohort': cohort, 'Model': clf.__class__.__name__,
-                                          'Count': dataset.Xtrain.shape[0]})
+                                          'Count': dataset.Xtrain.shape[0], 'Trial': trial_i})
       test_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytest, test_pred)
       test_perf_df = append_perf_row_generic(
         test_perf_df, test_score_dict, {'Xtype': 'test', 'Cohort': cohort, 'Model': clf.__class__.__name__,
-                                        'Count': dataset.Xtest.shape[0]})
+                                        'Count': dataset.Xtest.shape[0], 'Trial': trial_i})
   # Format perf df
   formatter = {scr: SCR_FORMATTER[scr] for scr in scorers.keys()}
   formatter['Count'] = '{:.0f}'.format
   train_styler = train_perf_df.style.format(formatter)
   test_styler = test_perf_df.style.format(formatter)
-  # TODO: add overall perf eval
   return train_perf_df, test_perf_df, train_styler, test_styler
 
+
+def show_best_clf_per_cohort(perf_df, Xtype):
+  best_clf_perf = perf_df.groupby(by=['Cohort', 'Model']).mean().reset_index().groupby('Cohort').max()
+
+  Xsize = best_clf_perf['Count'].sum()
+  print(f'Mean {Xtype} size: {Xsize}')
+  print(f'Overall mean {Xtype} accuracy: ',
+        '{:.2%}'.format(np.dot(best_clf_perf['accuracy'].to_numpy(), best_clf_perf['Count'].to_numpy()) / Xsize))
+  formatter = SCR_FORMATTER.copy()
+  formatter['Count'] = '{:.0f}'.format
+  return best_clf_perf, best_clf_perf.sort_values(by='accuracy', ascending=False).style.format(formatter)

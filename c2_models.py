@@ -90,11 +90,11 @@ class RegressionBasedClassifier(object):
     return accuracy_score(y, preds, sample_weight=sample_weight)
 
 
-class KNeighborsClassifierCV(object):
+# Abstract class
+class ClassifierCV(object):
 
-  def __init__(self, param_space, kfold=5):
-    self.clf = GridSearchCV(estimator=KNeighborsClassifier(), param_grid=param_space, scoring='accuracy', cv=kfold,
-                            n_jobs=-1, refit=True, return_train_score=True, verbose=0)
+  def __init__(self):
+    self.clf = None
 
   def fit(self, X, y):
     self.clf.fit(X, y)
@@ -110,15 +110,25 @@ class KNeighborsClassifierCV(object):
 
 
 
+class KNeighborsClassifierCV(ClassifierCV):
+
+  def __init__(self, param_space, kfold=5):
+    super(KNeighborsClassifierCV, self).__init__()
+    self.clf = GridSearchCV(estimator=KNeighborsClassifier(), param_grid=param_space, scoring='accuracy', cv=kfold,
+                            n_jobs=-1, refit=True, return_train_score=True, verbose=0)
+
+
 def get_model(model, cls_weight='balanced'):
   if model == globals.LGR:
     clf = LogisticRegression(C=0.03, class_weight=cls_weight, max_iter=500, random_state=0)
+    # clf = LogisticRegressionCV(Cs=[0.01, 0.03, 0.1, 0.3, 1, 3], class_weight=cls_weight, max_iter=500, random_state=0,
+    #                            cv=5)
   elif model == globals.PR:
     clf = RegressionBasedClassifier(globals.PR, alpha=0.01, max_iter=300)
   elif model == globals.SVC:
     clf = SVC(gamma='auto', class_weight=cls_weight, probability=False)
   elif model == globals.KNN:
-    clf = KNeighborsClassifierCV({'n_neighbors': np.arange(4, 16)})
+    clf = KNeighborsClassifier(n_neighbors=11)
   elif model == globals.DTCLF:
     clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight=cls_weight)
   elif model == globals.RMFCLF:
@@ -144,6 +154,8 @@ def get_model_by_cohort(model, cls_weight='balanced', cohort=None):
   # TODO: can add customization for each cohort later
   if model == globals.LGR:
     clf = LogisticRegression(C=0.03, class_weight=cls_weight, max_iter=500, random_state=0)
+    # clf = LogisticRegressionCV(Cs=[0.01, 0.03, 0.1, 0.3, 1, 3], class_weight=cls_weight, max_iter=500, random_state=0,
+    #                            cv=5)
   elif model == globals.PR:
     clf = RegressionBasedClassifier(globals.PR, alpha=0.01, max_iter=300)
   elif model == globals.SVC:
@@ -158,7 +170,7 @@ def get_model_by_cohort(model, cls_weight='balanced', cohort=None):
     clf = GradientBoostingClassifier(random_state=0, max_depth=3)
   elif model == globals.XGBCLF:
     clf = XGBClassifier(max_depth=4, learning_rate=0.1, n_estimators=100, gamma=5, random_state=0, use_label_encoder=False,
-                        objective='multi:softmax', eval_metric='mlogloss')
+                        eval_metric='mlogloss')
   elif model == globals.ORDCLF_LOGIT:
     clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True)
   elif model == globals.ORDCLF_PROBIT:

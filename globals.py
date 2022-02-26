@@ -74,10 +74,18 @@ FEATURE_COLS_NO_OS_SPS = FEATURE_COLS_NO_OS + [SPS_PRED]
 
 # Default medical code to decile feature to aggregation function
 DEFAULT_COL2DECILE_FTR2AGGF = {
-  CPT: {CPT_DECILE: 'max', f'{CPT}_COUNT': 'max', f'{CPT}_SD': 'mean', f'{CPT}_QT25': 'max', f'{CPT}_QT75': 'max'},
-  PPROC: {PPROC_DECILE: 'max', f'{PPROC}_COUNT': 'max', f'{PPROC}_SD': 'mean', f'{PPROC}_QT25': 'max', f'{PPROC}_QT75': 'max'},
-  CCSR: {CCSR_DECILE: 'max', f'{CCSR}_COUNT': 'max', f'{CCSR}_SD': 'mean', f'{CCSR}_QT25': 'max', f'{CCSR}_QT75': 'max'},
-  MED123: {MED123_DECILE: 'max', f'{MED123}_COUNT': 'max', f'{MED123}_SD': 'mean', f'{MED123}_QT25': 'max', f'{MED123}_QT75': 'max'},
+  CPT: {CPT_DECILE: 'max',
+        f'{CPT}_COUNT': 'sum',
+        f'{CPT}_SD': 'mean',
+        f'{CPT}_QT25': 'max',
+        f'{CPT}_QT75': 'max'},
+  PPROC: {PPROC_DECILE: 'max',
+          f'{PPROC}_COUNT': 'sum',
+          f'{PPROC}_SD': 'mean',
+          f'{PPROC}_QT25': 'max',
+          f'{PPROC}_QT75': 'max'},
+  CCSR: {CCSR_DECILE: 'max', f'{CCSR}_COUNT': 'sum', f'{CCSR}_SD': 'mean', f'{CCSR}_QT25': 'max', f'{CCSR}_QT75': 'max'},
+  MED123: {MED123_DECILE: 'sum', f'{MED123}_COUNT': 'sum', f'{MED123}_SD': 'mean', f'{MED123}_QT25': 'max', f'{MED123}_QT75': 'max'},
 }
 # MED1: {MED1_DECILE: 'max'},
 # MED2: {MED2_DECILE: 'max'},
@@ -296,6 +304,7 @@ SCR_ACC_ERR2 = 'Accuracy (tol = 2 NNT)'
 SCR_RMSE = 'Rooted MSE'
 SCR_UNDERPRED = 'Underprediction rate'
 SCR_OVERPRED = 'Overprediction rate'
+DEFAULT_SCORERS = [SCR_ACC, SCR_ACC_BAL, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED, SCR_UNDERPRED, SCR_RMSE]
 
 # Scorer formatter for pd output
 SCR_FORMATTER = defaultdict(lambda: "{:.2f}".format)

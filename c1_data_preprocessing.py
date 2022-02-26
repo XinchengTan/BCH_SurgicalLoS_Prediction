@@ -153,7 +153,7 @@ class Dataset(object):
       self.Xtest, _, self.test_case_keys = preprocess_Xtest(test_df, self.feature_names, ftr_cols,
                                                             ftrEng=self.FeatureEngineer, skip_cases_df_or_fp=o2m_df)
       self.test_cohort_df = test_df.set_index('SURG_CASE_KEY').loc[self.test_case_keys]
-      self.ytest = self.test_cohort_df[outcome]
+      self.ytest = np.array(self.test_cohort_df[outcome])
     else:
       self.Xtest, self.ytest, self.test_case_keys = np.array([]), np.array([]), np.array([])
       self.test_cohort_df = self.test_df_raw
@@ -165,6 +165,26 @@ class Dataset(object):
   def get_Xtest_by_case_key(self, query_case_keys):
     idxs = np.where(np.in1d(self.test_case_keys, query_case_keys))[0]
     return self.Xtest[idxs, :]
+
+  def get_cohort_to_Xytrains(self, by_cohort) -> Dict:
+    assert by_cohort in {globals.PRIMARY_PROC, globals.SURG_GROUP}
+    train_df_by_cohort = self.df.set_index('SURG_CASE_KEY').loc[self.train_case_keys].reset_index() \
+      .groupby(by=by_cohort)['SURG_CASE_KEY']
+    cohort_to_Xdata = {}
+    for cohort, case_keys in train_df_by_cohort:
+      idxs = np.where(np.in1d(self.train_case_keys, case_keys))[0]
+      cohort_to_Xdata[cohort] = (self.Xtrain[idxs, :], self.ytrain[idxs])
+    return cohort_to_Xdata
+
+  def get_cohort_to_Xytests(self, by_cohort):
+    assert by_cohort in {globals.PRIMARY_PROC, globals.SURG_GROUP}
+    test_df_by_cohort = self.df.set_index('SURG_CASE_KEY').loc[self.test_case_keys].reset_index() \
+      .groupby(by=by_cohort)['SURG_CASE_KEY']
+    cohort_to_Xdata = {}
+    for cohort, case_keys in test_df_by_cohort:
+      idxs = np.where(np.in1d(self.test_case_keys, case_keys))[0]
+      cohort_to_Xdata[cohort] = (self.Xtest[idxs, :], self.ytest[idxs])
+    return cohort_to_Xdata
 
   def get_surgeon_pred_df_by_case_key(self, query_case_keys):
     if query_case_keys is None or len(query_case_keys) == 0:
