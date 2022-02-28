@@ -85,21 +85,23 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
       test_perf_df = append_perf_row_generic(
         test_perf_df, test_score_dict, {'Xtype': 'test', 'Cohort': cohort, 'Model': clf.__class__.__name__,
                                         'Count': dataset.Xtest.shape[0], 'Trial': trial_i})
-  # Format perf df
-  formatter = {scr: SCR_FORMATTER[scr] for scr in scorers.keys()}
-  formatter['Count'] = '{:.0f}'.format
-  train_styler = train_perf_df.style.format(formatter)
-  test_styler = test_perf_df.style.format(formatter)
-  return train_perf_df, test_perf_df, train_styler, test_styler
+  return train_perf_df, test_perf_df
 
 
-def show_best_clf_per_cohort(perf_df, Xtype):
+def show_best_clf_per_cohort(perf_df, Xtype, sort_by='accuracy'):
   best_clf_perf = perf_df.groupby(by=['Cohort', 'Model']).mean().reset_index().groupby('Cohort').max()
 
   Xsize = best_clf_perf['Count'].sum()
   print(f'Mean {Xtype} size: {Xsize}')
   print(f'Overall mean {Xtype} accuracy: ',
         '{:.2%}'.format(np.dot(best_clf_perf['accuracy'].to_numpy(), best_clf_perf['Count'].to_numpy()) / Xsize))
+  perf_styler = format_perf_df(best_clf_perf.sort_values(by=sort_by, ascending=False))
+  return best_clf_perf, perf_styler
+
+
+# Format numbers and floats in perf df
+def format_perf_df(perf_df: pd.DataFrame):
   formatter = SCR_FORMATTER.copy()
   formatter['Count'] = '{:.0f}'.format
-  return best_clf_perf, best_clf_perf.sort_values(by='accuracy', ascending=False).style.format(formatter)
+  perf_styler = perf_df.style.format(formatter)
+  return perf_styler

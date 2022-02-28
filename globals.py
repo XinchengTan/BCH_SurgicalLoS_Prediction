@@ -30,7 +30,7 @@ PPROC, PPROC_DECILE = 'PPROC', 'PPROC_DECILE'
 # COL to Dummy coded column names
 COL2DUMMIES = {STATE: ['IN_STATE', 'OUT_OF_STATE_US', 'FOREIGN'],
                REGION: ['International', 'Local', 'Regional', 'Unknown'],
-               LANGUAGE: ['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']}
+               LANGUAGE: ['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']}  # 'ARABIC', 'PORTUGUESE', 'HAITIAN', 
 
 # Column list for feature selection
 OS_CODE_LIST = ['Cardiovascular', 'Digestive', 'Endocrine',
@@ -75,21 +75,26 @@ FEATURE_COLS_NO_OS_SPS = FEATURE_COLS_NO_OS + [SPS_PRED]
 # Default medical code to decile feature to aggregation function
 DEFAULT_COL2DECILE_FTR2AGGF = {
   CPT: {CPT_DECILE: 'max',
-        f'{CPT}_COUNT': 'sum',
+        f'{CPT}_COUNT': 'max',
         f'{CPT}_SD': 'mean',
         f'{CPT}_QT25': 'max',
         f'{CPT}_QT75': 'max'},
   PPROC: {PPROC_DECILE: 'max',
-          f'{PPROC}_COUNT': 'sum',
+          f'{PPROC}_COUNT': 'max',
           f'{PPROC}_SD': 'mean',
           f'{PPROC}_QT25': 'max',
           f'{PPROC}_QT75': 'max'},
-  CCSR: {CCSR_DECILE: 'max', f'{CCSR}_COUNT': 'sum', f'{CCSR}_SD': 'mean', f'{CCSR}_QT25': 'max', f'{CCSR}_QT75': 'max'},
-  MED123: {MED123_DECILE: 'sum', f'{MED123}_COUNT': 'sum', f'{MED123}_SD': 'mean', f'{MED123}_QT25': 'max', f'{MED123}_QT75': 'max'},
+  CCSR: {CCSR_DECILE: 'max',
+         f'{CCSR}_COUNT': 'max',
+         f'{CCSR}_SD': 'mean',
+         f'{CCSR}_QT25': 'max',
+         f'{CCSR}_QT75': 'max'},
+  MED123: {MED123_DECILE: 'max',
+           f'{MED123}_COUNT': 'max',
+           f'{MED123}_SD': 'mean',
+           f'{MED123}_QT25': 'max',
+           f'{MED123}_QT75': 'max'},
 }
-# MED1: {MED1_DECILE: 'max'},
-# MED2: {MED2_DECILE: 'max'},
-# MED3: {MED3_DECILE: 'max'},
 
 ONEHOT_COL2DTYPE = {
   PRIMARY_PROC: str,

@@ -148,10 +148,7 @@ def eval_model_perf(dataset: Dataset, clf, scorers=None, by_cohort=None, trial_i
   train_perf_df.sort_values(by='accuracy', ascending=False, inplace=True)
   test_perf_df.sort_values(by='accuracy', ascending=False, inplace=True)
 
-  # Add formatter
-  formatter = {scr: SCR_FORMATTER[scr] for scr in scorers.keys()}
-  formatter['Count'] = '{:.0f}'.format
-  return train_perf_df, test_perf_df, train_perf_df.style.format(formatter), test_perf_df.style.format(formatter)
+  return train_perf_df, test_perf_df
 
 
 def append_perf_row_generic(perf_df, score_dict: Dict, info_col_dict: Dict[str, Any]):

@@ -71,11 +71,20 @@ class FeatureEngineeringModifier(object):
 
     # Language
     if 'LANGUAGE_DESC' in Xdf_cols:
-      Xdf[['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']] = 0.0
+      Xdf[['ENGLISH', 'SPANISH', 'ARABIC', 'PORTUGUESE', 'HAITIAN', 'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']] = 0.0
       Xdf.loc[(Xdf.LANGUAGE_DESC == 'English'), 'ENGLISH'] = 1.0
       Xdf.loc[(Xdf.LANGUAGE_DESC == 'Spanish'), 'SPANISH'] = 1.0
       Xdf.loc[(Xdf.LANGUAGE_DESC == 'Unable to Collect'), 'UNKNOWN_LANGUAGE'] = 1.0
-      Xdf.loc[((Xdf.ENGLISH == 0.0) & (Xdf.SPANISH == 0.0) & (Xdf.UNKNOWN_LANGUAGE == 0.0)), 'OTHER_LANGUAGE'] = 1.0
+      Xdf.loc[~Xdf[globals.LANGUAGE].isin({'English', 'Spanish', 'Unable to Collect'}), 'OTHER_LANGUAGE'] = 1.0
+      # Xdf[['ENGLISH', 'SPANISH', 'ARABIC', 'PORTUGUESE', 'HAITIAN', 'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']] = 0.0
+      # Xdf.loc[(Xdf.LANGUAGE_DESC == 'English'), 'ENGLISH'] = 1.0
+      # Xdf.loc[(Xdf.LANGUAGE_DESC == 'Spanish'), 'SPANISH'] = 1.0
+      # Xdf.loc[(Xdf.LANGUAGE_DESC == 'Arabic'), 'ARABIC'] = 1.0
+      # Xdf.loc[(Xdf.LANGUAGE_DESC == 'Portuguese'), 'PORTUGUESE'] = 1.0
+      # Xdf.loc[(Xdf.LANGUAGE_DESC == 'Haitian Creole'), 'HAITIAN'] = 1.0
+      # Xdf.loc[(Xdf.LANGUAGE_DESC == 'Unable to Collect'), 'UNKNOWN_LANGUAGE'] = 1.0
+      # Xdf.loc[~Xdf[globals.LANGUAGE].isin({'English', 'Spanish', 'Arabic', 'Portuguese', 'Haitian Creole',
+      #                                      'Unable to Collect'}), 'OTHER_LANGUAGE'] = 1.0
       Xdf.drop(columns=['LANGUAGE_DESC'], inplace=True)
 
     return Xdf
