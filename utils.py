@@ -19,36 +19,38 @@ def make_k_all_feature_datasets(dashb_df: pd.DataFrame,
                                 outcome=globals.NNT,
                                 onehot_cols=[],
                                 discretize_cols=None,
+                                code2decile_ftr2aggf=None,
                                 remove_o2m=(True, True),
                                 scaler='robust',
                                 scale_numeric_only=True):
-  code2decile_ftrs2aggf = {
-    CCSR: {
-      CCSR_DECILE: 'max', f'{CCSR}_COUNT': 'max',
-      f'{CCSR}_MEDIAN': 'max', f'{CCSR}_SD': 'mean',
-      f'{CCSR}_QT25': 'max', f'{CCSR}_QT75': 'max'
-    },
-    CPT: {
-      CPT_DECILE: 'max', f'{CPT}_COUNT': 'max',
-      f'{CPT}_MEDIAN': 'max', f'{CPT}_SD': 'mean',
-      f'{CPT}_QT25': 'max', f'{CPT}_QT75': 'max'
-    },
-    PPROC: {
-      PPROC_DECILE: 'max', f'{PPROC}_COUNT': 'max',
-      f'{PPROC}_MEDIAN': 'max', f'{PPROC}_SD': 'mean',
-      f'{PPROC}_QT25': 'max', f'{PPROC}_QT75': 'max'
-    },
-    MED123: {
-      MED123_DECILE: 'max', f'{MED123}_COUNT': 'max',
-      f'{MED123}_MEDIAN': 'max', f'{MED123}_SD': 'mean',
-      f'{MED123}_QT25': 'max', f'{MED123}_QT75': 'max'
-    },
-  }
+  if code2decile_ftr2aggf is None:
+    code2decile_ftr2aggf = {
+      CCSR: {
+        CCSR_DECILE: 'max', f'{CCSR}_COUNT': 'max',
+        f'{CCSR}_MEDIAN': 'max', f'{CCSR}_SD': 'mean',
+        f'{CCSR}_QT25': 'max', f'{CCSR}_QT75': 'max'
+      },
+      CPT: {
+        CPT_DECILE: 'max', f'{CPT}_COUNT': 'max',
+        f'{CPT}_MEDIAN': 'max', f'{CPT}_SD': 'mean',
+        f'{CPT}_QT25': 'max', f'{CPT}_QT75': 'max'
+      },
+      PPROC: {
+        PPROC_DECILE: 'max', f'{PPROC}_COUNT': 'max',
+        f'{PPROC}_MEDIAN': 'max', f'{PPROC}_SD': 'mean',
+        f'{PPROC}_QT25': 'max', f'{PPROC}_QT75': 'max'
+      },
+      MED123: {
+        MED123_DECILE: 'max', f'{MED123}_COUNT': 'max',
+        f'{MED123}_MEDIAN': 'max', f'{MED123}_SD': 'mean',
+        f'{MED123}_QT25': 'max', f'{MED123}_QT75': 'max'
+      },
+    }
   datasets = []
   for i in range(k):
     df = dashb_df.sample(frac=1).reset_index(drop=True)
     dataset = Dataset(df, outcome, FEATURES_ALL_NO_WEIGHT, onehot_cols=onehot_cols,
-                      discretize_cols=discretize_cols, col2decile_ftrs2aggf=code2decile_ftrs2aggf,
+                      discretize_cols=discretize_cols, col2decile_ftrs2aggf=code2decile_ftr2aggf,
                       remove_o2m=remove_o2m, scaler=scaler, scale_numeric_only=scale_numeric_only)
     datasets.append(dataset)
   return datasets

@@ -5,6 +5,7 @@ from collections import Counter
 
 import xgboost
 from imblearn.ensemble import BalancedBaggingClassifier, BalancedRandomForestClassifier
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.metrics import mean_squared_error, make_scorer, accuracy_score
 from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
@@ -90,7 +91,7 @@ class RegressionBasedClassifier(object):
     return accuracy_score(y, preds, sample_weight=sample_weight)
 
 
-# Abstract class
+# Abstract class for cross validation
 class ClassifierCV(object):
 
   def __init__(self):
@@ -108,6 +109,30 @@ class ClassifierCV(object):
     preds = self.predict(X)
     return accuracy_score(y, preds, sample_weight=sample_weight)
 
+
+# Wrapper for safe handling when training data contains a single class
+class ClassifierWrapper(BaseEstimator, ClassifierMixin):
+  def __init__(self, base_estimator):
+    self.base_estimator = base_estimator
+
+  def fit(self, X, y, sample_weight=None):
+    try:
+      return self.base_estimator.fit(X, y, sample_weight)
+    except ValueError as exc:
+      if not str(exc).startswith('This solver needs samples of at least 2 classes in the data'):
+        raise
+    finally:
+      self.classes_ = self.base_estimator.classes_
+
+  def predict_proba(self, X):
+    if len(self.classes_) == 1:
+      return np.ones((X.shape[1], 1))
+    return self.base_estimator.predict_proba(X)
+
+  def predict(self, X):
+    if len(self.classes_) == 1:
+      return np.full_like(X, self.classes_[0])
+    return self.base_estimator.predict(X)
 
 
 class KNeighborsClassifierCV(ClassifierCV):

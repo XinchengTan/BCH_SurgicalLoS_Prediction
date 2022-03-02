@@ -30,7 +30,7 @@ PPROC, PPROC_DECILE = 'PPROC', 'PPROC_DECILE'
 # COL to Dummy coded column names
 COL2DUMMIES = {STATE: ['IN_STATE', 'OUT_OF_STATE_US', 'FOREIGN'],
                REGION: ['International', 'Local', 'Regional', 'Unknown'],
-               LANGUAGE: ['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']}  # 'ARABIC', 'PORTUGUESE', 'HAITIAN', 
+               LANGUAGE: ['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']}  # 'ARABIC', 'PORTUGUESE', 'HAITIAN',
 
 # Column list for feature selection
 OS_CODE_LIST = ['Cardiovascular', 'Digestive', 'Endocrine',
