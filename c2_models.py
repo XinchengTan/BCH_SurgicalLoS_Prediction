@@ -1,9 +1,8 @@
 # Customized Model classes
-import json
 import numpy as np
+import optuna
 from collections import Counter
 
-import xgboost
 from imblearn.ensemble import BalancedBaggingClassifier, BalancedRandomForestClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.metrics import mean_squared_error, make_scorer, accuracy_score
@@ -110,8 +109,17 @@ class ClassifierCV(object):
     return accuracy_score(y, preds, sample_weight=sample_weight)
 
 
-# Wrapper for safe handling when training data contains a single class
-class ClassifierWrapper(BaseEstimator, ClassifierMixin):
+# CV wrapper for KNN (grid search)
+class KNeighborsClassifierCV(ClassifierCV):
+
+  def __init__(self, param_space, kfold=5):
+    super().__init__()
+    self.clf = GridSearchCV(estimator=KNeighborsClassifier(), param_grid=param_space, scoring='accuracy', cv=kfold,
+                            n_jobs=-1, refit=True, return_train_score=True, verbose=0)
+
+
+# Wrapper for all model objects for safe handling a single class in training data
+class SafeOneClassWrapper(BaseEstimator, ClassifierMixin):
   def __init__(self, base_estimator):
     self.base_estimator = base_estimator
 
@@ -122,7 +130,7 @@ class ClassifierWrapper(BaseEstimator, ClassifierMixin):
       if not str(exc).startswith('This solver needs samples of at least 2 classes in the data'):
         raise
     finally:
-      self.classes_ = self.base_estimator.classes_
+      self.classes_ = np.unique(y)
 
   def predict_proba(self, X):
     if len(self.classes_) == 1:
@@ -133,14 +141,6 @@ class ClassifierWrapper(BaseEstimator, ClassifierMixin):
     if len(self.classes_) == 1:
       return np.full_like(X, self.classes_[0])
     return self.base_estimator.predict(X)
-
-
-class KNeighborsClassifierCV(ClassifierCV):
-
-  def __init__(self, param_space, kfold=5):
-    super(KNeighborsClassifierCV, self).__init__()
-    self.clf = GridSearchCV(estimator=KNeighborsClassifier(), param_grid=param_space, scoring='accuracy', cv=kfold,
-                            n_jobs=-1, refit=True, return_train_score=True, verbose=0)
 
 
 def get_model(model, cls_weight='balanced'):
@@ -162,7 +162,7 @@ def get_model(model, cls_weight='balanced'):
     clf = GradientBoostingClassifier(random_state=0, max_depth=3)
   elif model == globals.XGBCLF:
     clf = XGBClassifier(max_depth=4, learning_rate=0.1, n_estimators=150, random_state=0, use_label_encoder=False,
-                        objective='multi:softmax', eval_metric='mlogloss')
+                        eval_metric='mlogloss')
   elif model == globals.ORDCLF_LOGIT:
     clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True)
   elif model == globals.ORDCLF_PROBIT:
@@ -172,7 +172,7 @@ def get_model(model, cls_weight='balanced'):
   else:
     raise NotImplementedError("Model %s is not supported!" % model)
 
-  return clf
+  return SafeOneClassWrapper(clf)
 
 
 def get_model_by_cohort(model, cls_weight='balanced', cohort=None):
@@ -194,8 +194,8 @@ def get_model_by_cohort(model, cls_weight='balanced', cohort=None):
   elif model == globals.GBCLF:
     clf = GradientBoostingClassifier(random_state=0, max_depth=3)
   elif model == globals.XGBCLF:
-    clf = XGBClassifier(max_depth=4, learning_rate=0.1, n_estimators=100, gamma=5, random_state=0, use_label_encoder=False,
-                        eval_metric='mlogloss')
+    clf = XGBClassifier(max_depth=4, learning_rate=0.1, n_estimators=100, gamma=5, random_state=0,
+                        use_label_encoder=False, eval_metric='mlogloss')
   elif model == globals.ORDCLF_LOGIT:
     clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True)
   elif model == globals.ORDCLF_PROBIT:
@@ -205,7 +205,7 @@ def get_model_by_cohort(model, cls_weight='balanced', cohort=None):
   else:
     raise NotImplementedError("Model %s is not supported!" % model)
 
-  return clf
+  return SafeOneClassWrapper(clf)
 
 
 def train_model(md, params, X, y):
@@ -227,10 +227,13 @@ def train_model(md, params, X, y):
     raise NotImplementedError(f"Model {md} is not implemented yet!")
 
   clf.set_params(**params)
+  clf = SafeOneClassWrapper(clf)
   clf.fit(X, y)
   return clf
 
 
+# TODO: 1. add SafeOneClassWrapper?
+# TODO: 2. use Optuna
 def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search',
   def minority_class_size(y):
     return min(Counter(y).values())
