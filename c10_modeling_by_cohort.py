@@ -6,7 +6,7 @@ from typing import Dict, Hashable, Any
 from globals import *
 from c1_data_preprocessing import Dataset
 from c4_model_perf import MyScorer, append_perf_row_generic
-from c2_models import get_model_by_cohort
+from c2_models import get_model_by_cohort, SafeOneClassWrapper
 
 
 # helper function to filter dashb_df by cohort count
@@ -114,23 +114,26 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
     clf = cohort_to_clf.get(cohort)
     if clf is not None:
       train_pred, test_pred = clf.predict(dataset.Xtrain), clf.predict(dataset.Xtest)
-      md_name = clf.__class__.__name__
+      md_name = clf.__class__.__name__ if not isinstance(clf, SafeOneClassWrapper) else clf.model_type
+      label_to_xgb_cls = None
       if 'XGB' in md_name:
         xgb_cls = sorted(set(dataset.ytrain))
         label_to_xgb_cls = {i: xgb_cls[i] for i in range(len(xgb_cls))}
         train_pred = np.array([label_to_xgb_cls[lb] for lb in train_pred])
         test_pred = np.array([label_to_xgb_cls[lb] for lb in test_pred])
       if not set(train_pred).issubset(set(dataset.ytrain)):
+        print(label_to_xgb_cls)
         print(cohort, 'training', set(train_pred), set(dataset.ytrain))
       if not set(test_pred).issubset(set(dataset.ytrain)):
-        print('!!!', cohort, 'test', set(test_pred), set(dataset.ytest))
+        print(label_to_xgb_cls)
+        print('!!![c10]', cohort, 'test', set(test_pred), set(dataset.ytest))
       train_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytrain, train_pred)
       train_perf_df = append_perf_row_generic(
-        train_perf_df, train_score_dict, {'Xtype': 'train', 'Cohort': cohort, 'Model': clf.__class__.__name__,
+        train_perf_df, train_score_dict, {'Xtype': 'train', 'Cohort': cohort, 'Model': md_name,
                                           'Count': dataset.Xtrain.shape[0], 'Trial': trial_i})
       test_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytest, test_pred)
       test_perf_df = append_perf_row_generic(
-        test_perf_df, test_score_dict, {'Xtype': 'test', 'Cohort': cohort, 'Model': clf.__class__.__name__,
+        test_perf_df, test_score_dict, {'Xtype': 'test', 'Cohort': cohort, 'Model': md_name,
                                         'Count': dataset.Xtest.shape[0], 'Trial': trial_i})
   return train_perf_df, test_perf_df
 

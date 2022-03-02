@@ -122,6 +122,7 @@ class KNeighborsClassifierCV(ClassifierCV):
 class SafeOneClassWrapper(BaseEstimator, ClassifierMixin):
   def __init__(self, base_estimator):
     self.base_estimator = base_estimator
+    self.model_type = base_estimator.__class__.__name__
 
   def fit(self, X, y, **kwargs):
     try:
