@@ -59,7 +59,6 @@ def gen_cohort_datasets(dashb_df: pd.DataFrame, cohort_col: str, min_cohort_size
   """
   assert cohort_col in {SURG_GROUP, PRIMARY_PROC}, f'cohort_col must be one of [{SURG_GROUP, PRIMARY_PROC}]!'
   assert cohort_col in dashb_df.columns, f'{cohort_col} must exist in dashb_df columns!'
-  assert min_cohort_size >= 0, 'min_cohort_size must be a non-negative int!'
 
   # Generate cohort to cohort_data_df mapping
   cohort_groupby = filter_df_by_cohort_count(dashb_df, cohort_col, min_cohort_size).groupby(cohort_col)

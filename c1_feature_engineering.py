@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -125,7 +127,7 @@ class FeatureEngineeringModifier(object):
     """
     if col2decile_ftrs2aggf is None:
       col2decile_ftrs2aggf = self.col2decile_ftr2aggf
-    if col2decile_ftrs2aggf is None:
+    if col2decile_ftrs2aggf is None or Xdf.shape[0] == 0:
       return Xdf
 
     for col, ftr2aggf in col2decile_ftrs2aggf.items():
@@ -149,6 +151,8 @@ class FeatureEngineeringModifier(object):
 
   def join_with_ccsr_decile(self, Xdf: pd.DataFrame, ccsr_decile: pd.DataFrame,
                             decile_col2aggf={globals.CCSR_DECILE: 'max'}):
+    if Xdf.shape[0] == 0:
+      return Xdf
     Xdf_w_decile = Xdf[['SURG_CASE_KEY', globals.CCSRS]]\
       .explode('CCSRS')\
       .fillna({'CCSRS': globals.ZERO_CCSR})\
@@ -169,6 +173,8 @@ class FeatureEngineeringModifier(object):
                            decile_col2aggf={globals.CPT_DECILE: 'max'}):
     # Note: Assume Xdf contains the CPT list column before one-hot encoding
     # 1. Explode Xdf on column 'CPTS'; 2. Groupby 'SURG_CASE_KEY' and apply agg func
+    if Xdf.shape[0] == 0:
+      return Xdf
     Xdf_w_decile = Xdf[['SURG_CASE_KEY', 'CPTS']]\
       .explode('CPTS')\
       .dropna(subset=['CPTS'])\
@@ -189,6 +195,8 @@ class FeatureEngineeringModifier(object):
                            decile_col2aggf={globals.MED1_DECILE: 'max'}):
     # Note: Assume Xdf contains the medication column (dtype is list) before one-hot encoding
     # 1. Explode Xdf on column 'LEVEL#_DRUG_CLASS_NAME'; 2. Groupby 'SURG_CASE_KEY' and apply agg func
+    if Xdf.shape[0] == 0:
+      return Xdf
     med_col = globals.DRUG_COLS[level-1] if level <= 3 else globals.DRUG_COLS[-1]
     Xdf_w_decile = Xdf[['SURG_CASE_KEY', med_col]]\
       .explode(med_col)\
@@ -208,6 +216,8 @@ class FeatureEngineeringModifier(object):
 
   def join_with_pproc_decile(self, Xdf: pd.DataFrame, pproc_decile: pd.DataFrame,
                              decile_col2aggf={globals.PPROC_DECILE: 'max'}):
+    if Xdf.shape[0] == 0:
+      return Xdf
     # Drop any placeholder column added by match_Xdf_cols_to_target_ftrs()
     Xdf.drop(columns=decile_col2aggf.keys(), inplace=True, errors='ignore')
     # Join selected columns in the decile df on 'SURG_CASE_KEY' with the input Xdf
@@ -236,7 +246,7 @@ class FeatureEngineeringModifier(object):
         .drop(columns=list(new_ftrs)) \
         .reset_index(drop=True)
       if Xdf.shape[0] == 0:
-        raise Exception("All cases in this dataset contain at least 1 unseen indicator!")
+        warnings.warn("All cases in this dataset contain at least 1 unseen indicator!")
 
     # Add unobserved indicators as columns of 0
     uncovered_ftrs = set(target_features) - set(Xdf_cols)
