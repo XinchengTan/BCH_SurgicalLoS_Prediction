@@ -123,9 +123,9 @@ class SafeOneClassWrapper(BaseEstimator, ClassifierMixin):
   def __init__(self, base_estimator):
     self.base_estimator = base_estimator
 
-  def fit(self, X, y, sample_weight=None):
+  def fit(self, X, y, **kwargs):
     try:
-      return self.base_estimator.fit(X, y, sample_weight)
+      return self.base_estimator.fit(X, y, **kwargs)
     except ValueError as exc:
       if not str(exc).startswith('This solver needs samples of at least 2 classes in the data'):
         raise
