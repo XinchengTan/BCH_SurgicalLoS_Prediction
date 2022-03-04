@@ -16,6 +16,7 @@ import shap
 
 from globals import *
 from c1_data_preprocessing import Dataset
+from c2_models import SafeOneClassWrapper
 
 
 class MyScorer:
@@ -118,7 +119,7 @@ def eval_model_perf(dataset: Dataset, clf, scorers=None, by_cohort=None, trial_i
     train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
   if test_perf_df is None:
     test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
-
+  md_name = clf.__class__.__name__ if not isinstance(clf, SafeOneClassWrapper) else clf.model_type
   if by_cohort == SURG_GROUP or by_cohort == PRIMARY_PROC:
     cohort_to_Xytrain = dataset.get_cohort_to_Xytrains(by_cohort)
     cohort_to_Xytest = dataset.get_cohort_to_Xytests(by_cohort)
@@ -128,22 +129,22 @@ def eval_model_perf(dataset: Dataset, clf, scorers=None, by_cohort=None, trial_i
       train_pred = clf.predict(Xtrain)
       train_scores = MyScorer.apply_scorers(scorers.keys(), ytrain, train_pred)
       train_perf_df = append_perf_row_generic(
-        train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': clf.__class__.__name__,
+        train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': md_name,
                                       'Count': Xtrain.shape[0], 'Trial': trial_i})
       if Xtest is not None:
         test_pred = clf.predict(Xtest)
         test_scores = MyScorer.apply_scorers(scorers.keys(), ytest, test_pred)
         test_perf_df = append_perf_row_generic(
-          test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': cohort, 'Model': clf.__class__.__name__,
+          test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': cohort, 'Model': md_name,
                                       'Count': Xtest.shape[0], 'Trial': trial_i})
   else:
     train_pred, test_pred = clf.predict(dataset.Xtrain), clf.predict(dataset.Xtest)
     train_scores = MyScorer.apply_scorers(scorers.keys(), dataset.ytrain, train_pred)
     test_scores = MyScorer.apply_scorers(scorers.keys(), dataset.ytest, test_pred)
     train_perf_df = append_perf_row_generic(
-      train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': 'All', 'Model': clf.__class__.__name__})
+      train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': 'All', 'Model': md_name})
     test_perf_df = append_perf_row_generic(
-      test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': 'All', 'Model': clf.__class__.__name__})
+      test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': 'All', 'Model': md_name})
 
   train_perf_df.sort_values(by='accuracy', ascending=False, inplace=True)
   test_perf_df.sort_values(by='accuracy', ascending=False, inplace=True)

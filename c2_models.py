@@ -256,8 +256,7 @@ def train_model_all_ktrials(decileFtr_config, models, k_datasets, eval_by_cohort
   return train_perf_df, test_perf_df
 
 
-# TODO: 1. add SafeOneClassWrapper?
-# TODO: 2. use Optuna
+# TODO: use Optuna
 def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search',
   def minority_class_size(y):
     return min(Counter(y).values())

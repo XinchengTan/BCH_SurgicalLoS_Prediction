@@ -63,7 +63,7 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=N
   admit_date, discharge_date = dashb_df['HAR_ADMIT_DATE'].dt.date, dashb_df['HAR_DISCHARGE_DATE'].dt.date
   dashb_df[globals.NNT] = (discharge_date - admit_date) / np.timedelta64(1, 'D')
 
-  # Handle NaNs
+  # Handle basic NaNs
   dashb_df.fillna({os: 0.0 for os in globals.OS_CODE_LIST}, inplace=True)
   print_df_info(dashb_df, "Dashboard DF (fill NaN OS with 0)")
   dashb_df = dashb_df[dashb_df[globals.NNT].notna()]
