@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from copy import deepcopy
+from tqdm import tqdm
 from typing import Dict, Hashable, Any
 
 from globals import *
@@ -41,6 +42,20 @@ def gen_ktrial_cohort_test_idxs(dashb_df: pd.DataFrame, cohort_col: str, min_coh
     kt_cohort2testIdxs.append(cohort2testIdxs)
 
   return kt_pprocDf, kt_cohort2testIdxs
+
+
+def gen_pproc_ktrial_datasets(ktrials, decileFtr_config, kt_dfs, kt_cohort2testIdxs, test_pct, min_cohort_size):
+  kt_datasets = []
+  for k in range(ktrials):
+    # Make dataset from existing train-test split cohort idxs
+    dataset_k = gen_cohort_datasets(
+      kt_dfs[k], PRIMARY_PROC, min_cohort_size, kt_cohort2testIdxs[k],
+      outcome=NNT, ftr_cols=FEATURE_COLS_NO_WEIGHT_ALLMEDS,
+      col2decile_ftrs2aggf=decileFtr_config, onehot_cols=[CCSRS],
+      test_pct=test_pct, discretize_cols=['AGE_AT_PROC_YRS'], scaler='robust'
+    )
+    kt_datasets.append(dataset_k)
+  return kt_datasets
 
 
 def gen_cohort_datasets(dashb_df: pd.DataFrame, cohort_col: str, min_cohort_size=10, cohort2testIdxs=None,
@@ -102,7 +117,7 @@ def train_cohort_clf(md, class_weight, cohort_to_dataset):
   return cohort_to_clf
 
 
-def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[str, Any], scorers: Dict[str, Any],
+def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[str, Any], scorers: Dict[str, Any] = None,
                     trial_i=None, train_perf_df=None, test_perf_df=None):
   if scorers is None:
     scorers = MyScorer.get_scorer_dict(DEFAULT_SCORERS)
@@ -119,12 +134,12 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
       if 'XGB' in md_name:
         xgb_cls = sorted(set(dataset.ytrain))
         label_to_xgb_cls = {i: xgb_cls[i] for i in range(len(xgb_cls))}
-        train_pred = np.array([label_to_xgb_cls[lb] for lb in train_pred])
-        test_pred = np.array([label_to_xgb_cls[lb] for lb in test_pred])
-      if not set(train_pred).issubset(set(dataset.ytrain)):
+        train_pred = np.array([label_to_xgb_cls[lb] for lb in train_pred]).astype(np.float)
+        test_pred = np.array([label_to_xgb_cls[lb] for lb in test_pred]).astype(np.float)
+      if not set(train_pred).issubset(np.unique(dataset.ytrain).astype(np.float)):
         print(label_to_xgb_cls)
         print(cohort, 'training', set(train_pred), set(dataset.ytrain))
-      if not set(test_pred).issubset(set(dataset.ytrain)):
+      if not set(test_pred).issubset(np.unique(dataset.ytrain).astype(np.float)):
         print(label_to_xgb_cls)
         print('!!![c10]', cohort, 'test', set(test_pred), set(dataset.ytest))
       train_score_dict = MyScorer.apply_scorers(scorers.keys(), dataset.ytrain, train_pred)
@@ -141,6 +156,8 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
 def show_best_clf_per_cohort(perf_df: pd.DataFrame, Xtype, sort_by='accuracy'):
   # overall_acc by trial --> mean, std
   print(f'{Xtype} set performance by cohort:')
+
+  # Obtain overall perf eval (groupby trial and model and compile cohort perf into 1 row for overall perf)
   no_cohort_col_list = perf_df.columns.to_list()
   no_cohort_col_list.remove('Cohort')
   no_cohort_col_list.remove('Xtype')
@@ -163,6 +180,7 @@ def show_best_clf_per_cohort(perf_df: pd.DataFrame, Xtype, sort_by='accuracy'):
                           how='left',
                           suffixes=('_mean', '_std')).dropna(axis=1)
 
+  # Obtain best classifier for each cohort by their average accuracy
   clf_perf_mean_std = pd.merge(perf_df.groupby(by=['Cohort', 'Model']).mean().reset_index(),
                                perf_df.groupby(by=['Cohort', 'Model']).std().reset_index(),
                                on=['Cohort', 'Model'],
@@ -175,6 +193,7 @@ def show_best_clf_per_cohort(perf_df: pd.DataFrame, Xtype, sort_by='accuracy'):
   print('Mean overall accuracy of best clf for each cohort: ',
         np.dot(best_clf_perf['accuracy_mean'], best_clf_perf['Count_mean']) / best_clf_xsize)
 
+  # Obtain overall performance of the best classifiers for each cohort put together
   best_overall_df = perf_df.join(best_clf_perf.set_index(['Cohort', 'Model']), on=['Cohort', 'Model'], how='inner')
   no_cohort_col_list.remove('Model')
   best_overall_perf = pd.DataFrame(columns=no_cohort_col_list)
@@ -208,3 +227,21 @@ def format_perf_df(perf_df: pd.DataFrame):
     formatter_ret[k+'_std'] = v
   perf_styler = perf_df.style.format(formatter_ret)
   return perf_styler
+
+
+def cohort_modeling_ktrials(decileFtr_config, models, k_datasets, train_perf_df=None, test_perf_df=None):
+  # print decile agg funcs
+  for k, v in decileFtr_config.items():
+    print(k, v)
+
+  models = [LGR, KNN, RMFCLF, XGBCLF] if models is None else models  # GBCLF,
+  for k in tqdm(range(len(k_datasets))):
+    # Fit and eval models
+    for md in models:
+      print('md=', md)
+      cohort_to_clf_pproc = train_cohort_clf(md=md, class_weight=None, cohort_to_dataset=k_datasets[k])
+      train_perf_df, test_perf_df = eval_cohort_clf(
+        k_datasets[k], cohort_to_clf_pproc, None, k, train_perf_df, test_perf_df
+      )
+
+  return train_perf_df, test_perf_df

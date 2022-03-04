@@ -100,19 +100,3 @@ def is_valid_cpt_grouping(cpt_df, group2cpts):
   if np.sum(cpt_markers) != len(all_cpt_codes):
     raise ValueError("Some CPT code is not covered by the grouping!")
   return True
-
-
-def gen_cpt_decile(df, score_range, by_code=True):
-  """
-  Generates CPT deciles based on CPT code or CPT group.
-  TODO: note that score_range is a tunable parameter
-
-  :param df:
-  :param by_code: if true, generate decile based on each CPT code; otherwise, base on CPT grouping
-  :param score_range: range of the decile score, starting from 1
-  :return: a dictionary mapping each decile feature to a score
-  """
-
-  return
-
-

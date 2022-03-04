@@ -10,29 +10,29 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from time import time
 from typing import Dict
 
-import globals
+from globals import *
 from c1_feature_engineering import FeatureEngineeringModifier, DecileGenerator
 
 
 def gen_cohort_df(df, cohort):
-  if cohort == globals.COHORT_ALL:
+  if cohort == COHORT_ALL:
     return df
   else:
-    ch_pprocs = globals.COHORT_TO_PPROCS[cohort]
+    ch_pprocs = COHORT_TO_PPROCS[cohort]
     return df.query("PRIMARY_PROC in @ch_pprocs")
 
 
 class Dataset(object):
 
-  def __init__(self, df, outcome=globals.NNT, ftr_cols=globals.FEATURE_COLS, col2decile_ftrs2aggf=None,
-               onehot_cols=[], discretize_cols=None, test_pct=0.2, test_idxs=None, cohort=globals.COHORT_ALL,
+  def __init__(self, df, outcome=NNT, ftr_cols=FEATURE_COLS, col2decile_ftrs2aggf=None,
+               onehot_cols=[], discretize_cols=None, test_pct=0.2, test_idxs=None, cohort=COHORT_ALL,
                trimmed_ccsr=None, target_features=None, decile_gen=None, remove_o2m=(True, True),
                scaler=None, scale_numeric_only=True):
     # Check args
-    assert all(oh in globals.ONEHOT_COL2DTYPE.keys() for oh in onehot_cols), \
-      f'onehot_cols must be in {globals.ONEHOT_COL2DTYPE.keys()}!'
+    assert all(oh in ONEHOT_COL2DTYPE.keys() for oh in onehot_cols), \
+      f'onehot_cols must be in {ONEHOT_COL2DTYPE.keys()}!'
     # Define datatype of the columns to be onehot-encoded in order
-    onehot_dtypes = [globals.ONEHOT_COL2DTYPE[oh] for oh in onehot_cols]
+    onehot_dtypes = [ONEHOT_COL2DTYPE[oh] for oh in onehot_cols]
 
     self.df = df.copy()
     self.outcome = outcome
@@ -91,7 +91,7 @@ class Dataset(object):
       raise NotImplementedError(f'Scaler {how} is not supported yet!')
 
     if only_numeric:
-      numeric_colidxs = np.where(np.in1d(self.feature_names, globals.ALL_POSSIBLE_NUMERIC_COLS))[0]
+      numeric_colidxs = np.where(np.in1d(self.feature_names, ALL_POSSIBLE_NUMERIC_COLS))[0]
       self.Xtrain[:, numeric_colidxs] = scaler.fit_transform(self.Xtrain[:, numeric_colidxs])
     else:
       self.Xtrain = scaler.fit_transform(self.Xtrain)
@@ -105,19 +105,19 @@ class Dataset(object):
       scaler = self.input_scaler
     assert scaler is not None, 'Input scaler for Xtest cannot be None!'
     if self.scale_numeric_only:
-      numeric_colidxs = np.where(np.in1d(self.feature_names, globals.ALL_POSSIBLE_NUMERIC_COLS))[0]
+      numeric_colidxs = np.where(np.in1d(self.feature_names, ALL_POSSIBLE_NUMERIC_COLS))[0]
       self.Xtest[:, numeric_colidxs] = scaler.fit_transform(self.Xtest[:, numeric_colidxs])
     else:
       self.Xtest = scaler.transform(self.Xtest)
     return self.Xtest
 
-  def preprocess_train(self, outcome, ftr_cols=globals.FEATURE_COLS, remove_o2m_train=True):
+  def preprocess_train(self, outcome, ftr_cols=FEATURE_COLS, remove_o2m_train=True):
     print('\n***** Start to preprocess Xtrain:')
     # I. Preprocess training set
     if self.train_df_raw is not None:
       # Preprocess outcome values / SPS prediction in df
       train_df = preprocess_y(self.train_df_raw, outcome, inplace=False)
-      if globals.SPS_PRED in train_df.columns:
+      if SPS_PRED in train_df.columns:
         train_df = preprocess_y(train_df, outcome, sps_y=True)
 
       # Modify data matrix
@@ -128,7 +128,7 @@ class Dataset(object):
       self.Xtrain, self.ytrain, self.train_case_keys = np.array([]), np.array([]), np.array([])
       self.train_cohort_df = self.train_df_raw
 
-  def preprocess_test(self, outcome, ftr_cols=globals.FEATURE_COLS, target_features=None, remove_o2m_test=None):
+  def preprocess_test(self, outcome, ftr_cols=FEATURE_COLS, target_features=None, remove_o2m_test=None):
     print('\n***** Start to preprocess Xtest:')
     # II. Preprocess test set, if it's not empty
     if self.test_df_raw is not None:
@@ -167,7 +167,7 @@ class Dataset(object):
     return self.Xtest[idxs, :]
 
   def get_cohort_to_Xytrains(self, by_cohort) -> Dict:
-    assert by_cohort in {globals.PRIMARY_PROC, globals.SURG_GROUP}
+    assert by_cohort in {PRIMARY_PROC, SURG_GROUP}
     train_df_by_cohort = self.df.set_index('SURG_CASE_KEY').loc[self.train_case_keys].reset_index() \
       .groupby(by=by_cohort)['SURG_CASE_KEY']
     cohort_to_Xdata = {}
@@ -177,7 +177,7 @@ class Dataset(object):
     return cohort_to_Xdata
 
   def get_cohort_to_Xytests(self, by_cohort):
-    assert by_cohort in {globals.PRIMARY_PROC, globals.SURG_GROUP}
+    assert by_cohort in {PRIMARY_PROC, SURG_GROUP}
     test_df_by_cohort = self.df.set_index('SURG_CASE_KEY').loc[self.test_case_keys].reset_index() \
       .groupby(by=by_cohort)['SURG_CASE_KEY']
     cohort_to_Xdata = {}
@@ -188,10 +188,10 @@ class Dataset(object):
 
   def get_surgeon_pred_df_by_case_key(self, query_case_keys):
     if query_case_keys is None or len(query_case_keys) == 0:
-      return pd.DataFrame(columns=['SURG_CASE_KEY', globals.SPS_PRED])
-    surg_df = self.df[['SURG_CASE_KEY', globals.SPS_PRED, self.outcome]]\
+      return pd.DataFrame(columns=['SURG_CASE_KEY', SPS_PRED])
+    surg_df = self.df[['SURG_CASE_KEY', SPS_PRED, self.outcome]]\
       .set_index('SURG_CASE_KEY').loc[query_case_keys].reset_index()
-    surg_df = surg_df[surg_df[globals.SPS_PRED].notnull()]
+    surg_df = surg_df[surg_df[SPS_PRED].notnull()]
     preprocess_y(surg_df, self.outcome, True, inplace=True)
     preprocess_y(surg_df, self.outcome, False, inplace=True)
     return surg_df
@@ -199,7 +199,7 @@ class Dataset(object):
   def get_raw_nnt(self, xtype='train'):
     case_keys = self.train_case_keys if xtype.lower() == 'train' else self.test_case_keys
     df = self.df.set_index('SURG_CASE_KEY').loc[case_keys]
-    return df[globals.NNT]
+    return df[NNT]
 
   def __str__(self):
     res = "Training set size: %d\n" \
@@ -212,7 +212,10 @@ class Dataset(object):
 def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModifier,
                       remove_nonnumeric=True, verbose=False, remove_o2m=True):
   # Make data matrix X numeric
-  Xdf = df.copy()[feature_cols + [ftrEng.decile_outcome]]  # add outcome col for computing decile features
+  ftrEng_dep_cols_to_drop = [ftrEng.decile_outcome]  # dependent columns for data cleaning / feature engineering
+  if STATE not in feature_cols:
+    ftrEng_dep_cols_to_drop.append(STATE)
+  Xdf = df.copy()[feature_cols + ftrEng_dep_cols_to_drop]
 
   # Handle NaNs -- only remove NAs if the nullable column IS IN 'feature_cols'
   Xdf = ftrEng.handle_nans(Xdf)
@@ -241,7 +244,7 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy()
   if remove_nonnumeric:
-    Xdf.drop(columns=globals.NON_NUMERIC_COLS + [ftrEng.decile_outcome], inplace=True, errors='ignore')
+    Xdf.drop(columns=NON_NUMERIC_COLS + ftrEng_dep_cols_to_drop, inplace=True, errors='ignore')
   print("\nAfter droppping nonnumeric cols: Xdf - ", Xdf.shape)
   # Convert dataframe to numerical numpy matrix and save the corresponding features' names
   X = Xdf.to_numpy(dtype=np.float64)
@@ -301,7 +304,7 @@ def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeri
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_key = Xdf['SURG_CASE_KEY'].to_numpy()
-  Xdf.drop(columns=globals.NON_NUMERIC_COLS, inplace=True, errors='ignore')
+  Xdf.drop(columns=NON_NUMERIC_COLS, inplace=True, errors='ignore')
 
   # Reorder columns such that it aligns with target_features
   Xdf = Xdf[target_features]
@@ -329,21 +332,21 @@ def preprocess_y(df: pd.DataFrame, outcome, sps_y=False, inplace=False):
   # Generate an outcome vector y with shape: (n_samples, )
   df = df.copy() if not inplace else df
 
-  if outcome == globals.LOS:
-    return df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[globals.SPS_PRED].to_numpy()
+  if outcome == LOS:
+    return df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[SPS_PRED].to_numpy()
   elif outcome == ">12h":
-    y = df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[globals.SPS_PRED].to_numpy()
+    y = df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[SPS_PRED].to_numpy()
     y[y > 0.5] = 1
     y[y <= 0.5] = 0
   elif outcome == ">1d":
-    y = df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[globals.SPS_PRED].to_numpy()
+    y = df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[SPS_PRED].to_numpy()
     y[y > 1] = 1
     y[y <= 1] = 0
-  elif outcome == globals.NNT:
-    y = df[globals.NNT].to_numpy() if not sps_y else df[globals.SPS_PRED].to_numpy()
+  elif outcome == NNT:
+    y = df[NNT].to_numpy() if not sps_y else df[SPS_PRED].to_numpy()
     y = gen_y_nnt(y)
   elif outcome.endswith("nnt"):
-    y = df[globals.NNT].to_numpy() if not sps_y else df[globals.SPS_PRED].to_numpy()
+    y = df[NNT].to_numpy() if not sps_y else df[SPS_PRED].to_numpy()
     cutoff = int(outcome.split("nnt")[0])
     y = gen_y_nnt_binary(y, cutoff)
   else:
@@ -351,7 +354,7 @@ def preprocess_y(df: pd.DataFrame, outcome, sps_y=False, inplace=False):
 
   # Update df by adding or updating the outcome column
   if sps_y:
-    df[globals.SPS_PRED] = y
+    df[SPS_PRED] = y
   else:
     df[outcome] = y
   return df
@@ -363,7 +366,7 @@ def gen_y_nnt(y):
   elif not isinstance(y, np.ndarray):
     y = np.array(y)
   y = np.round(y)
-  y[y > globals.MAX_NNT] = globals.MAX_NNT + 1
+  y[y > MAX_NNT] = MAX_NNT + 1
   return y
 
 
@@ -375,7 +378,7 @@ def gen_y_nnt_binary(y, cutoff):  # task: predict if LoS <= cutoff (cutoff in ra
 
 
 # Perform train-test split
-def gen_train_test(X, y, test_pct=0.2, rand_state=globals.SEED):
+def gen_train_test(X, y, test_pct=0.2, rand_state=SEED):
   """
   Returns the purely integer-location based index w.r.t. the data matrix X for the train and test set respectively.
   i.e. max(X_train.index) <= n_samples - 1 and max(X_test.index) <= n_samples - 1
@@ -398,8 +401,8 @@ def gen_train_test(X, y, test_pct=0.2, rand_state=globals.SEED):
 # train-validation-test split
 def gen_train_val_test(X, y, val_pct=0.2, test_pct=0.2):
   X, y = pd.DataFrame(X), pd.Series(y)
-  X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=test_pct, random_state=globals.SEED)
-  X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=val_pct, random_state=globals.SEED)
+  X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=test_pct, random_state=SEED)
+  X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=val_pct, random_state=SEED)
   return X_train.to_numpy(), X_val.to_numpy(), X_test.to_numpy(), y_train.to_numpy(), y_val.to_numpy(), y_test.to_numpy(),\
          X_train.index, X_val.index, X_test.index
 
@@ -412,8 +415,8 @@ def standardize(X_train, X_test=None):
 
 
 def gen_smote_Xy(X, y, feature_names):
-  categ_ftrs = np.array([False if ftr in globals.CONTINUOUS_COLS else True for ftr in feature_names], dtype=bool)
-  sm = SMOTENC(categorical_features=categ_ftrs, random_state=globals.SEED)
+  categ_ftrs = np.array([False if ftr in CONTINUOUS_COLS else True for ftr in feature_names], dtype=bool)
+  sm = SMOTENC(categorical_features=categ_ftrs, random_state=SEED)
   X, y = sm.fit_resample(X, y)
   return X, y
 

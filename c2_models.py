@@ -2,6 +2,8 @@
 import numpy as np
 import optuna
 from collections import Counter
+from tqdm import tqdm
+from typing import List
 
 from imblearn.ensemble import BalancedBaggingClassifier, BalancedRandomForestClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -18,7 +20,8 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.neural_network import MLPRegressor, MLPClassifier
 from xgboost import XGBClassifier, XGBRegressor
 
-import globals
+from globals import *
+from c4_model_perf import eval_model_perf
 
 
 try:
@@ -58,21 +61,21 @@ class RegressionBasedClassifier(object):
 
   def __init__(self, md, **kwargs):
     self.regressor = None
-    if md == globals.PR:
+    if md == PR:
       self.regressor = PoissonRegressor(**kwargs)  # alpha=0.01, max_iter=300
-    elif md == globals.SVR:
+    elif md == SVR:
       self.regressor = SVR(**kwargs)
-    elif md == globals.KNR:
+    elif md == KNR:
       self.regressor = KNeighborsRegressor(**kwargs)
-    elif md == globals.DT:
+    elif md == DT:
       self.regressor = DecisionTreeRegressor(**kwargs)
-    elif md == globals.RMF:
+    elif md == RMF:
        self.regressor = RandomForestRegressor(**kwargs)
-    elif md == globals.GB:
+    elif md == GB:
       self.regressor = GradientBoostingRegressor(**kwargs)
-    elif md == globals.XGB:
+    elif md == XGB:
       self.regressor = XGBRegressor(**kwargs)
-    elif md == globals.MLP:
+    elif md == MLP:
       self.regressor = MLPRegressor(**kwargs)
     else:
       raise NotImplementedError
@@ -82,7 +85,7 @@ class RegressionBasedClassifier(object):
 
   def predict(self, X):
     reg_pred = np.rint(self.regressor.predict(X))
-    reg_pred[reg_pred > globals.MAX_NNT] = globals.MAX_NNT + 1
+    reg_pred[reg_pred > MAX_NNT] = MAX_NNT + 1
     return reg_pred
 
   def score(self, X, y, sample_weight=None):
@@ -101,7 +104,7 @@ class ClassifierCV(object):
 
   def predict(self, X):
     pred = self.clf.predict(X)
-    pred[pred > globals.MAX_NNT] = globals.MAX_NNT + 1
+    pred[pred > MAX_NNT] = MAX_NNT + 1
     return pred
 
   def score(self, X, y, sample_weight=None):
@@ -140,35 +143,35 @@ class SafeOneClassWrapper(BaseEstimator, ClassifierMixin):
 
   def predict(self, X):
     if len(self.classes_) == 1:
-      return np.full_like(X, self.classes_[0])
+      return np.full(X.shape[0], self.classes_[0])
     return self.base_estimator.predict(X)
 
 
 def get_model(model, cls_weight='balanced'):
-  if model == globals.LGR:
+  if model == LGR:
     clf = LogisticRegression(C=0.03, class_weight=cls_weight, max_iter=500, random_state=0)
     # clf = LogisticRegressionCV(Cs=[0.01, 0.03, 0.1, 0.3, 1, 3], class_weight=cls_weight, max_iter=500, random_state=0,
     #                            cv=5)
-  elif model == globals.PR:
-    clf = RegressionBasedClassifier(globals.PR, alpha=0.01, max_iter=300)
-  elif model == globals.SVC:
+  elif model == PR:
+    clf = RegressionBasedClassifier(PR, alpha=0.01, max_iter=300)
+  elif model == SVC:
     clf = SVC(gamma='auto', class_weight=cls_weight, probability=False)
-  elif model == globals.KNN:
+  elif model == KNN:
     clf = KNeighborsClassifier(n_neighbors=11)
-  elif model == globals.DTCLF:
+  elif model == DTCLF:
     clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight=cls_weight)
-  elif model == globals.RMFCLF:
+  elif model == RMFCLF:
     clf = RandomForestClassifier(random_state=0, class_weight=cls_weight)
-  elif model == globals.GBCLF:
+  elif model == GBCLF:
     clf = GradientBoostingClassifier(random_state=0, max_depth=3)
-  elif model == globals.XGBCLF:
+  elif model == XGBCLF:
     clf = XGBClassifier(max_depth=4, learning_rate=0.1, n_estimators=150, random_state=0, use_label_encoder=False,
                         eval_metric='mlogloss')
-  elif model == globals.ORDCLF_LOGIT:
+  elif model == ORDCLF_LOGIT:
     clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True)
-  elif model == globals.ORDCLF_PROBIT:
+  elif model == ORDCLF_PROBIT:
     clf = OrdinalClassifier(distr='probit', solver='bfgs', disp=True)
-  elif model == globals.BAL_BAGCLF:
+  elif model == BAL_BAGCLF:
     clf = BalancedBaggingClassifier(random_state=0)
   else:
     raise NotImplementedError("Model %s is not supported!" % model)
@@ -178,30 +181,30 @@ def get_model(model, cls_weight='balanced'):
 
 def get_model_by_cohort(model, cls_weight='balanced', cohort=None):
   # TODO: can add customization for each cohort later
-  if model == globals.LGR:
+  if model == LGR:
     clf = LogisticRegression(C=0.03, class_weight=cls_weight, max_iter=500, random_state=0)
     # clf = LogisticRegressionCV(Cs=[0.01, 0.03, 0.1, 0.3, 1, 3], class_weight=cls_weight, max_iter=500, random_state=0,
     #                            cv=5)
-  elif model == globals.PR:
-    clf = RegressionBasedClassifier(globals.PR, alpha=0.01, max_iter=300)
-  elif model == globals.SVC:
+  elif model == PR:
+    clf = RegressionBasedClassifier(PR, alpha=0.01, max_iter=300)
+  elif model == SVC:
     clf = SVC(gamma='auto', class_weight=cls_weight, probability=False)
-  elif model == globals.KNN:
+  elif model == KNN:
     clf = KNeighborsClassifierCV({'n_neighbors': np.arange(4, 16)})
-  elif model == globals.DTCLF:
+  elif model == DTCLF:
     clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight=cls_weight)
-  elif model == globals.RMFCLF:
+  elif model == RMFCLF:
     clf = RandomForestClassifier(random_state=0, class_weight=cls_weight)
-  elif model == globals.GBCLF:
+  elif model == GBCLF:
     clf = GradientBoostingClassifier(random_state=0, max_depth=3)
-  elif model == globals.XGBCLF:
+  elif model == XGBCLF:
     clf = XGBClassifier(max_depth=4, learning_rate=0.1, n_estimators=100, gamma=5, random_state=0,
                         use_label_encoder=False, eval_metric='mlogloss')
-  elif model == globals.ORDCLF_LOGIT:
+  elif model == ORDCLF_LOGIT:
     clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True)
-  elif model == globals.ORDCLF_PROBIT:
+  elif model == ORDCLF_PROBIT:
     clf = OrdinalClassifier(distr='probit', solver='bfgs', disp=True)
-  elif model == globals.BAL_BAGCLF:
+  elif model == BAL_BAGCLF:
     clf = BalancedBaggingClassifier(random_state=0)
   else:
     raise NotImplementedError("Model %s is not supported!" % model)
@@ -210,20 +213,20 @@ def get_model_by_cohort(model, cls_weight='balanced', cohort=None):
 
 
 def train_model(md, params, X, y):
-  if md == globals.LGR:
-    clf = LogisticRegression(random_state=globals.SEED)
-  elif md == globals.SVC:
-    clf = SVC(random_state=globals.SEED, probability=True)
-  elif md == globals.KNN:
+  if md == LGR:
+    clf = LogisticRegression(random_state=SEED)
+  elif md == SVC:
+    clf = SVC(random_state=SEED, probability=True)
+  elif md == KNN:
     clf = KNeighborsClassifier()
-  elif md == globals.DTCLF:
-    clf = DecisionTreeClassifier(random_state=globals.SEED)
-  elif md == globals.RMFCLF:
-    clf = RandomForestClassifier(random_state=globals.SEED)
-  elif md == globals.GBCLF:
-    clf = GradientBoostingClassifier(random_state=globals.SEED)
-  elif md == globals.XGBCLF:
-    clf = XGBClassifier(random_state=globals.SEED, eval_metric='mlogloss')
+  elif md == DTCLF:
+    clf = DecisionTreeClassifier(random_state=SEED)
+  elif md == RMFCLF:
+    clf = RandomForestClassifier(random_state=SEED)
+  elif md == GBCLF:
+    clf = GradientBoostingClassifier(random_state=SEED)
+  elif md == XGBCLF:
+    clf = XGBClassifier(random_state=SEED, eval_metric='mlogloss')
   else:
     raise NotImplementedError(f"Model {md} is not implemented yet!")
 
@@ -231,6 +234,26 @@ def train_model(md, params, X, y):
   clf = SafeOneClassWrapper(clf)
   clf.fit(X, y)
   return clf
+
+
+def train_model_all_ktrials(decileFtr_config, models, k_datasets, eval_by_cohort=SURG_GROUP,
+                            train_perf_df=None, test_perf_df=None):
+  # print decile agg funcs
+  for k, v in decileFtr_config.items():
+    print(k, v)
+
+  models = [LGR, KNN, RMFCLF, XGBCLF] if models is None else models  # GBCLF,
+  for kt, dataset_k in tqdm(enumerate(k_datasets)):
+    # Fit and eval models
+    for md in models:
+      print('md=', md)
+      clf = get_model(md)
+      clf.fit(dataset_k.Xtrain, dataset_k.ytrain)
+      train_perf_df, test_perf_df = eval_model_perf(
+        dataset_k, clf, None, eval_by_cohort, kt, train_perf_df, test_perf_df
+      )
+
+  return train_perf_df, test_perf_df
 
 
 # TODO: 1. add SafeOneClassWrapper?
@@ -244,19 +267,19 @@ def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search
   minority_size = minority_class_size(y)
   min_samples_split_max = int(minority_size * (1-1/kfold))
   print("Minority-class size: ", minority_size)
-  if md == globals.LGR:
+  if md == LGR:
     param_space = {'Cs': [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100],
                    'l1_ratio': [0, 0.01, 0.03, 0.1, 0.3, 0.5, 0.8, 0.9, 0.95, 0.99, 1],
                    'class_weight': [None, 'balanced']}
-    clf = LogisticRegression(random_state=globals.SEED, penalty='elasticnet', solver='saga', max_iter=300)
-  elif md == globals.SVC:
-    clf = SVC(random_state=globals.SEED, probability=False)
+    clf = LogisticRegression(random_state=SEED, penalty='elasticnet', solver='saga', max_iter=300)
+  elif md == SVC:
+    clf = SVC(random_state=SEED, probability=False)
     param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'gamma': sorted(list({1 / n_frts, 1, 0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001})),
                    'kernel': ['rbf', 'poly', 'sigmoid'],
                    'degree': [2, 3, 4],
                    'class_weight': [None, 'balanced']}
-  elif md == globals.KNN:
+  elif md == KNN:
     clf = KNeighborsClassifier()
     param_space = {
       'algorithm': ['ball_tree', 'kd_tree', 'brute'],
@@ -266,8 +289,8 @@ def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search
       'p': [1, 2, 3],
       'weights': ['uniform', 'distance']
     }
-  elif md == globals.DTCLF:
-    clf = DecisionTreeClassifier(random_state=globals.SEED)
+  elif md == DTCLF:
+    clf = DecisionTreeClassifier(random_state=SEED)
     param_space = {
       'class_weight': [None, 'balanced'],
       'max_depth': [None] + list(range(2, 21, 2)),
@@ -278,8 +301,8 @@ def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search
       'min_samples_split': list(range(2, min_samples_split_max, 3)),
       'splitter': ['best', 'random'],
     }
-  elif md == globals.RMFCLF:
-    clf = RandomForestClassifier(random_state=globals.SEED)
+  elif md == RMFCLF:
+    clf = RandomForestClassifier(random_state=SEED)
     param_space = {
       'class_weight': [None, 'balanced'],
       'max_depth': [None] + list(range(2, 21, 2)),
@@ -292,9 +315,9 @@ def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search
     }
     if not param_space['min_samples_split']:
       raise ValueError("min_samples_split cannot < 2!")
-  elif md == globals.GBCLF:
+  elif md == GBCLF:
     # TODO: what's validation fraction?
-    clf = GradientBoostingClassifier(random_state=globals.SEED, validation_fraction=0.15, n_iter_no_change=3)
+    clf = GradientBoostingClassifier(random_state=SEED, validation_fraction=0.15, n_iter_no_change=3)
     param_space = {
       'class_weight': [None, 'balanced'],
       'learning_rate': [0.001, 0.03, 0.01, 0.3, 0.1, 0.3],
@@ -308,8 +331,8 @@ def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search
     }
     if not param_space['min_samples_split']:
       raise ValueError("min_samples_split cannot < 2!")
-  elif md == globals.XGBCLF:
-    clf = xgboost.XGBClassifier(random_state=globals.SEED)
+  elif md == XGBCLF:
+    clf = XGBClassifier(random_state=SEED)
     if n_frts > 500:
       colsample_bytree_range = np.arange(0.3, 0.9, 0.1)
     else:

@@ -14,6 +14,33 @@ from globals import *
 from c1_data_preprocessing import Dataset
 
 
+# Generate ktrials of shuffled data_df and a set of randomly selected test indices
+def gen_ktrials_test_idxs(dashb_df: pd.DataFrame, ktrials=10, test_pct=0.2):
+  kt_data_df = []
+  kt_test_idxs = []
+  for k in range(ktrials):
+    df = dashb_df.sample(frac=1).reset_index(drop=True)
+    kt_data_df.append(df)
+    test_idxs = np.random.choice(np.arange(df.shape[0]), int(df.shape[0] * test_pct), replace=False)
+    kt_test_idxs.append(test_idxs)
+  return kt_data_df, kt_test_idxs
+
+
+# Generate ktrials of Dataset objects according to a pre-shuffled data_df and the corresponding test indices
+def gen_ktrials_datasets(kt_dfs, kt_test_idxs, **kwargs):
+  decileFtr_aggs = kwargs.get('col2decile_ftrs2aggf', DEFAULT_COL2DECILE_FTR2AGGF)
+  for k, v in decileFtr_aggs.items():
+    print(k, v)
+
+  kt_datasets = []
+  for k, df in enumerate(kt_dfs):
+    dataset_k = Dataset(df, test_idxs=kt_test_idxs[k], outcome=NNT, ftr_cols=FEATURE_COLS_NO_WEIGHT_ALLMEDS,
+                        col2decile_ftrs2aggf=decileFtr_aggs, onehot_cols=[CCSRS], discretize_cols=['AGE_AT_PROC_YRS'],
+                        scaler='robust')
+    kt_datasets.append(dataset_k)
+  return kt_datasets
+
+
 def make_k_all_feature_datasets(dashb_df: pd.DataFrame,
                                 k=1,
                                 outcome=globals.NNT,
