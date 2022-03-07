@@ -174,17 +174,17 @@ class Dataset(object):
     idxs = np.where(np.in1d(self.test_case_keys, query_case_keys))[0]
     return self.Xtest[idxs, :]
 
-  def get_sda_Xtrain(self):
+  def get_sda_Xytrain(self):
     if self.train_case_keys is not None:
-      sda_keys_train = self.train_case_keys[np.in1d(self.train_case_keys, self.sda_case_keys)]
-      return self.get_Xtrain_by_case_key(sda_keys_train)
-    return np.array([])
+      sda_idxs = np.where(np.in1d(self.train_case_keys, self.sda_case_keys))[0]
+      return self.Xtrain[sda_idxs, :], self.ytrain[sda_idxs]
+    return np.array([]), np.array([])
 
-  def get_sda_Xtest(self):
+  def get_sda_Xytest(self):
     if self.test_case_keys is not None:
-      sda_keys_test = self.test_case_keys[np.in1d(self.test_case_keys, self.sda_case_keys)]
-      return self.get_Xtest_by_case_key(sda_keys_test)
-    return np.array([])
+      sda_idxs = np.where(np.in1d(self.test_case_keys, self.sda_case_keys))[0]
+      return self.Xtest[sda_idxs, :], self.ytest[sda_idxs]
+    return np.array([]), np.array([])
 
   def get_cohort_to_Xytrains(self, by_cohort) -> Dict:
     assert by_cohort in {PRIMARY_PROC, SURG_GROUP}

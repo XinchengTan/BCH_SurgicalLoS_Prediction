@@ -236,24 +236,23 @@ def train_model(md, params, X, y):
   return clf
 
 
-def train_model_all_ktrials(decileFtr_config, models, k_datasets, eval_by_cohort=SURG_GROUP,
-                            train_perf_df=None, test_perf_df=None):
+def train_model_all_ktrials(decileFtr_config, models, k_datasets):
   # print decile agg funcs
   for k, v in decileFtr_config.items():
     print(k, v)
 
   models = [LGR, KNN, RMFCLF, XGBCLF] if models is None else models  # GBCLF,
+  k_model_dict = []
   for kt, dataset_k in tqdm(enumerate(k_datasets)):
-    # Fit and eval models
+    # Fit models
+    model_dict = {}
     for md in models:
       print('md=', md)
       clf = get_model(md)
       clf.fit(dataset_k.Xtrain, dataset_k.ytrain)
-      train_perf_df, test_perf_df = eval_model_perf(
-        dataset_k, clf, None, eval_by_cohort, kt, train_perf_df, test_perf_df
-      )
-
-  return train_perf_df, test_perf_df
+      model_dict[md] = clf
+    k_model_dict.append(model_dict)
+  return k_model_dict
 
 
 # TODO: use Optuna
