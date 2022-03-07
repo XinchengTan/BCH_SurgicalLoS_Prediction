@@ -42,6 +42,9 @@ class Dataset(object):
     self.cohort_df = gen_cohort_df(df, cohort)
     print('cohort df shape: ', self.cohort_df.shape)
 
+    # 0. Save initial SDA case keys
+    self.sda_case_keys = self.gen_sda_case_keys(self.cohort_df)
+
     # 1. Train-test split
     if test_idxs is None:
       if test_pct == 0:
@@ -77,6 +80,11 @@ class Dataset(object):
     if self.input_scaler is not None:
       self.scale_Xtrain(how=scaler, only_numeric=self.scale_numeric_only)
       self.scale_Xtest(scaler=self.input_scaler)
+
+  def gen_sda_case_keys(self, df):
+    # identify intial SDA cases
+    sda_df = df[df['SPS_REQUEST_DT_TM'].notnull()]
+    return sda_df['SURG_CASE_KEY'].unique().astype(int)
 
   def scale_Xtrain(self, how='minmax', only_numeric=True):  # ['minmax', 'std', 'robust']  -- only normalize continuous / ordinal features
     if self.train_df_raw is None or self.Xtrain.shape[0] == 0:
@@ -166,6 +174,18 @@ class Dataset(object):
     idxs = np.where(np.in1d(self.test_case_keys, query_case_keys))[0]
     return self.Xtest[idxs, :]
 
+  def get_sda_Xtrain(self):
+    if self.train_case_keys is not None:
+      sda_keys_train = self.train_case_keys[np.in1d(self.train_case_keys, self.sda_case_keys)]
+      return self.get_Xtrain_by_case_key(sda_keys_train)
+    return np.array([])
+
+  def get_sda_Xtest(self):
+    if self.test_case_keys is not None:
+      sda_keys_test = self.test_case_keys[np.in1d(self.test_case_keys, self.sda_case_keys)]
+      return self.get_Xtest_by_case_key(sda_keys_test)
+    return np.array([])
+
   def get_cohort_to_Xytrains(self, by_cohort) -> Dict:
     assert by_cohort in {PRIMARY_PROC, SURG_GROUP}
     train_df_by_cohort = self.df.set_index('SURG_CASE_KEY').loc[self.train_case_keys].reset_index() \
@@ -242,7 +262,7 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   print("\nAfter adding decile cols: Xdf - ", Xdf.shape)
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
-  X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy()
+  X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy().astype(int)
   if remove_nonnumeric:
     Xdf.drop(columns=NON_NUMERIC_COLS + ftrEng_dep_cols_to_drop, inplace=True, errors='ignore')
   print("\nAfter droppping nonnumeric cols: Xdf - ", Xdf.shape)
@@ -261,6 +281,8 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
 
   if verbose:
     display(pd.DataFrame(X, columns=target_features).head(20))
+
+  assert len(X_case_keys) == len(np.unique(X_case_keys)), 'Xrain contains duplicated case keys!'
   assert X.shape[1] == len(target_features), 'Generated data matrix has %d features, but feature list has %d items' % \
                                              (X.shape[1], len(target_features))  # Basic sanity check
   return X, target_features, X_case_keys, y, o2m_df
@@ -279,7 +301,7 @@ def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeri
   Xdf = df.copy()[feature_cols]
 
   # Handle NAs
-  Xdf = ftrEng.handle_nans(Xdf)
+  Xdf = ftrEng.handle_nans(Xdf, isTrain=False)
 
   # Add a column of trimmed CCSRs with/without a column of the corresponding trimmed ICD10s
   Xdf, onehot_cols = ftrEng.trim_ccsr_in_X(Xdf, ftrEng.onehot_cols, ftrEng.trimmed_ccsr)
@@ -303,7 +325,7 @@ def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeri
   # TODO: Scan for uniform columns
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
-  X_case_key = Xdf['SURG_CASE_KEY'].to_numpy()
+  X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy().astype(int)
   Xdf.drop(columns=NON_NUMERIC_COLS, inplace=True, errors='ignore')
 
   # Reorder columns such that it aligns with target_features
@@ -315,13 +337,14 @@ def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeri
   # Remove cases identical to any in skip_cases, update X_case_keys correspondingly
   if (skip_cases_df is not None) and (not skip_cases_df.empty):
     s = time()
-    X, X_case_key = discard_o2m_cases_from_historical_data(X, X_case_key, skip_cases_df)
+    X, X_case_keys = discard_o2m_cases_from_historical_data(X, X_case_keys, skip_cases_df)
     print("Removing o2m cases according to training set took %d sec" % (time() - s))
 
   # Basic sanity check
+  assert len(X_case_keys) == len(np.unique(X_case_keys)), 'Xtest contains duplicated case keys!'
   assert X.shape[1] == len(target_features), 'Generated data matrix has %d features, but feature list has %d items' % \
                                              (X.shape[1], len(target_features))
-  return X, target_features, X_case_key
+  return X, target_features, X_case_keys
 
 
 def get_df_by_case_keys(df, case_keys):

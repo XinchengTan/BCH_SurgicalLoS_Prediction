@@ -33,14 +33,12 @@ COL2DUMMIES = {STATE: ['IN_STATE', 'OUT_OF_STATE_US', 'FOREIGN'],
                LANGUAGE: ['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']}  # 'ARABIC', 'PORTUGUESE', 'HAITIAN',
 
 # Column list for feature selection
-OS_CODE_LIST = ['Cardiovascular', 'Digestive', 'Endocrine',
-                'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
-                'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic',
-                'Nutrition', 'Optic', 'Oral', 'Otic', 'Renal', 'Respiratory', 'Skin',
-                'Uncategorized', 'Urogenital']
+OS_CODE_LIST = ['Cardiovascular', 'Digestive', 'Endocrine', 'Genetic', 'Hematologic', 'Immunologic', 'Infectious',
+                'Mental', 'Metabolic', 'Musculoskeletal', 'Neoplasm', 'Neurologic', 'Nutrition', 'Optic', 'Oral',
+                'Otic', 'Renal', 'Respiratory', 'Skin', 'Uncategorized', 'Urogenital']
 diaglabels = OS_CODE_LIST
 
-DASHDATA_COLS = ['SURG_CASE_KEY', 'LENGTH_OF_STAY', 'SPS_PREDICTED_LOS', 'BOOKING_DATE',
+DASHDATA_COLS = ['SURG_CASE_KEY', 'LENGTH_OF_STAY', 'SPS_PREDICTED_LOS', 'SPS_REQUEST_DT_TM', 'BOOKING_DATE',
                  GENDER, AGE, WEIGHT_ZS] + OS_CODE_LIST
 
 DATETIME_COLS = ['SURG_CASE_KEY', 'CARE_CLASS', 'ICU_BED_NEEDED', PRIMARY_PROC,
@@ -48,7 +46,7 @@ DATETIME_COLS = ['SURG_CASE_KEY', 'CARE_CLASS', 'ICU_BED_NEEDED', PRIMARY_PROC,
                  'HAR_ADMIT_DATE', 'HAR_DISCHARGE_DATE']
 
 DRUG_COLS = ['LEVEL1_DRUG_CLASS_NAME', 'LEVEL2_DRUG_CLASS_NAME', 'LEVEL3_DRUG_CLASS_NAME', 'LEVEL123_DRUG_CLASS_NAME']
-NON_NUMERIC_COLS = ['SURG_CASE_KEY', CPTS, CPT_GROUPS, PRIMARY_PROC, CCSRS, 'ICD10S'] + DRUG_COLS
+NON_NUMERIC_COLS = ['SURG_CASE_KEY', 'SPS_REQUEST_DT_TM', CPTS, CPT_GROUPS, PRIMARY_PROC, CCSRS, 'ICD10S'] + DRUG_COLS
 CONTINUOUS_COLS = [AGE, WEIGHT_ZS]
 
 # Feature columns

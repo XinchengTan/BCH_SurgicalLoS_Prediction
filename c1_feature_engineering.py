@@ -101,12 +101,16 @@ class FeatureEngineeringModifier(object):
     if MILES in Xdf_cols:
       Xdf.loc[(Xdf[MILES] == 0), MILES] = np.nan
       if isTrain:
+        # Fill nan miles with state median miles
         state_grouped = Xdf[[STATE, MILES]].groupby(STATE)
         Xdf = Xdf.fillna(state_grouped.transform('median'))
+        # Save the state to its miles median on Xtrain for Xtest
         self.miles_nan_replacer = state_grouped.median()[MILES].reset_index(name='median_miles_by_state').dropna(axis=0)
       else:
+        # Fill nan miles from Xtest with median miles by state
         Xdf = Xdf.join(self.miles_nan_replacer.set_index(STATE), on=STATE, how='left')
         Xdf.loc[Xdf[MILES].isnull(), MILES] = Xdf['median_miles_by_state']
+        # Drop test cases from a state that never occurs in Xtrain
         Xdf = Xdf[Xdf[MILES].notnull()].drop(columns=['median_miles_by_state'])
       print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {MILES}")
       prevN = Xdf.shape[0]
