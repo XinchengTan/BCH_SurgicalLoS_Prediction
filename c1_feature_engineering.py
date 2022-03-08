@@ -375,6 +375,8 @@ class DecileGenerator(object):
         self.pproc_decile = self.gen_pproc_decile(Xdf, outcome)
       elif col == CPT:
         self.cpt_decile = self.gen_cpt_decile(Xdf, outcome)
+      elif col == CPT_GROUP:
+        self.cpt_group_decile = self.gen_cpt_group_decile(Xdf, outcome)
       elif col == CCSR:
         self.ccsr_decile = self.gen_ccsr_decile(Xdf, outcome)
       elif col == MED1:
@@ -455,6 +457,29 @@ class DecileGenerator(object):
     if save_fp:
       cpt_decile.to_csv(save_fp, index=False)
     return cpt_decile
+
+  # TODO: thoughts on def of decile (outlier skewing the actual complexity??)
+  def gen_cpt_group_decile(self, data_df: pd.DataFrame, outcome=LOS, save_fp=None):
+    cptgrp_df = data_df[[CPT_GROUPS, outcome]]
+    exp_cpt2outcome_df = cptgrp_df.explode(CPT_GROUPS)\
+      .dropna(subset=[CPT_GROUPS])\
+      .rename(columns={'CPT_GROUPS': CPT_GROUP})
+    cptgrp_groupby = exp_cpt2outcome_df.groupby(CPT_GROUP)
+    cptgrp_decile = cptgrp_groupby[outcome].median().reset_index(name='CPTGROUP_MEDIAN').set_index(CPT_GROUP) \
+      .join(cptgrp_groupby[outcome].mean().reset_index(name='CPTGROUP_MEAN').set_index(CPT_GROUP), on=CPT_GROUP, how='left') \
+      .join(cptgrp_groupby.size().reset_index(name='CPTGROUP_COUNT').set_index(CPT_GROUP), on=CPT_GROUP, how='left') \
+      .join(cptgrp_groupby[outcome].std(ddof=0).reset_index(name='CPTGROUP_SD').set_index(CPT_GROUP), on=CPT_GROUP, how='left') \
+      .join(cptgrp_groupby[outcome].min().reset_index(name='CPTGROUP_MIN').set_index(CPT_GROUP), on=CPT_GROUP, how='left') \
+      .join(cptgrp_groupby[outcome].max().reset_index(name='CPTGROUP_MAX').set_index(CPT_GROUP), on=CPT_GROUP, how='left') \
+      .join(cptgrp_groupby[outcome].quantile(0.25).reset_index(name='CPTGROUP_QT25').set_index(CPT_GROUP), on=CPT_GROUP, how='left') \
+      .join(cptgrp_groupby[outcome].quantile(0.75).reset_index(name='CPTGROUP_QT75').set_index(CPT_GROUP), on=CPT_GROUP, how='left')
+
+    cptgrp_decile['CPTGROUP_DECILE'] = cptgrp_decile['CPTGROUP_MEDIAN'].apply(lambda x: float(min(round(x), MAX_NNT + 1)))
+    cptgrp_decile.reset_index(inplace=True)
+
+    if save_fp:
+      cptgrp_decile.to_csv(save_fp, index=False)
+    return cptgrp_decile
 
   def gen_medication_decile(self, data_df: pd.DataFrame, outcome=LOS, level=1, save_dir=None):
     med_col = DRUG_COLS[level-1] if level <= 3 else DRUG_COLS[-1]
