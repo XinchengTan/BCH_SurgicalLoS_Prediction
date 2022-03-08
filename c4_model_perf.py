@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from collections import defaultdict
+from copy import deepcopy
 from typing import Dict, Any
 from tqdm import tqdm
 
@@ -124,10 +124,18 @@ def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, 
   return train_perf_df, test_perf_df
 
 
-def show_clf_perfs(perf_df: pd.DataFrame, Xtype, sort_by='accuracy'):
-
-
-  return
+def summarize_clf_perfs(perf_df: pd.DataFrame, Xtype, sort_by='accuracy'):
+  print(f'[{Xtype}] Model performance summary:')
+  # Group by md, aggregate across trial
+  clf_perfs = pd.merge(perf_df.groupby(by=['Model', 'Cohort']).mean().reset_index(),
+                       perf_df.groupby(by=['Model', 'Cohort']).std().reset_index(),
+                       on=['Model', 'Cohort'],
+                       how='left',
+                       suffixes=('_mean', '_std')) \
+    .dropna(axis=1) \
+    .sort_values(by=sort_by+'_mean', ascending=False)
+  clf_perfs_styler = format_perf_df(clf_perfs)
+  return clf_perfs, clf_perfs_styler
 
 
 def eval_model(dataset: Dataset, clf, scorers=None, by_cohort=None, trial_i=None,
@@ -219,5 +227,17 @@ def append_perf_row_surg(surg_perf_df: pd.DataFrame, trial, scores_row_dict):
   scores_row_dict['Model'] = 'Surgeon-train'
   surg_perf_df = surg_perf_df.append(scores_row_dict, ignore_index=True)
   return surg_perf_df
+
+
+# Format numbers and floats in perf df
+def format_perf_df(perf_df: pd.DataFrame):
+  formatter = SCR_FORMATTER.copy()
+  formatter['Count'] = '{:.0f}'.format
+  formatter_ret = deepcopy(formatter)
+  for k, v in formatter.items():
+    formatter_ret[k+'_mean'] = v
+    formatter_ret[k+'_std'] = v
+  perf_styler = perf_df.style.format(formatter_ret)
+  return perf_styler
 
 

@@ -21,7 +21,7 @@ from sklearn.neural_network import MLPRegressor, MLPClassifier
 from xgboost import XGBClassifier, XGBRegressor
 
 from globals import *
-from c4_model_perf import eval_model_perf
+from c1_data_preprocessing import Dataset
 
 
 try:
@@ -236,7 +236,7 @@ def train_model(md, params, X, y):
   return clf
 
 
-def train_model_all_ktrials(decileFtr_config, models, k_datasets):
+def train_model_all_ktrials(decileFtr_config, models, k_datasets: List[Dataset], train_sda_only=False):
   # print decile agg funcs
   for k, v in decileFtr_config.items():
     print(k, v)
@@ -245,11 +245,12 @@ def train_model_all_ktrials(decileFtr_config, models, k_datasets):
   k_model_dict = []
   for kt, dataset_k in tqdm(enumerate(k_datasets)):
     # Fit models
+    Xtrain, ytrain = dataset_k.get_sda_Xytrain() if train_sda_only else dataset_k.Xtrain, dataset_k.ytrain
     model_dict = {}
     for md in models:
       print('md=', md)
       clf = get_model(md)
-      clf.fit(dataset_k.Xtrain, dataset_k.ytrain)
+      clf.fit(Xtrain, ytrain)
       model_dict[md] = clf
     k_model_dict.append(model_dict)
   return k_model_dict

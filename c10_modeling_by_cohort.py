@@ -1,12 +1,11 @@
 import numpy as np
 import pandas as pd
-from copy import deepcopy
 from tqdm import tqdm
 from typing import Dict, Hashable, Any
 
 from globals import *
 from c1_data_preprocessing import Dataset
-from c4_model_perf import MyScorer, append_perf_row_generic
+from c4_model_perf import MyScorer, append_perf_row_generic, format_perf_df
 from c2_models import get_model_by_cohort, SafeOneClassWrapper
 
 
@@ -102,7 +101,8 @@ def gen_cohort_datasets(dashb_df: pd.DataFrame, cohort_col: str, min_cohort_size
   return cohort_to_dataset
 
 
-def train_cohort_clf(md, class_weight, cohort_to_dataset):
+def train_cohort_clf(md, class_weight, cohort_to_dataset, train_sda_only=False):
+  # TODO: add training only on SDA cases
   cohort_to_clf = {}
   for cohort, dataset in cohort_to_dataset.items():
     clf = get_model_by_cohort(md, class_weight)
@@ -215,18 +215,6 @@ def show_best_clf_per_cohort(perf_df: pd.DataFrame, Xtype, sort_by='accuracy'):
   #best_overall_perf_styler = format_perf_df(best_overall_perf)
   print(pd.DataFrame({'Mean': best_overall_perf.mean(), 'Std': best_overall_perf.std()}))
   return best_clf_perf, overall_perf, best_clf_perf_styler, overall_perf_styler, best_overall_perf
-
-
-# Format numbers and floats in perf df
-def format_perf_df(perf_df: pd.DataFrame):
-  formatter = SCR_FORMATTER.copy()
-  formatter['Count'] = '{:.0f}'.format
-  formatter_ret = deepcopy(formatter)
-  for k, v in formatter.items():
-    formatter_ret[k+'_mean'] = v
-    formatter_ret[k+'_std'] = v
-  perf_styler = perf_df.style.format(formatter_ret)
-  return perf_styler
 
 
 def cohort_modeling_ktrials(decileFtr_config, models, k_datasets, train_perf_df=None, test_perf_df=None):
