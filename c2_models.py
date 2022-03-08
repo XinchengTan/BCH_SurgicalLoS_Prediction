@@ -159,7 +159,7 @@ def get_model(model, cls_weight='balanced'):
   elif model == KNN:
     clf = KNeighborsClassifier(n_neighbors=25)
   elif model == KNNCV:
-    clf = KNeighborsClassifierCV({'n_neighbors': np.arange(5, 41, 3)})
+    clf = KNeighborsClassifierCV({'n_neighbors': np.arange(5, 41, 5)})
   elif model == DTCLF:
     clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight=cls_weight)
   elif model == RMFCLF:

@@ -129,7 +129,11 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
     clf = cohort_to_clf.get(cohort)
     if clf is not None:
       train_pred, test_pred = clf.predict(dataset.Xtrain), clf.predict(dataset.Xtest)
-      md_name = clf.__class__.__name__ if not isinstance(clf, SafeOneClassWrapper) else clf.model_type
+      try:
+        md_name = clf.model_type
+        assert clf.__class__.__name__ == 'SafeOneClassWrapper'
+      except AttributeError:
+        md_name = clf.__class__.__name__
       label_to_xgb_cls = None
       if 'XGB' in md_name:
         xgb_cls = sorted(set(dataset.ytrain))
