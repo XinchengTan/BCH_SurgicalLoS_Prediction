@@ -26,6 +26,20 @@ def gen_ktrials_test_idxs(dashb_df: pd.DataFrame, ktrials=10, test_pct=0.2):
   return kt_data_df, kt_test_idxs
 
 
+# Generate ktrials of SDA_df and a set of randomly selected test indices from output of gen_ktrials_test_idxs()
+# To randomly shuffle and generate test_idxs from dashb_sda_df, simply use gen_ktrials_test_idxs()
+def gen_ktrials_sda_test_idxs_from_full(kt_data_df, kt_test_idxs):
+  # Pure SDA dataset
+  kt_sda_df, kt_sda_test_idxs = [], []
+  for k, data_df_k in enumerate(kt_data_df):
+    sda_df_k = data_df_k[data_df_k['SPS_REQUEST_DT_TM'].notnull()]
+    sda_test_idxs = np.where(np.in1d(sda_df_k.index.to_numpy(), kt_test_idxs[k]))[0]  # test_idxs w.r.t. sda_df_k
+    kt_sda_df.append(sda_df_k.reset_index(drop=True))
+    kt_sda_test_idxs.append(sda_test_idxs)
+    print(f'k={k}, test size={len(sda_test_idxs)} out of {len(kt_test_idxs[k])}')
+  return kt_sda_df, kt_sda_test_idxs
+
+
 # Generate ktrials of Dataset objects according to a pre-shuffled data_df and the corresponding test indices
 def gen_ktrials_datasets(kt_dfs, kt_test_idxs, **kwargs):
   decileFtr_aggs = kwargs.get('col2decile_ftrs2aggf', DEFAULT_COL2DECILE_FTR2AGGF)

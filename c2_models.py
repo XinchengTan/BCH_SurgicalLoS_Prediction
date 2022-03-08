@@ -243,7 +243,7 @@ def train_model_all_ktrials(decileFtr_config, models, k_datasets: List[Dataset],
 
   models = [LGR, KNN, RMFCLF, XGBCLF] if models is None else models  # GBCLF,
   k_model_dict = []
-  for kt, dataset_k in tqdm(enumerate(k_datasets)):
+  for kt, dataset_k in tqdm(enumerate(k_datasets), total=len(k_datasets)):
     # Fit models
     Xtrain, ytrain = dataset_k.get_sda_Xytrain() if train_sda_only else dataset_k.Xtrain, dataset_k.ytrain
     model_dict = {}

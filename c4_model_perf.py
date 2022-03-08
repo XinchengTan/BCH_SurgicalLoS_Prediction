@@ -109,7 +109,7 @@ def eval_surgeon_perf(dataset: Dataset, scorers):
 
 def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, eval_sda_only=False,
                            train_perf_df=None, test_perf_df=None):
-  for kt, dataset_k in tqdm(enumerate(k_datasets)):
+  for kt, dataset_k in tqdm(enumerate(k_datasets), total=len(k_datasets)):
     model_dict = k_model_dict[kt]
     for md, clf in model_dict.items():
       if eval_sda_only:
@@ -146,7 +146,7 @@ def eval_model(dataset: Dataset, clf, scorers=None, by_cohort=None, trial_i=None
     train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
   if test_perf_df is None:
     test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
-  md_name = clf.__class__.__name__ if not isinstance(clf, SafeOneClassWrapper) else clf.model_type
+  md_name = clf.model_type if isinstance(clf, SafeOneClassWrapper) else clf.__class__.__name__
 
   if by_cohort == SURG_GROUP or by_cohort == PRIMARY_PROC:
     cohort_to_Xytrain = dataset.get_cohort_to_Xytrains(by_cohort)
