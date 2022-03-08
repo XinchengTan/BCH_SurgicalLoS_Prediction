@@ -83,7 +83,7 @@ class Dataset(object):
 
   def gen_sda_case_keys(self, df):
     # identify intial SDA cases
-    sda_df = df[df['SPS_REQUEST_DT_TM'].notnull()]
+    sda_df = df[~(df['SPS_REQUEST_DT_TM'].notnull() & df[SPS_PRED].isnull())]
     return sda_df['SURG_CASE_KEY'].unique().astype(int)
 
   def scale_Xtrain(self, how='minmax', only_numeric=True):  # ['minmax', 'std', 'robust']  -- only normalize continuous / ordinal features
@@ -255,11 +255,21 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   # Generate deciles
   s = time()
   decile_cols = ftrEng.decile_generator.gen_decile_cols(Xdf, ftrEng.decile_outcome, ftrEng.col2decile_ftr2aggf)
+  # Generate CPT Group decile if this is not meant to be a feature in Xdata
+  cptgrp_decile = ftrEng.decile_generator.gen_cpt_group_decile(Xdf, ftrEng.decile_outcome)
+  # if CPT_GROUP not in ftrEng.col2decile_ftr2aggf.keys():
+  #   print('generated CPT group decile!')
+  ftrEng.decile_generator.cpt_group_decile = cptgrp_decile
   print('Took %d sec to generate all deciles' % (time() - s))
 
   # Add decile-related columns to Xdf
   Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
   print("\nAfter adding decile cols: Xdf - ", Xdf.shape)
+
+  # Filter out rare primary procedure cases, and replace them with the CPT group with max decile
+  # for ties, simply use 1 of the 7 tie groups
+  rare_pproc_to_pr_cptgrp = {}  # rare primary procedure to primary cpt group
+
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
   X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy().astype(int)
@@ -349,6 +359,43 @@ def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeri
 
 def get_df_by_case_keys(df, case_keys):
   return df.set_index('SURG_CASE_KEY').loc[case_keys].reset_index()
+
+
+def gen_rare_pproc_Xdf(Xdf: pd.DataFrame, min_train_cohort_size=40):
+  pproc_size = Xdf.groupby(PRIMARY_PROC).size().reset_index(name='pproc_size')
+  rare_pproc_df = Xdf.join(pproc_size.set_index(PRIMARY_PROC), on=PRIMARY_PROC, how='left')
+  rare_pproc_df = rare_pproc_df[rare_pproc_df['pproc_size'] < min_train_cohort_size]
+  return rare_pproc_df
+
+
+def replace_pproc_with_primary_cptgrp(rare_Xdf: pd.DataFrame, cptgrp_decile: pd.DataFrame):
+  # explode on cptgroups, join with cptgrp decile, groupby surg key & agg on max without tie breaking
+  #### df[df.groupby('group')['value1'].apply(lambda x: x == x.max())]
+  # if only 1 max decile, use the corresponding cptgroup, else replace with 'CPTGROUP_TIE?' ? = max decile
+  rare_Xdf_exp = rare_Xdf[['SURG_CASE_KEY', CPT_GROUPS, PRIMARY_PROC]].explode(CPT_GROUPS)\
+    .rename(columns={CPT_GROUPS: CPT_GROUP})  # shouldn't contain na after explosion
+  print('after explosion: ', rare_Xdf_exp.shape)
+  rare_Xdf_exp = rare_Xdf_exp.dropna(subset=[CPT_GROUP])
+  print('after dropping na (cptgrp=[]): ', rare_Xdf_exp.shape)
+
+  # TODO: what if 1 pproc is mapped to multiple primary cpt groups??
+  rare_Xdf_cptgrp_decile = rare_Xdf_exp.join(cptgrp_decile.set_index(CPT_GROUP), on=CPT_GROUP, how='inner')
+  print(rare_Xdf_cptgrp_decile.index)
+  max_mask = rare_Xdf_cptgrp_decile.groupby('SURG_CASE_KEY')[CPT_GROUP_DECILE].apply(lambda x: x == x.max())  # do not break tie
+  print('rare_xdf_cptgrp', rare_Xdf_cptgrp_decile.shape, 'max mask', max_mask.shape)
+  pr_cptgrp_Xdf_groupby = rare_Xdf_cptgrp_decile[max_mask].groupby('SURG_CASE_KEY')
+  pr_cptgrp_Xdf_groupedCnt = pr_cptgrp_Xdf_groupby[CPT_GROUP_DECILE].count()
+  single_max_cptgrp_decile_Xdf = pr_cptgrp_Xdf_groupedCnt[pr_cptgrp_Xdf_groupedCnt == 1]  # index: case key
+  multi_max_cptgrp_decile_Xdf = pr_cptgrp_Xdf_groupedCnt[pr_cptgrp_Xdf_groupedCnt > 1]
+
+  return single_max_cptgrp_decile_Xdf, multi_max_cptgrp_decile_Xdf
+
+
+def update_rare_pproc_with_primary_cptgroup(Xdf: pd.DataFrame):
+  # encompass the above 2 funcs, join case w/ rare pproc with the original Xdf
+
+  return
+# TODO: how to use this? add an arg (e.g. replace_rare_pproc?) in Dataset init?
 
 
 def preprocess_y(df: pd.DataFrame, outcome, sps_y=False, inplace=False):

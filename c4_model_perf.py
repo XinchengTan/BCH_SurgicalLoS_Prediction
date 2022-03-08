@@ -190,7 +190,7 @@ def eval_model_sda_only(dataset: Dataset, clf, scorers=None, trial_i=None,
   if test_perf_df_sda is None:
     test_perf_df_sda = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
   md_name = clf.__class__.__name__ if not isinstance(clf, SafeOneClassWrapper) else clf.model_type
-
+  print(md_name)
   # Get Xytrain_sda, Xytest_sda
   Xtrain_sda, ytrain_sda = dataset.get_sda_Xytrain()
   Xtest_sda, ytest_sda = dataset.get_sda_Xytest()

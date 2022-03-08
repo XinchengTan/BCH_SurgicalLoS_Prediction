@@ -32,7 +32,7 @@ def gen_ktrials_sda_test_idxs_from_full(kt_data_df, kt_test_idxs):
   # Pure SDA dataset
   kt_sda_df, kt_sda_test_idxs = [], []
   for k, data_df_k in enumerate(kt_data_df):
-    sda_df_k = data_df_k[data_df_k['SPS_REQUEST_DT_TM'].notnull()]
+    sda_df_k = data_df_k[~(data_df_k['SPS_REQUEST_DT_TM'].notnull() & data_df_k[SPS_PRED].isnull())]
     sda_test_idxs = np.where(np.in1d(sda_df_k.index.to_numpy(), kt_test_idxs[k]))[0]  # test_idxs w.r.t. sda_df_k
     kt_sda_df.append(sda_df_k.reset_index(drop=True))
     kt_sda_test_idxs.append(sda_test_idxs)
