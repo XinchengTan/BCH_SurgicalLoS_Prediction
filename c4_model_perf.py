@@ -125,6 +125,8 @@ def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, 
           dataset_k, clf, scorers, trial_i=kt, sda_only=eval_sda_only, surg_only=eval_surg_only,
           train_perf_df=train_perf_df, test_perf_df=test_perf_df
         )
+  train_perf_df['Count'] = pd.to_numeric(train_perf_df['Count'])
+  test_perf_df['Count'] = pd.to_numeric(test_perf_df['Count'])
   return train_perf_df, test_perf_df
 
 
@@ -147,9 +149,9 @@ def eval_model_by_cohort(dataset: Dataset, clf, scorers=None, cohort_type=SURG_G
   if scorers is None:
     scorers = MyScorer.get_scorer_dict(DEFAULT_SCORERS)
   if train_perf_df is None:
-    train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
+    train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model', 'Count'] + list(scorers.keys()))
   if test_perf_df is None:
-    test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
+    test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model', 'Count'] + list(scorers.keys()))
 
   # Get classifier name
   try:
@@ -191,9 +193,9 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
   if scorers is None:
     scorers = MyScorer.get_scorer_dict(DEFAULT_SCORERS)
   if train_perf_df is None:
-    train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
+    train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model', 'Count'] + list(scorers.keys()))
   if test_perf_df is None:
-    test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
+    test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model', 'Count'] + list(scorers.keys()))
 
   # Get classifier name
   try:
@@ -210,17 +212,21 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
   train_scores = MyScorer.apply_scorers(scorers.keys(), ytrain, train_pred)
   test_scores = MyScorer.apply_scorers(scorers.keys(), ytest, test_pred)
   train_perf_df = append_perf_row_generic(
-    train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i})
+    train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
+                                  'Count': Xtrain.shape[0]})
   test_perf_df = append_perf_row_generic(
-    test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i})
+    test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
+                                'Count': Xtest.shape[0]})
 
   # Surgeon performance
   if surg_only:
     surg_train, surg_test = eval_surgeon_perf(dataset, scorers)
     train_perf_df = append_perf_row_generic(train_perf_df, surg_train,
-                                            {'Xtype': 'train', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i})
+                                            {'Xtype': 'train', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i,
+                                             'Count': Xtrain.shape[0]})
     test_perf_df = append_perf_row_generic(test_perf_df, surg_test,
-                                           {'Xtype': 'test', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i})
+                                           {'Xtype': 'test', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i,
+                                            'Count': Xtest.shape[0]})
   return train_perf_df, test_perf_df
 
 
@@ -250,6 +256,8 @@ def append_perf_row_surg(surg_perf_df: pd.DataFrame, trial, scores_row_dict):
 def format_perf_df(perf_df: pd.DataFrame):
   formatter = SCR_FORMATTER.copy()
   formatter['Count'] = '{:.0f}'.format
+  formatter['Count_mean'] = '{:.0f}'.format
+  formatter['Count_std'] = '{:.0f}'.format
   formatter_ret = deepcopy(formatter)
   for k, v in formatter.items():
     formatter_ret[k+'_mean'] = v
