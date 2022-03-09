@@ -388,24 +388,42 @@ def replace_pproc_with_primary_cptgrp(rare_Xdf: pd.DataFrame, cptgrp_decile: pd.
   # explode on cptgroups, join with cptgrp decile, groupby surg key & agg on max without tie breaking
   #### df[df.groupby('group')['value1'].apply(lambda x: x == x.max())]
   # if only 1 max decile, use the corresponding cptgroup, else replace with 'CPTGROUP_TIE?' ? = max decile
+  print('Input Xdf case count: ', rare_Xdf['SURG_CASE_KEY'].nunique())
   rare_Xdf_exp = rare_Xdf[['SURG_CASE_KEY', CPT_GROUPS, PRIMARY_PROC]].explode(CPT_GROUPS)\
     .rename(columns={CPT_GROUPS: CPT_GROUP})  # shouldn't contain na after explosion
-  print('after explosion: ', rare_Xdf_exp.shape)
+  print('\nafter explosion: ', rare_Xdf_exp.shape)
   rare_Xdf_exp = rare_Xdf_exp.dropna(subset=[CPT_GROUP])
   print('after dropping na (cptgrp=[]): ', rare_Xdf_exp.shape)
 
-  # TODO: what if 1 pproc is mapped to multiple primary cpt groups??
-  rare_Xdf_cptgrp_decile = rare_Xdf_exp.join(cptgrp_decile.set_index(CPT_GROUP), on=CPT_GROUP, how='inner')
-  print(rare_Xdf_cptgrp_decile.index)
+  # TODO: what if 1 pproc is mapped to multiple primary cpt groups?? -- double check, acceptable I think
+  # Generate all max CPT group decile for the exploded Xdf
+  rare_Xdf_cptgrp_decile = rare_Xdf_exp.join(cptgrp_decile.set_index(CPT_GROUP), on=CPT_GROUP, how='inner').reset_index(drop=True)
   max_mask = rare_Xdf_cptgrp_decile.groupby('SURG_CASE_KEY')[CPT_GROUP_DECILE].apply(lambda x: x == x.max())  # do not break tie
+  print(len(rare_Xdf_cptgrp_decile.index), rare_Xdf_cptgrp_decile.index.is_unique, rare_Xdf_cptgrp_decile.columns)
   print('rare_xdf_cptgrp', rare_Xdf_cptgrp_decile.shape, 'max mask', max_mask.shape)
-  pr_cptgrp_Xdf_groupby = rare_Xdf_cptgrp_decile[max_mask].groupby('SURG_CASE_KEY')
-  pr_cptgrp_Xdf_groupedCnt = pr_cptgrp_Xdf_groupby[CPT_GROUP_DECILE].count()
-  single_max_cptgrp_decile_Xdf = pr_cptgrp_Xdf_groupedCnt[pr_cptgrp_Xdf_groupedCnt == 1]  # index: case key
-  multi_max_cptgrp_decile_Xdf = pr_cptgrp_Xdf_groupedCnt[pr_cptgrp_Xdf_groupedCnt > 1]
+  rare_Xdf_max_cptgrp_decile = rare_Xdf_cptgrp_decile[max_mask]
 
+  # Count the number of max CPT group decile for each case
+  max_decile_cnt = rare_Xdf_max_cptgrp_decile \
+    .groupby('SURG_CASE_KEY')[CPT_GROUP_DECILE].count() \
+    .reset_index(name='CPTGRP_MAX_DECILE_COUNT') \
+    .set_index('SURG_CASE_KEY')
+  print("\nmax_decile_cnt's index is unique: ", max_decile_cnt.index.is_unique, max_decile_cnt.shape)
+
+  # Cases with a single cptgrp decile max
+  single_max_cptgrp_decile_Xdf = max_decile_cnt[max_decile_cnt['CPTGRP_MAX_DECILE_COUNT'] == 1]\
+    .join(rare_Xdf_max_cptgrp_decile, on='SURG_CASE_KEY', how='left')
+
+  # Cases with multiple cptgrp decile max
+  multi_max_cptgrp_decile_Xdf = max_decile_cnt[max_decile_cnt['CPTGRP_MAX_DECILE_COUNT'] > 1]
+
+  # Add the max count to the exploded Xdf
+  pr_cptgrp_Xdf_max_decileCnt = rare_Xdf_max_cptgrp_decile.join(max_decile_cnt, on='SURG_CASE_KEY', how='inner')
+  print('pr_cptgrp_Xdf_max_decileCnt', pr_cptgrp_Xdf_max_decileCnt.shape, ' index is unique: ', pr_cptgrp_Xdf_max_decileCnt.index.is_unique)
 
   return single_max_cptgrp_decile_Xdf, multi_max_cptgrp_decile_Xdf
+
+# TODO: when processing Xtest, need to filter out unseen Primary CPTGRP??
 
 
 def update_rare_pproc_with_primary_cptgroup(Xdf: pd.DataFrame):
