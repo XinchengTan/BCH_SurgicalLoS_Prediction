@@ -146,6 +146,10 @@ class SafeOneClassWrapper(BaseEstimator, ClassifierMixin):
       return np.full(X.shape[0], self.classes_[0])
     return self.base_estimator.predict(X)
 
+  def score(self, X, y, sample_weight=None):
+    ypred = self.predict(X)
+    return accuracy_score(y, ypred, sample_weight=sample_weight)
+
 
 def get_model(model, cls_weight='balanced'):
   if model == LGR:

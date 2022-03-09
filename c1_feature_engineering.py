@@ -189,8 +189,8 @@ class FeatureEngineeringModifier(object):
       return Xdf
     Xdf_w_decile = Xdf[['SURG_CASE_KEY', 'CPTS']]\
       .explode('CPTS')\
-      .dropna(subset=['CPTS'])\
-      .rename(columns={'CPTS': 'CPT'})\
+      .dropna(subset=['CPTS'])  # drop cases with empty CPT list
+    Xdf_w_decile = Xdf_w_decile.rename(columns={'CPTS': 'CPT'})\
       .join(cpt_decile.set_index('CPT')[decile_col2aggf.keys()], on='CPT', how='inner')\
       .groupby('SURG_CASE_KEY')\
       .agg(decile_col2aggf)

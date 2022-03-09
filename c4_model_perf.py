@@ -111,7 +111,6 @@ def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, 
                            scorers=None, train_perf_df=None, test_perf_df=None):
   if scorers is None:
     scorers = MyScorer.get_scorer_dict(DEFAULT_SCORERS)
-
   for kt, dataset_k in tqdm(enumerate(k_datasets), total=len(k_datasets)):
     # Model performance
     model_dict = k_model_dict[kt]
@@ -169,12 +168,13 @@ def eval_model_by_cohort(dataset: Dataset, clf, scorers=None, cohort_type=SURG_G
   for cohort in cohort_to_Xytrain.keys():
     Xtrain, ytrain = cohort_to_Xytrain[cohort]
     Xtest, ytest = cohort_to_Xytest.get(cohort, (None, None))
-    train_pred = clf.predict(Xtrain)
-    train_scores = MyScorer.apply_scorers(scorers.keys(), ytrain, train_pred)
-    train_perf_df = append_perf_row_generic(
-      train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': md_name,
-                                    'Count': Xtrain.shape[0], 'Trial': trial_i})
-    if Xtest is not None:
+    if Xtrain is not None and len(Xtrain) > 0:
+      train_pred = clf.predict(Xtrain)
+      train_scores = MyScorer.apply_scorers(scorers.keys(), ytrain, train_pred)
+      train_perf_df = append_perf_row_generic(
+        train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': md_name,
+                                      'Count': Xtrain.shape[0], 'Trial': trial_i})
+    if Xtest is not None and len(Xtest) > 0:
       test_pred = clf.predict(Xtest)
       test_scores = MyScorer.apply_scorers(scorers.keys(), ytest, test_pred)
       test_perf_df = append_perf_row_generic(
@@ -208,25 +208,30 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
   Xtrain, ytrain, Xtest, ytest = get_Xys_sda_surg(dataset, sda_only, surg_only)
 
   # Apply trained clf and evaluate
-  train_pred, test_pred = clf.predict(Xtrain), clf.predict(Xtest)
-  train_scores = MyScorer.apply_scorers(scorers.keys(), ytrain, train_pred)
-  test_scores = MyScorer.apply_scorers(scorers.keys(), ytest, test_pred)
-  train_perf_df = append_perf_row_generic(
-    train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
-                                  'Count': Xtrain.shape[0]})
-  test_perf_df = append_perf_row_generic(
-    test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
-                                'Count': Xtest.shape[0]})
+  if Xtrain is not None and len(Xtrain) > 0:
+    train_pred = clf.predict(Xtrain)
+    train_scores = MyScorer.apply_scorers(scorers.keys(), ytrain, train_pred)
+    train_perf_df = append_perf_row_generic(
+      train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
+                                    'Count': Xtrain.shape[0]})
+  if Xtest is not None and len(Xtest) > 0:
+    test_pred = clf.predict(Xtest)
+    test_scores = MyScorer.apply_scorers(scorers.keys(), ytest, test_pred)
+    test_perf_df = append_perf_row_generic(
+      test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
+                                  'Count': Xtest.shape[0]})
 
   # Surgeon performance
   if surg_only:
     surg_train, surg_test = eval_surgeon_perf(dataset, scorers)
-    train_perf_df = append_perf_row_generic(train_perf_df, surg_train,
-                                            {'Xtype': 'train', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i,
-                                             'Count': Xtrain.shape[0]})
-    test_perf_df = append_perf_row_generic(test_perf_df, surg_test,
-                                           {'Xtype': 'test', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i,
-                                            'Count': Xtest.shape[0]})
+    if len(surg_train) > 0:
+      train_perf_df = append_perf_row_generic(train_perf_df, surg_train,
+                                              {'Xtype': 'train', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i,
+                                               'Count': Xtrain.shape[0]})
+    if len(surg_test) > 0:
+      test_perf_df = append_perf_row_generic(test_perf_df, surg_test,
+                                             {'Xtype': 'test', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i,
+                                              'Count': Xtest.shape[0]})
   return train_perf_df, test_perf_df
 
 

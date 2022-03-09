@@ -26,7 +26,7 @@ class Dataset(object):
 
   def __init__(self, df, outcome=NNT, ftr_cols=FEATURE_COLS, col2decile_ftrs2aggf=None,
                onehot_cols=[], discretize_cols=None, test_pct=0.2, test_idxs=None, cohort=COHORT_ALL,
-               trimmed_ccsr=None, target_features=None, decile_gen=None, remove_o2m=(True, True),
+               trimmed_ccsr=None, target_features=None, decile_gen=None, ftr_eng=None, remove_o2m=(True, True),
                scaler=None, scale_numeric_only=True):
     # Check args
     assert all(oh in ONEHOT_COL2DTYPE.keys() for oh in onehot_cols), \
@@ -53,7 +53,8 @@ class Dataset(object):
       elif test_pct == 1:
         train_df, test_df = None, self.cohort_df
         if col2decile_ftrs2aggf is not None and len(col2decile_ftrs2aggf) > 0:
-          assert isinstance(decile_gen, DecileGenerator), "Please specify pre-computed deciles for testing!"
+          assert ftr_eng.__class__.__name__ == 'FeatureEngineeringModifier', \
+            "Please specify pre-computed meta data (e.g. deciles) for testing!"
       else:
         train_df, test_df = train_test_split(self.cohort_df, test_size=test_pct)
     else:
@@ -66,8 +67,12 @@ class Dataset(object):
     self.Xtest, self.ytest, self.test_case_keys, self.test_cohort_df = None, None, None, None
     self.o2m_df_train = None
     self.feature_names = None
-    self.FeatureEngineer = FeatureEngineeringModifier(
-      onehot_cols, onehot_dtypes, trimmed_ccsr, discretize_cols, col2decile_ftrs2aggf)
+    if ftr_eng is None:
+      self.FeatureEngineer = FeatureEngineeringModifier(
+        onehot_cols, onehot_dtypes, trimmed_ccsr, discretize_cols, col2decile_ftrs2aggf)
+    else:
+      assert ftr_eng.__class__.__name__ == 'FeatureEngineeringModifier', 'ftr_eng must be of type FeatureEngineeringModifier!'
+      self.FeatureEngineer = ftr_eng  # when test_pct = 1
     if decile_gen is not None:
       self.FeatureEngineer.set_decile_gen(decile_gen)  # when test_pct = 1
 
@@ -79,7 +84,8 @@ class Dataset(object):
     self.input_scaler = scaler
     self.scale_numeric_only = scale_numeric_only
     if self.input_scaler is not None:
-      self.scale_Xtrain(how=scaler, only_numeric=self.scale_numeric_only)
+      if type(self.input_scaler) == str:
+        self.scale_Xtrain(how=scaler, only_numeric=self.scale_numeric_only)
       self.scale_Xtest(scaler=self.input_scaler)
 
   def gen_sda_case_keys(self, df):
@@ -172,48 +178,52 @@ class Dataset(object):
       self.test_cohort_df = self.test_df_raw
 
   def get_Xytrain_by_case_key(self, query_case_keys):
-    if self.train_case_keys is not None:
+    if self.train_case_keys is not None and len(self.train_case_keys) > 0:
       idxs = np.where(np.in1d(self.train_case_keys, query_case_keys))[0]
       return self.Xtrain[idxs, :], self.ytrain[idxs]
     return np.array([]), np.array([])
 
   def get_Xytest_by_case_key(self, query_case_keys):
-    if self.test_case_keys is not None:
+    if self.test_case_keys is not None and len(self.test_case_keys) > 0:
       idxs = np.where(np.in1d(self.test_case_keys, query_case_keys))[0]
       return self.Xtest[idxs, :], self.ytest[idxs]
     return np.array([]), np.array([])
 
   def get_sda_Xytrain(self):
-    if self.train_case_keys is not None:
+    if self.train_case_keys is not None and len(self.train_case_keys) > 0:
       sda_idxs = np.where(np.in1d(self.train_case_keys, self.sda_case_keys))[0]
       return self.Xtrain[sda_idxs, :], self.ytrain[sda_idxs]
     return np.array([]), np.array([])
 
   def get_sda_Xytest(self):
-    if self.test_case_keys is not None:
+    if self.test_case_keys is not None and len(self.test_case_keys) > 0:
       sda_idxs = np.where(np.in1d(self.test_case_keys, self.sda_case_keys))[0]
       return self.Xtest[sda_idxs, :], self.ytest[sda_idxs]
     return np.array([]), np.array([])
 
   def get_cohort_to_Xytrains(self, by_cohort) -> Dict:
     assert by_cohort in {PRIMARY_PROC, SURG_GROUP}
-    train_df_by_cohort = self.df.set_index('SURG_CASE_KEY').loc[self.train_case_keys].reset_index() \
-      .groupby(by=by_cohort)['SURG_CASE_KEY']
-    cohort_to_Xdata = {}
-    for cohort, case_keys in train_df_by_cohort:
-      idxs = np.where(np.in1d(self.train_case_keys, case_keys))[0]
-      cohort_to_Xdata[cohort] = (self.Xtrain[idxs, :], self.ytrain[idxs])
-    return cohort_to_Xdata
+    if self.train_case_keys is not None and len(self.train_case_keys) > 0:
+      train_df_by_cohort = self.df.set_index('SURG_CASE_KEY').loc[self.train_case_keys].reset_index() \
+        .groupby(by=by_cohort)['SURG_CASE_KEY']
+      cohort_to_Xdata = {}
+      for cohort, case_keys in train_df_by_cohort:
+        idxs = np.where(np.in1d(self.train_case_keys, case_keys))[0]
+        cohort_to_Xdata[cohort] = (self.Xtrain[idxs, :], self.ytrain[idxs])
+      return cohort_to_Xdata
+    return {}
 
   def get_cohort_to_Xytests(self, by_cohort):
     assert by_cohort in {PRIMARY_PROC, SURG_GROUP}
-    test_df_by_cohort = self.df.set_index('SURG_CASE_KEY').loc[self.test_case_keys].reset_index() \
-      .groupby(by=by_cohort)['SURG_CASE_KEY']
-    cohort_to_Xdata = {}
-    for cohort, case_keys in test_df_by_cohort:
-      idxs = np.where(np.in1d(self.test_case_keys, case_keys))[0]
-      cohort_to_Xdata[cohort] = (self.Xtest[idxs, :], self.ytest[idxs])
-    return cohort_to_Xdata
+    if self.test_case_keys is not None and len(self.test_case_keys) > 0:
+      test_df_by_cohort = self.df.set_index('SURG_CASE_KEY').loc[self.test_case_keys].reset_index() \
+        .groupby(by=by_cohort)['SURG_CASE_KEY']
+      cohort_to_Xdata = {}
+      for cohort, case_keys in test_df_by_cohort:
+        idxs = np.where(np.in1d(self.test_case_keys, case_keys))[0]
+        cohort_to_Xdata[cohort] = (self.Xtest[idxs, :], self.ytest[idxs])
+      return cohort_to_Xdata
+    return {}
 
   def get_surgeon_pred_df_by_case_key(self, query_case_keys):
     if query_case_keys is None or len(query_case_keys) == 0:
@@ -377,11 +387,15 @@ def get_df_by_case_keys(df, case_keys):
   return df.set_index('SURG_CASE_KEY').loc[case_keys].reset_index()
 
 
-def gen_rare_pproc_Xdf(Xdf: pd.DataFrame, min_train_cohort_size=40):
-  pproc_size = Xdf.groupby(PRIMARY_PROC).size().reset_index(name='pproc_size')
-  rare_pproc_df = Xdf.join(pproc_size.set_index(PRIMARY_PROC), on=PRIMARY_PROC, how='left')
-  rare_pproc_df = rare_pproc_df[rare_pproc_df['pproc_size'] < min_train_cohort_size]
-  return rare_pproc_df
+def gen_rare_pproc_Xdf(Xdf: pd.DataFrame, rare_pprocs=None, min_train_cohort_size=40):
+  if rare_pprocs is None:
+    pproc_size = Xdf.groupby(PRIMARY_PROC).size().reset_index(name='pproc_size')
+    rare_pproc_df = Xdf.join(pproc_size.set_index(PRIMARY_PROC), on=PRIMARY_PROC, how='left')
+    rare_pproc_df = rare_pproc_df[rare_pproc_df['pproc_size'] < min_train_cohort_size]
+    return rare_pproc_df
+  else:
+    # Handle Xtest TODO: track rare_pprocs from Xtrain
+    return
 
 
 def replace_pproc_with_primary_cptgrp(rare_Xdf: pd.DataFrame, cptgrp_decile: pd.DataFrame):
