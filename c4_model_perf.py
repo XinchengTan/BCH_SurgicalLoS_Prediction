@@ -10,7 +10,7 @@ from sklearn.metrics import accuracy_score, balanced_accuracy_score, make_scorer
 import shap
 
 from globals import *
-from c1_data_preprocessing import Dataset
+from c1_data_preprocessing import Dataset, get_Xys_sda_surg
 from c2_models import SafeOneClassWrapper
 
 
@@ -98,29 +98,33 @@ class MyScorer:
 
 def eval_surgeon_perf(dataset: Dataset, scorers):
   train_scores_row_dict, test_scores_row_dict = {}, {}
-  if dataset.Xtrain:
-    train_surg_pred = dataset.get_surgeon_pred_df_by_case_key(dataset.train_case_keys)[SPS_PRED]
-    train_scores_row_dict = MyScorer.apply_scorers(scorers, dataset.ytrain, train_surg_pred)
-  if dataset.Xtest:
-    test_surg_pred = dataset.get_surgeon_pred_df_by_case_key(dataset.test_case_keys)[SPS_PRED]
-    test_scores_row_dict = MyScorer.apply_scorers(scorers, dataset.ytest, test_surg_pred)
+  if dataset.Xtrain is not None and len(dataset.Xtrain) > 0:
+    train_preds = dataset.get_surgeon_pred_df_by_case_key(dataset.train_case_keys)
+    train_scores_row_dict = MyScorer.apply_scorers(scorers, train_preds[dataset.outcome], train_preds[SPS_PRED])
+  if dataset.Xtest is not None and len(dataset.Xtest) > 0:
+    test_preds = dataset.get_surgeon_pred_df_by_case_key(dataset.test_case_keys)
+    test_scores_row_dict = MyScorer.apply_scorers(scorers, test_preds[dataset.outcome], test_preds[SPS_PRED])
   return train_scores_row_dict, test_scores_row_dict
 
 
-def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, eval_sda_only=False,
-                           train_perf_df=None, test_perf_df=None):
+def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, eval_sda_only=False, eval_surg_only=False,
+                           scorers=None, train_perf_df=None, test_perf_df=None):
+  if scorers is None:
+    scorers = MyScorer.get_scorer_dict(DEFAULT_SCORERS)
+
   for kt, dataset_k in tqdm(enumerate(k_datasets), total=len(k_datasets)):
+    # Model performance
     model_dict = k_model_dict[kt]
     for md, clf in model_dict.items():
-      if eval_sda_only:
-        train_perf_df, test_perf_df = eval_model_sda_only(
-          dataset_k, clf, trial_i=kt, train_perf_df_sda=train_perf_df, test_perf_df_sda=test_perf_df
+      if eval_by_cohort is not None:
+        train_perf_df, test_perf_df = eval_model_by_cohort(
+          dataset_k, clf, scorers, eval_by_cohort, trial_i=kt, train_perf_df=train_perf_df, test_perf_df=test_perf_df
         )
       else:
         train_perf_df, test_perf_df = eval_model(
-          dataset_k, clf, by_cohort=eval_by_cohort, trial_i=kt, train_perf_df=train_perf_df, test_perf_df=test_perf_df
+          dataset_k, clf, scorers, trial_i=kt, sda_only=eval_sda_only, surg_only=eval_surg_only,
+          train_perf_df=train_perf_df, test_perf_df=test_perf_df
         )
-
   return train_perf_df, test_perf_df
 
 
@@ -138,41 +142,42 @@ def summarize_clf_perfs(perf_df: pd.DataFrame, Xtype, sort_by='accuracy'):
   return clf_perfs, clf_perfs_styler
 
 
-def eval_model(dataset: Dataset, clf, scorers=None, by_cohort=None, trial_i=None,
-               train_perf_df=None, test_perf_df=None):
+def eval_model_by_cohort(dataset: Dataset, clf, scorers=None, cohort_type=SURG_GROUP, trial_i=None,
+                         train_perf_df=None, test_perf_df=None):
   if scorers is None:
     scorers = MyScorer.get_scorer_dict(DEFAULT_SCORERS)
   if train_perf_df is None:
     train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
   if test_perf_df is None:
     test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
-  md_name = clf.model_type if isinstance(clf, SafeOneClassWrapper) else clf.__class__.__name__
 
-  if by_cohort == SURG_GROUP or by_cohort == PRIMARY_PROC:
-    cohort_to_Xytrain = dataset.get_cohort_to_Xytrains(by_cohort)
-    cohort_to_Xytest = dataset.get_cohort_to_Xytests(by_cohort)
-    for cohort in cohort_to_Xytrain.keys():
-      Xtrain, ytrain = cohort_to_Xytrain[cohort]
-      Xtest, ytest = cohort_to_Xytest.get(cohort, (None, None))
-      train_pred = clf.predict(Xtrain)
-      train_scores = MyScorer.apply_scorers(scorers.keys(), ytrain, train_pred)
-      train_perf_df = append_perf_row_generic(
-        train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': md_name,
-                                      'Count': Xtrain.shape[0], 'Trial': trial_i})
-      if Xtest is not None:
-        test_pred = clf.predict(Xtest)
-        test_scores = MyScorer.apply_scorers(scorers.keys(), ytest, test_pred)
-        test_perf_df = append_perf_row_generic(
-          test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': cohort, 'Model': md_name,
-                                      'Count': Xtest.shape[0], 'Trial': trial_i})
-  else:
-    train_pred, test_pred = clf.predict(dataset.Xtrain), clf.predict(dataset.Xtest)
-    train_scores = MyScorer.apply_scorers(scorers.keys(), dataset.ytrain, train_pred)
-    test_scores = MyScorer.apply_scorers(scorers.keys(), dataset.ytest, test_pred)
+  # Get classifier name
+  try:
+    md_name = clf.model_type
+    assert clf.__class__.__name__ == 'SafeOneClassWrapper'
+  except AttributeError:
+    md_name = clf.__class__.__name__
+
+  if cohort_type not in {SURG_GROUP, PRIMARY_PROC}:  # todo: PRIMARY_PROC_CPTGRP
+    raise ValueError('cohort_type must be ont of {SURG_GROUP, PRIMARY_PROC}')
+
+  # TODO: add eval by SDA &/ Surg only
+  cohort_to_Xytrain = dataset.get_cohort_to_Xytrains(cohort_type)
+  cohort_to_Xytest = dataset.get_cohort_to_Xytests(cohort_type)
+  for cohort in cohort_to_Xytrain.keys():
+    Xtrain, ytrain = cohort_to_Xytrain[cohort]
+    Xtest, ytest = cohort_to_Xytest.get(cohort, (None, None))
+    train_pred = clf.predict(Xtrain)
+    train_scores = MyScorer.apply_scorers(scorers.keys(), ytrain, train_pred)
     train_perf_df = append_perf_row_generic(
-      train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': 'All', 'Model': md_name, 'Trial': trial_i})
-    test_perf_df = append_perf_row_generic(
-      test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': 'All', 'Model': md_name, 'Trial': trial_i})
+      train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': md_name,
+                                    'Count': Xtrain.shape[0], 'Trial': trial_i})
+    if Xtest is not None:
+      test_pred = clf.predict(Xtest)
+      test_scores = MyScorer.apply_scorers(scorers.keys(), ytest, test_pred)
+      test_perf_df = append_perf_row_generic(
+        test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': cohort, 'Model': md_name,
+                                    'Count': Xtest.shape[0], 'Trial': trial_i})
 
   train_perf_df.sort_values(by='accuracy', ascending=False, inplace=True)
   test_perf_df.sort_values(by='accuracy', ascending=False, inplace=True)
@@ -180,34 +185,43 @@ def eval_model(dataset: Dataset, clf, scorers=None, by_cohort=None, trial_i=None
   return train_perf_df, test_perf_df
 
 
-# Evaluate model only on SDA cases
-def eval_model_sda_only(dataset: Dataset, clf, scorers=None, trial_i=None,
-                        train_perf_df_sda=None, test_perf_df_sda=None):
+# Evaluate model on various groups of cases (e.g. pure SDA cases, cases with surgeon prediction, all cases etc.)
+def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False, surg_only=False, cohort='All',
+               train_perf_df=None, test_perf_df=None):
   if scorers is None:
     scorers = MyScorer.get_scorer_dict(DEFAULT_SCORERS)
-  if train_perf_df_sda is None:
-    train_perf_df_sda = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
-  if test_perf_df_sda is None:
-    test_perf_df_sda = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
+  if train_perf_df is None:
+    train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
+  if test_perf_df is None:
+    test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model'] + list(scorers.keys()))
+
+  # Get classifier name
   try:
     md_name = clf.model_type
     assert clf.__class__.__name__ == 'SafeOneClassWrapper'
   except AttributeError:
     md_name = clf.__class__.__name__
-  # Get Xytrain_sda, Xytest_sda
-  Xtrain_sda, ytrain_sda = dataset.get_sda_Xytrain()
-  Xtest_sda, ytest_sda = dataset.get_sda_Xytest()
+
+  # Get train & test Xy
+  Xtrain, ytrain, Xtest, ytest = get_Xys_sda_surg(dataset, sda_only, surg_only)
 
   # Apply trained clf and evaluate
-  train_pred, test_pred = clf.predict(Xtrain_sda), clf.predict(Xtest_sda)
-  train_scores = MyScorer.apply_scorers(scorers.keys(), ytrain_sda, train_pred)
-  test_scores = MyScorer.apply_scorers(scorers.keys(), ytest_sda, test_pred)
-  train_perf_df_sda = append_perf_row_generic(
-    train_perf_df_sda, train_scores, {'Xtype': 'train', 'Cohort': 'All', 'Model': md_name, 'Trial': trial_i})
-  test_perf_df_sda = append_perf_row_generic(
-    test_perf_df_sda, test_scores, {'Xtype': 'test', 'Cohort': 'All', 'Model': md_name, 'Trial': trial_i})
-  # TODO: add eval by cohort
-  return train_perf_df_sda, test_perf_df_sda
+  train_pred, test_pred = clf.predict(Xtrain), clf.predict(Xtest)
+  train_scores = MyScorer.apply_scorers(scorers.keys(), ytrain, train_pred)
+  test_scores = MyScorer.apply_scorers(scorers.keys(), ytest, test_pred)
+  train_perf_df = append_perf_row_generic(
+    train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i})
+  test_perf_df = append_perf_row_generic(
+    test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i})
+
+  # Surgeon performance
+  if surg_only:
+    surg_train, surg_test = eval_surgeon_perf(dataset, scorers)
+    train_perf_df = append_perf_row_generic(train_perf_df, surg_train,
+                                            {'Xtype': 'train', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i})
+    test_perf_df = append_perf_row_generic(test_perf_df, surg_test,
+                                           {'Xtype': 'test', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i})
+  return train_perf_df, test_perf_df
 
 
 def append_perf_row_generic(perf_df, score_dict: Dict, info_col_dict: Dict[str, Any]):
@@ -242,5 +256,3 @@ def format_perf_df(perf_df: pd.DataFrame):
     formatter_ret[k+'_std'] = v
   perf_styler = perf_df.style.format(formatter_ret)
   return perf_styler
-
-

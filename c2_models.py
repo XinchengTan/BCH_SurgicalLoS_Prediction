@@ -21,7 +21,7 @@ from sklearn.neural_network import MLPRegressor, MLPClassifier
 from xgboost import XGBClassifier, XGBRegressor
 
 from globals import *
-from c1_data_preprocessing import Dataset
+from c1_data_preprocessing import Dataset, get_Xys_sda_surg
 
 
 try:
@@ -238,7 +238,8 @@ def train_model(md, params, X, y):
   return clf
 
 
-def train_model_all_ktrials(decileFtr_config, models, k_datasets: List[Dataset], train_sda_only=False):
+def train_model_all_ktrials(decileFtr_config, models, k_datasets: List[Dataset],
+                            train_sda_only=False, train_surg_only=False):
   # print decile agg funcs
   for k, v in decileFtr_config.items():
     print(k, v)
@@ -247,7 +248,7 @@ def train_model_all_ktrials(decileFtr_config, models, k_datasets: List[Dataset],
   k_model_dict = []
   for kt, dataset_k in tqdm(enumerate(k_datasets), total=len(k_datasets)):
     # Fit models
-    Xtrain, ytrain = dataset_k.get_sda_Xytrain() if train_sda_only else dataset_k.Xtrain, dataset_k.ytrain
+    Xtrain, ytrain, _, _ = get_Xys_sda_surg(dataset_k, train_sda_only, train_surg_only)
     model_dict = {}
     for md in models:
       print('md=', md)

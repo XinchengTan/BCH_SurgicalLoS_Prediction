@@ -42,8 +42,9 @@ class Dataset(object):
     self.cohort_df = gen_cohort_df(df, cohort)
     print('cohort df shape: ', self.cohort_df.shape)
 
-    # 0. Save initial SDA case keys
+    # 0. Save pure SDA case keys, and those having surgeon prediction case keys
     self.sda_case_keys = self.gen_sda_case_keys(self.cohort_df)
+    self.surg_only_case_keys = self.gen_surg_only_case_keys(self.cohort_df)
 
     # 1. Train-test split
     if test_idxs is None:
@@ -82,9 +83,13 @@ class Dataset(object):
       self.scale_Xtest(scaler=self.input_scaler)
 
   def gen_sda_case_keys(self, df):
-    # identify intial SDA cases
+    # identify pure SDA cases
     sda_df = df[~(df['SPS_REQUEST_DT_TM'].notnull() & df[SPS_PRED].isnull())]
     return sda_df['SURG_CASE_KEY'].unique().astype(int)
+
+  def gen_surg_only_case_keys(self, df):
+    surg_df = df[df[SPS_PRED].notnull()]
+    return surg_df['SURG_CASE_KEY'].unique().astype(int)
 
   def scale_Xtrain(self, how='minmax', only_numeric=True):  # ['minmax', 'std', 'robust']  -- only normalize continuous / ordinal features
     if self.train_df_raw is None or self.Xtrain.shape[0] == 0:
@@ -126,7 +131,7 @@ class Dataset(object):
       # Preprocess outcome values / SPS prediction in df
       train_df = preprocess_y(self.train_df_raw, outcome, inplace=False)
       if SPS_PRED in train_df.columns:
-        train_df = preprocess_y(train_df, outcome, sps_y=True)
+        train_df = preprocess_y(train_df, outcome, surg_y=True)
 
       # Modify data matrix
       self.Xtrain, self.feature_names, self.train_case_keys, self.ytrain, self.o2m_df_train = preprocess_Xtrain(
@@ -142,7 +147,7 @@ class Dataset(object):
     if self.test_df_raw is not None:
       # Preprocess ytest & sps prediction
       test_df = preprocess_y(self.test_df_raw, outcome)
-      preprocess_y(test_df, outcome, sps_y=True, inplace=True)
+      preprocess_y(test_df, outcome, surg_y=True, inplace=True)
 
       if isinstance(remove_o2m_test, pd.DataFrame):
         o2m_df = remove_o2m_test
@@ -166,13 +171,17 @@ class Dataset(object):
       self.Xtest, self.ytest, self.test_case_keys = np.array([]), np.array([]), np.array([])
       self.test_cohort_df = self.test_df_raw
 
-  def get_Xtrain_by_case_key(self, query_case_keys):
-    idxs = np.where(np.in1d(self.train_case_keys, query_case_keys))[0]
-    return self.Xtrain[idxs, :]
+  def get_Xytrain_by_case_key(self, query_case_keys):
+    if self.train_case_keys is not None:
+      idxs = np.where(np.in1d(self.train_case_keys, query_case_keys))[0]
+      return self.Xtrain[idxs, :], self.ytrain[idxs]
+    return np.array([]), np.array([])
 
-  def get_Xtest_by_case_key(self, query_case_keys):
-    idxs = np.where(np.in1d(self.test_case_keys, query_case_keys))[0]
-    return self.Xtest[idxs, :]
+  def get_Xytest_by_case_key(self, query_case_keys):
+    if self.test_case_keys is not None:
+      idxs = np.where(np.in1d(self.test_case_keys, query_case_keys))[0]
+      return self.Xtest[idxs, :], self.ytest[idxs]
+    return np.array([]), np.array([])
 
   def get_sda_Xytrain(self):
     if self.train_case_keys is not None:
@@ -209,12 +218,18 @@ class Dataset(object):
   def get_surgeon_pred_df_by_case_key(self, query_case_keys):
     if query_case_keys is None or len(query_case_keys) == 0:
       return pd.DataFrame(columns=['SURG_CASE_KEY', SPS_PRED])
-    surg_df = self.df[['SURG_CASE_KEY', SPS_PRED, self.outcome]]\
+    surg_df = self.df[['SURG_CASE_KEY', SPS_PRED, self.outcome, ADMIT_DTM]]\
       .set_index('SURG_CASE_KEY').loc[query_case_keys].reset_index()
     surg_df = surg_df[surg_df[SPS_PRED].notnull()]
-    preprocess_y(surg_df, self.outcome, True, inplace=True)
-    preprocess_y(surg_df, self.outcome, False, inplace=True)
+    preprocess_y(surg_df, self.outcome, True, inplace=True)  # preprocess surgeon prediction
+    preprocess_y(surg_df, self.outcome, False, inplace=True)  # preprocess true outcome
     return surg_df
+
+  def get_year_by_case_key(self, query_case_keys):
+    if query_case_keys is None or len(query_case_keys) == 0:
+      return pd.DataFrame(columns=['SURG_CASE_KEY', 'YEAR', self.outcome])
+    # TODO
+    return
 
   def get_raw_nnt(self, xtype='train'):
     case_keys = self.train_case_keys if xtype.lower() == 'train' else self.test_case_keys
@@ -228,7 +243,7 @@ class Dataset(object):
     res += "Feature names: \n" + "\n".join(self.feature_names)
     return res
 
-
+# TODO: primary cpt
 def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModifier,
                       remove_nonnumeric=True, verbose=False, remove_o2m=True):
   # Make data matrix X numeric
@@ -298,6 +313,7 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
   return X, target_features, X_case_keys, y, o2m_df
 
 
+# TODO: primary cpt
 # Data preprocessing (clean, discretize and one-hot encode certain features)
 def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeringModifier, skip_cases_df_or_fp=None):
   # Get target feature names from training data
@@ -399,32 +415,32 @@ def update_rare_pproc_with_primary_cptgroup(Xdf: pd.DataFrame):
 # TODO: how to use this? add an arg (e.g. replace_rare_pproc?) in Dataset init?
 
 
-def preprocess_y(df: pd.DataFrame, outcome, sps_y=False, inplace=False):
+def preprocess_y(df: pd.DataFrame, outcome, surg_y=False, inplace=False):
   # Generate an outcome vector y with shape: (n_samples, )
   df = df.copy() if not inplace else df
 
   if outcome == LOS:
-    return df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[SPS_PRED].to_numpy()
+    return df.LENGTH_OF_STAY.to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
   elif outcome == ">12h":
-    y = df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[SPS_PRED].to_numpy()
+    y = df.LENGTH_OF_STAY.to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
     y[y > 0.5] = 1
     y[y <= 0.5] = 0
   elif outcome == ">1d":
-    y = df.LENGTH_OF_STAY.to_numpy() if not sps_y else df[SPS_PRED].to_numpy()
+    y = df.LENGTH_OF_STAY.to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
     y[y > 1] = 1
     y[y <= 1] = 0
   elif outcome == NNT:
-    y = df[NNT].to_numpy() if not sps_y else df[SPS_PRED].to_numpy()
+    y = df[NNT].to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
     y = gen_y_nnt(y)
   elif outcome.endswith("nnt"):
-    y = df[NNT].to_numpy() if not sps_y else df[SPS_PRED].to_numpy()
+    y = df[NNT].to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
     cutoff = int(outcome.split("nnt")[0])
     y = gen_y_nnt_binary(y, cutoff)
   else:
     raise NotImplementedError("Outcome type '%s' is not implemented yet!" % outcome)
 
   # Update df by adding or updating the outcome column
-  if sps_y:
+  if surg_y:
     df[SPS_PRED] = y
   else:
     df[outcome] = y
@@ -548,3 +564,21 @@ def gen_o2m_cases(X, y, features, unique=True, save_fp=None, X_case_keys=None):
   if save_fp:
     o2m_df.to_csv(save_fp, index=False)
   return o2m_df
+
+
+# Get X, y for pure SDA cases and/or cases with a surgeon prediction
+def get_Xys_sda_surg(dataset: Dataset, sda_only, surg_only):
+  if sda_only:
+    query_case_keys = dataset.sda_case_keys
+    if surg_only:
+      query_case_keys = np.intersect1d(query_case_keys, dataset.surg_only_case_keys)
+    Xtrain, ytrain = dataset.get_Xytrain_by_case_key(query_case_keys)
+    Xtest, ytest = dataset.get_Xytest_by_case_key(query_case_keys)
+  else:
+    if surg_only:
+      Xtrain, ytrain = dataset.get_Xytrain_by_case_key(dataset.surg_only_case_keys)
+      Xtest, ytest = dataset.get_Xytest_by_case_key(dataset.surg_only_case_keys)
+    else:
+      Xtrain, ytrain = dataset.Xtrain, dataset.ytrain
+      Xtest, ytest = dataset.Xtest, dataset.ytest
+  return Xtrain, ytrain, Xtest, ytest
