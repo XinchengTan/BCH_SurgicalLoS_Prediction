@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 
 from copy import deepcopy
-from typing import Dict, Any
 from tqdm import tqdm
+from typing import Dict, Any, List
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, make_scorer, roc_auc_score, mean_squared_error
 import shap
@@ -71,6 +71,15 @@ class MyScorer:
     return underpred_pct
 
   @staticmethod
+  def classwise_recall(ytrue, ypred, cls):
+    # This is not meant to be made a Scorer object in sklearn, but only for evaluation
+    if cls not in ytrue:
+      return -1
+    cls_idxs = np.where(ytrue == cls)[0]
+    recall_cls = len(np.where(ypred[cls_idxs] != cls)[0]) / len(cls_idxs)
+    return recall_cls
+
+  @staticmethod
   def apply_scorers(scorer_names, ytrue, ypred):
     perf_row_dict = {}
     for scorer_name in scorer_names:
@@ -78,6 +87,9 @@ class MyScorer:
         perf_row_dict[scorer_name] = accuracy_score(ytrue, ypred)
       elif scorer_name == SCR_ACC_BAL:
         perf_row_dict[scorer_name] = balanced_accuracy_score(ytrue, ypred)
+      elif scorer_name.startswith(SCR_RECALL_PREFIX):
+        cls = int(scorer_name.lstrip(SCR_RECALL_PREFIX))
+        perf_row_dict[scorer_name] = MyScorer.classwise_recall(ytrue, ypred, cls)
       elif scorer_name == SCR_RMSE:
         perf_row_dict[scorer_name] = MyScorer.scorer_rmse(ytrue, ypred)
       elif scorer_name == SCR_ACC_ERR1:
@@ -109,8 +121,6 @@ def eval_surgeon_perf(dataset: Dataset, scorers):
 
 def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, eval_sda_only=False, eval_surg_only=False,
                            scorers=None, train_perf_df=None, test_perf_df=None):
-  if scorers is None:
-    scorers = MyScorer.get_scorer_dict(DEFAULT_SCORERS)
   for kt, dataset_k in tqdm(enumerate(k_datasets), total=len(k_datasets)):
     # Model performance
     model_dict = k_model_dict[kt]
@@ -146,11 +156,12 @@ def summarize_clf_perfs(perf_df: pd.DataFrame, Xtype, sort_by='accuracy'):
 def eval_model_by_cohort(dataset: Dataset, clf, scorers=None, cohort_type=SURG_GROUP, trial_i=None,
                          train_perf_df=None, test_perf_df=None):
   if scorers is None:
-    scorers = MyScorer.get_scorer_dict(DEFAULT_SCORERS)
+    scorers = deepcopy(DEFAULT_SCORERS)
+
   if train_perf_df is None:
-    train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model', 'Count'] + list(scorers.keys()))
+    train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model', 'Count'] + scorers)
   if test_perf_df is None:
-    test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model', 'Count'] + list(scorers.keys()))
+    test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model', 'Count'] + scorers)
 
   # Get classifier name
   try:
@@ -170,13 +181,13 @@ def eval_model_by_cohort(dataset: Dataset, clf, scorers=None, cohort_type=SURG_G
     Xtest, ytest = cohort_to_Xytest.get(cohort, (None, None))
     if Xtrain is not None and len(Xtrain) > 0:
       train_pred = clf.predict(Xtrain)
-      train_scores = MyScorer.apply_scorers(scorers.keys(), ytrain, train_pred)
+      train_scores = MyScorer.apply_scorers(scorers, ytrain, train_pred)
       train_perf_df = append_perf_row_generic(
         train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': md_name,
                                       'Count': Xtrain.shape[0], 'Trial': trial_i})
     if Xtest is not None and len(Xtest) > 0:
       test_pred = clf.predict(Xtest)
-      test_scores = MyScorer.apply_scorers(scorers.keys(), ytest, test_pred)
+      test_scores = MyScorer.apply_scorers(scorers, ytest, test_pred)
       test_perf_df = append_perf_row_generic(
         test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': cohort, 'Model': md_name,
                                     'Count': Xtest.shape[0], 'Trial': trial_i})
@@ -191,11 +202,11 @@ def eval_model_by_cohort(dataset: Dataset, clf, scorers=None, cohort_type=SURG_G
 def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False, surg_only=False, cohort='All',
                train_perf_df=None, test_perf_df=None):
   if scorers is None:
-    scorers = MyScorer.get_scorer_dict(DEFAULT_SCORERS)
+    scorers = deepcopy(DEFAULT_SCORERS)
   if train_perf_df is None:
-    train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model', 'Count'] + list(scorers.keys()))
+    train_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model', 'Count'] + scorers)
   if test_perf_df is None:
-    test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model', 'Count'] + list(scorers.keys()))
+    test_perf_df = pd.DataFrame(columns=['Trial', 'Xtype', 'Cohort', 'Model', 'Count'] + scorers)
 
   # Get classifier name
   try:
@@ -210,13 +221,13 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
   # Apply trained clf and evaluate
   if Xtrain is not None and len(Xtrain) > 0:
     train_pred = clf.predict(Xtrain)
-    train_scores = MyScorer.apply_scorers(scorers.keys(), ytrain, train_pred)
+    train_scores = MyScorer.apply_scorers(scorers, ytrain, train_pred)
     train_perf_df = append_perf_row_generic(
       train_perf_df, train_scores, {'Xtype': 'train', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
                                     'Count': Xtrain.shape[0]})
   if Xtest is not None and len(Xtest) > 0:
     test_pred = clf.predict(Xtest)
-    test_scores = MyScorer.apply_scorers(scorers.keys(), ytest, test_pred)
+    test_scores = MyScorer.apply_scorers(scorers, ytest, test_pred)
     test_perf_df = append_perf_row_generic(
       test_perf_df, test_scores, {'Xtype': 'test', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
                                   'Count': Xtest.shape[0]})
@@ -264,8 +275,8 @@ def format_perf_df(perf_df: pd.DataFrame):
   formatter['Count_mean'] = '{:.0f}'.format
   formatter['Count_std'] = '{:.0f}'.format
   formatter_ret = deepcopy(formatter)
-  for k, v in formatter.items():
-    formatter_ret[k+'_mean'] = v
-    formatter_ret[k+'_std'] = v
+  for scr in perf_df.columns.to_list():
+    if scr not in {'Model', 'Xtype', 'Cohort', 'Trial', 'Count'}:
+      formatter_ret[scr] = formatter[SCR_RMSE] if scr.startswith(SCR_RMSE) else formatter[scr]
   perf_styler = perf_df.style.format(formatter_ret)
   return perf_styler

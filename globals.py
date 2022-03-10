@@ -315,13 +315,23 @@ SCR_ACC_ERR2 = 'Accuracy (tol = 2 NNT)'
 SCR_RMSE = 'Rooted MSE'
 SCR_UNDERPRED = 'Underprediction rate'
 SCR_OVERPRED = 'Overprediction rate'
-DEFAULT_SCORERS = [SCR_ACC, SCR_ACC_BAL, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED, SCR_UNDERPRED, SCR_RMSE]
+SCR_RECALL_ALL_CLS = 'recall_all_classes'
+SCR_RECALL_PREFIX = 'recall_class'  # prefix for recall of a particular class: recall of class X has label 'recall_clsX'
+SCR_RECALL0 = 'recall_class0'
+SCR_RECALL1 = 'recall_class1'
+SCR_RECALL2 = 'recall_class2'
+SCR_RECALL3 = 'recall_class3'
+SCR_RECALL4 = 'recall_class4'
+SCR_RECALL5 = 'recall_class5'
+SCR_RECALL6 = 'recall_class6'  # if MAX_NNT > 5, add SCR_RECALL? accordingly
+SCR_RECALL_ALL_LIST = [SCR_RECALL0, SCR_RECALL1, SCR_RECALL2, SCR_RECALL3, SCR_RECALL4, SCR_RECALL5, SCR_RECALL6]
+DEFAULT_SCORERS = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED, SCR_UNDERPRED, SCR_RMSE] + SCR_RECALL_ALL_LIST # SCR_ACC_BAL,
 
 # Scorer formatter for pd output
-SCR_FORMATTER = defaultdict(lambda: "{:.2f}".format)
-SCR_FORMATTER.update({SCR_ACC: "{:.2%}".format, SCR_ACC_BAL: "{:.2%}".format, SCR_ACC_ERR1: "{:.2%}".format,
-                      SCR_ACC_ERR2: "{:.2%}".format, SCR_OVERPRED: "{:.2%}".format, SCR_UNDERPRED: "{:.2%}".format,
-                      SCR_RMSE: "{:.2f}".format})
+SCR_FORMATTER = defaultdict(lambda: "{:.1%}".format)
+SCR_FORMATTER.update({SCR_RMSE: "{:.2f}".format})
+# SCR_ACC: "{:.1%}".format, SCR_ACC_BAL: "{:.1%}".format, SCR_ACC_ERR1: "{:.1%}".format,
+# SCR_ACC_ERR2: "{:.1%}".format, SCR_OVERPRED: "{:.1%}".format, SCR_UNDERPRED: "{:.1%}".format,
 
 # TODO: Remove these
 SCR_1NNT_TOL_ACC = 'Accuracy (Hit rate and tol=1NNT)'
