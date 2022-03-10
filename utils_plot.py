@@ -50,11 +50,15 @@ def plot_predicted_proba_over_class(ytrue, yproba, md_name, Xtype='train', class
   plt.show()
 
 
-def plot_confusion_matrix(yTrue, yPred, md_name, Xtype, axis_ticklabels=None, normalize='true', savefig=False, title_note=''):
+def gen_and_plot_confusion_matrix(yTrue, yPred, md_name, Xtype, axis_ticklabels=None, normalize='true', title_note='', savefig=False):
   confmat = metrics.confusion_matrix(yTrue, yPred, labels=np.arange(0, globals.MAX_NNT + 2, 1), normalize=normalize)
+  plot_confusion_matrix(confmat, md_name, Xtype, axis_ticklabels, title_note, savefig)
+  return confmat
 
+
+def plot_confusion_matrix(confmat, md_name, Xtype, axis_ticklabels=None, title_note='', savefig=False):
   cmap = sns.color_palette("ch:start=.2,rot=-.3") if str(Xtype).lower() == 'train' else 'rocket_r'
-  fmt = 'd' if normalize is None else '.2%'
+  fmt = 'd' if np.all([float(i).is_integer() for i in confmat.flatten()]) else '.2%'
   title = 'Confusion Matrix (%s - %s)' % (md_name, Xtype)
 
   # plot confusion matrix - todo: Add arg for axis tick labels
@@ -66,7 +70,6 @@ def plot_confusion_matrix(yTrue, yPred, md_name, Xtype, axis_ticklabels=None, no
   axs.set_xlabel("Predicted outcome", fontsize=16)
   axs.set_ylabel("True outcome", fontsize=16)
   if axis_ticklabels is None:
-
     axs.set_xticks(np.arange(globals.MAX_NNT + 2) + 0.5)
     axs.set_xticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
     axs.set_yticks(np.arange(globals.MAX_NNT + 2) + 0.5)

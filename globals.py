@@ -260,13 +260,13 @@ BAL_BAGCLF = 'bal-bagging'
 ENSEMBLE_MAJ_EQ = 'ensemble-maj-eq'
 
 #             SVC: "Support Vector Classifier" --- very time-consuming
-clf2name = {LGR: "Logistic Regression",
-            PR: "Poisson Regression",
-            KNN: "K Nearest Neighbor",
-            DTCLF: "Decision Tree Classifier",
-            RMFCLF: "Random Forest Classifier",
+clf2name = {LGR: "LogisticRegression",
+            PR: "PoissonRegression",
+            KNN: "KNeighborsClassifier",
+            DTCLF: "DecisionTreeClassifier",
+            RMFCLF: "RandomForestClassifier",
             GBCLF: "Gradient Boosting Classifier",
-            XGBCLF: 'XGBoost',
+            XGBCLF: 'XGBClassifier',
             BAL_BAGCLF: "Balanced Bagging Classifier"
             }
 clf2name_eval = dict(clf2name)
