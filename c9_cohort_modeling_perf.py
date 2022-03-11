@@ -15,7 +15,7 @@ def get_year_label(years):
     return f'{min(years)} - {max(years)}'
   else:
     return str(years[0])
-  
+
 
 def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[str, Any], scorers: List = None,
                     trial_i=None, years=None, train_perf_df=None, test_perf_df=None):
@@ -67,16 +67,16 @@ def show_best_clf_per_cohort(perf_df: pd.DataFrame, Xtype, sort_by='accuracy'):
   no_cohort_col_list.remove('Cohort')
   no_cohort_col_list.remove('Xtype')
   overall_perf_df = pd.DataFrame(columns=no_cohort_col_list)
-  groupby_trial_model = perf_df.groupby(by=['Trial', 'Model'])
-  for tr_md, cohort_perf in groupby_trial_model:
+  groupby_trial_model_year = perf_df.groupby(by=['Trial', 'Model', 'Year'])
+  for tr_md_yr, cohort_perf in groupby_trial_model_year:
     Xsize = cohort_perf['Count'].sum()
     overall_acc = np.dot(cohort_perf[SCR_ACC].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
     overall_acc_err1 = np.dot(cohort_perf[SCR_ACC_ERR1].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
     overall_underpred = np.dot(cohort_perf[SCR_UNDERPRED].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
     overall_overpred = np.dot(cohort_perf[SCR_OVERPRED].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
     overall_rmse = np.sqrt(np.dot(cohort_perf[SCR_RMSE].to_numpy()**2, cohort_perf['Count'].to_numpy()) / Xsize)
-    overall_perf_df = overall_perf_df.append({'Trial': tr_md[0], 'Model': tr_md[1], 'Count': Xsize,
-                                              SCR_ACC: overall_acc, SCR_ACC_ERR1: overall_acc_err1,
+    overall_perf_df = overall_perf_df.append({'Trial': tr_md_yr[0], 'Model': tr_md_yr[1], 'Year': tr_md_yr[2],
+                                              'Count': Xsize, SCR_ACC: overall_acc, SCR_ACC_ERR1: overall_acc_err1,
                                               SCR_UNDERPRED: overall_underpred, SCR_OVERPRED: overall_overpred,
                                               SCR_RMSE: overall_rmse}, ignore_index=True)
   overall_perf = pd.merge(overall_perf_df.groupby(by=['Model', 'Year']).mean().reset_index(),
@@ -99,17 +99,19 @@ def show_best_clf_per_cohort(perf_df: pd.DataFrame, Xtype, sort_by='accuracy'):
         np.dot(best_clf_perf['accuracy_mean'], best_clf_perf['Count_mean']) / best_clf_xsize)
 
   # Obtain overall performance of the best classifiers for each cohort put together
-  best_overall_df = perf_df.join(best_clf_perf.set_index(['Cohort', 'Model', 'Year']), on=['Cohort', 'Model', 'Year'], how='inner')
+  best_overall_df = perf_df.join(best_clf_perf.set_index(['Cohort', 'Model', 'Year']),
+                                 on=['Cohort', 'Model', 'Year'],
+                                 how='inner')
   no_cohort_col_list.remove('Model')
   best_overall_perf = pd.DataFrame(columns=no_cohort_col_list)
-  for trial, cohort_perf in best_overall_df.groupby('Trial'):
+  for trial_yr, cohort_perf in best_overall_df.groupby(by=['Trial', 'Year']):
     Xsize = cohort_perf['Count'].sum()
     overall_acc = np.dot(cohort_perf[SCR_ACC].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
     overall_acc_err1 = np.dot(cohort_perf[SCR_ACC_ERR1].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
     overall_underpred = np.dot(cohort_perf[SCR_UNDERPRED].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
     overall_overpred = np.dot(cohort_perf[SCR_OVERPRED].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
     overall_rmse = np.sqrt(np.dot(cohort_perf[SCR_RMSE].to_numpy() ** 2, cohort_perf['Count'].to_numpy()) / Xsize)
-    best_overall_perf = best_overall_perf.append({'Trial': trial, 'Count': Xsize,
+    best_overall_perf = best_overall_perf.append({'Trial': trial_yr[0], 'Year': trial_yr[1], 'Count': Xsize,
                                                   SCR_ACC: overall_acc, SCR_ACC_ERR1: overall_acc_err1,
                                                   SCR_UNDERPRED: overall_underpred, SCR_OVERPRED: overall_overpred,
                                                   SCR_RMSE: overall_rmse}, ignore_index=True)

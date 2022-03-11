@@ -285,7 +285,7 @@ if __name__ == '__main__':
   surg_perf = pd.DataFrame(columns=['Trial', 'Model'] + list(scorers.keys()))  # Trial, train_scores ...
   for trial, dataset in enumerate(datasets):  # ktrials
     # Surgeon prediction
-    train_scores_dict, test_scores_dict = eval_surgeon_perf(dataset, scorers)
+    train_scores_dict, test_scores_dict, confmat_test = eval_surgeon_perf(dataset, scorers, False)
     surg_perf = append_perf_row_surg(surg_perf, trial, train_scores_dict)
 
     # Train / Tune models

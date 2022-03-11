@@ -194,7 +194,7 @@ def eval_model_by_cohort_Xydata(trial_i, dataset: Dataset, clf, cohort_to_XyKeys
   md_name = get_clf_name(clf)
 
   # Get year label (None means using all years in dataset)
-  year_name = get_year_label(years, dataset)
+  year_label = get_year_label(years, dataset)
 
   # Evaluate on each cohort, include surgeon's performance by request
   for cohort in cohort_to_XyKeys:
@@ -206,7 +206,7 @@ def eval_model_by_cohort_Xydata(trial_i, dataset: Dataset, clf, cohort_to_XyKeys
       perf_df = append_perf_row_generic(
         perf_df, scores, {**class_to_counts,
                           **{'Xtype': Xtype, 'Cohort': cohort, 'Model': md_name, 'Count': X.shape[0],
-                             'Trial': trial_i, 'Year': year_name}
+                             'Trial': trial_i, 'Year': year_label}
                           })
       if surg_only:
         true_surg_preds = dataset.get_surgeon_pred_df_by_case_key(cohort_case_keys, years=years)
@@ -214,7 +214,7 @@ def eval_model_by_cohort_Xydata(trial_i, dataset: Dataset, clf, cohort_to_XyKeys
         perf_df = append_perf_row_generic(
           perf_df, scores_surg, {**class_to_counts,
                                  **{'Xtype': Xtype, 'Cohort': cohort, 'Model': 'Surgeon', 'Count': X.shape[0],
-                                    'Trial': trial_i, 'Year': year_name}
+                                    'Trial': trial_i, 'Year': year_label}
                                  })
   return perf_df
 
@@ -261,7 +261,7 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
   md_name = get_clf_name(clf)
 
   # Get year label (None means using all years in dataset)
-  year_name = get_year_label(years, dataset)
+  year_label = get_year_label(years, dataset)
 
   # Get train & test X, y under sda, surg, years filters
   Xtrain, ytrain = dataset.get_Xytrain_by_case_key(dataset.train_case_keys,
@@ -276,7 +276,7 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
     train_perf_df = append_perf_row_generic(
       train_perf_df, train_scores, {**get_class_count(ytrain),
                                     **{'Xtype': 'train', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
-                                       'Count': Xtrain.shape[0], 'Year': year_name}})
+                                       'Count': Xtrain.shape[0], 'Year': year_label}})
   confmat_test = None
   if Xtest is not None and len(Xtest) > 0:
     test_pred = clf.predict(Xtest)
@@ -284,7 +284,7 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
     test_perf_df = append_perf_row_generic(
       test_perf_df, test_scores, {**get_class_count(ytest),
                                   **{'Xtype': 'test', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
-                                     'Count': Xtest.shape[0], 'Year': year_name}})
+                                     'Count': Xtest.shape[0], 'Year': year_label}})
     if show_confmat:
       confmat_test = confusion_matrix(ytest, test_pred, labels=np.arange(0, MAX_NNT + 2), normalize='true')
 
@@ -296,12 +296,12 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
       train_perf_df = append_perf_row_generic(
         train_perf_df, surg_train, {**get_class_count(ytrain),
                                     **{'Xtype': 'train', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i,
-                                       'Count': Xtrain.shape[0], 'Year': year_name}})
+                                       'Count': Xtrain.shape[0], 'Year': year_label}})
     if len(surg_test) > 0:
       test_perf_df = append_perf_row_generic(
         test_perf_df, surg_test, {**get_class_count(ytest),
                                   **{'Xtype': 'test', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i,
-                                     'Count': Xtest.shape[0], 'Year': year_name}})
+                                     'Count': Xtest.shape[0], 'Year': year_label}})
   return train_perf_df, test_perf_df, confmat_test, surg_confmat_test
 
 
