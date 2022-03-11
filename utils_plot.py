@@ -58,7 +58,7 @@ def gen_and_plot_confusion_matrix(yTrue, yPred, md_name, Xtype, axis_ticklabels=
 
 def plot_confusion_matrix(confmat, md_name, Xtype, axis_ticklabels=None, title_note='', savefig=False):
   cmap = sns.color_palette("ch:start=.2,rot=-.3") if str(Xtype).lower() == 'train' else 'rocket_r'
-  fmt = 'd' if np.all([float(i).is_integer() for i in confmat.flatten()]) else '.2%'
+  fmt = 'd' if np.all([float(i).is_integer() for i in confmat.flatten()]) else '.1%'
   title = 'Confusion Matrix (%s - %s)' % (md_name, Xtype)
 
   # plot confusion matrix - todo: Add arg for axis tick labels

@@ -76,7 +76,7 @@ class MyScorer:
     if cls not in ytrue:
       return -1.0
     cls_idxs = np.where(ytrue == cls)[0]
-    recall_cls = sum(np.array(ypred[cls_idxs] != cls)) / len(cls_idxs)
+    recall_cls = sum(np.array(ypred[cls_idxs] == cls)) / len(cls_idxs)
     return recall_cls
 
   @staticmethod
@@ -129,7 +129,7 @@ def show_confmat_of_median_perf_for_mds(perf_df, model_to_confmats, which_md, Xt
   which_md = str(which_md)
   if which_md.lower() == 'all':
     for md, kt_to_confmats in model_to_confmats.items():
-      show_confmat_of_median_perf_(perf_df, kt_to_confmats, clf2name[md], Xtype, criterion)
+      show_confmat_of_median_perf_(perf_df, kt_to_confmats, md, Xtype, criterion)
   else:
     kt = show_confmat_of_median_perf_(perf_df, model_to_confmats[which_md], which_md, Xtype, criterion)
     if 'Surgeon' in model_to_confmats:
@@ -138,7 +138,7 @@ def show_confmat_of_median_perf_for_mds(perf_df, model_to_confmats, which_md, Xt
 
 # Display the confusion matrix of a particular model on the dataset where it achieves its median perf across k trials
 def show_confmat_of_median_perf_(perf_df, kt_to_confmats, md, Xtype, criterion):
-  md_name = clf2name[md]
+  md_name = clf2name[md] if md != 'Surgeon' else md
   criterion_sorted = perf_df[perf_df['Model'] == md_name].sort_values(by=criterion).reset_index(drop=True)
   kt = criterion_sorted.iloc[len(kt_to_confmats) // 2]['Trial']
   utils_plot.plot_confusion_matrix(kt_to_confmats[kt], md_name, Xtype)
@@ -159,6 +159,7 @@ def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, 
           years=years, train_perf_df=train_perf_df, test_perf_df=test_perf_df
         )
       else:
+        print(md)
         train_perf_df, test_perf_df, confmat_test, surg_confmat_test = eval_model(
           dataset_k, clf, scorers, trial_i=kt, sda_only=eval_sda_only, surg_only=eval_surg_only, years=years,
           show_confmat=md_to_show_confmat, train_perf_df=train_perf_df, test_perf_df=test_perf_df
@@ -166,6 +167,7 @@ def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, 
         model_to_k_confmats_test[md][kt] = confmat_test
         model_to_k_confmats_test['Surgeon'][kt] = surg_confmat_test
 
+  print(model_to_k_confmats_test.keys())
   if md_to_show_confmat:
     # show confusion matrix of the median performance
     show_confmat_of_median_perf_for_mds(test_perf_df, model_to_k_confmats_test, md_to_show_confmat, Xtype='Test', criterion=SCR_ACC)
