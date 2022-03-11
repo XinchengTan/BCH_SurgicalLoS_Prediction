@@ -117,6 +117,24 @@ def train_cohort_clf(md, class_weight, cohort_to_dataset, train_sda_only=False):
   return cohort_to_clf
 
 
+def cohort_modeling_ktrials(decileFtr_config, models, k_datasets, train_perf_df=None, test_perf_df=None):
+  # print decile agg funcs
+  for k, v in decileFtr_config.items():
+    print(k, v)
+
+  models = [LGR, KNN, RMFCLF, XGBCLF] if models is None else models  # GBCLF,
+  for k in tqdm(range(len(k_datasets))):
+    # Fit and eval models
+    for md in models:
+      print('md=', md)
+      cohort_to_clf_pproc = train_cohort_clf(md=md, class_weight=None, cohort_to_dataset=k_datasets[k])
+      train_perf_df, test_perf_df = eval_cohort_clf(
+        k_datasets[k], cohort_to_clf_pproc, None, k, train_perf_df, test_perf_df
+      )
+
+  return train_perf_df, test_perf_df
+
+
 def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[str, Any], scorers: Dict[str, Any] = None,
                     trial_i=None, train_perf_df=None, test_perf_df=None):
   if scorers is None:
@@ -220,20 +238,3 @@ def show_best_clf_per_cohort(perf_df: pd.DataFrame, Xtype, sort_by='accuracy'):
   print(pd.DataFrame({'Mean': best_overall_perf.mean(), 'Std': best_overall_perf.std()}))
   return best_clf_perf, overall_perf, best_clf_perf_styler, overall_perf_styler, best_overall_perf
 
-
-def cohort_modeling_ktrials(decileFtr_config, models, k_datasets, train_perf_df=None, test_perf_df=None):
-  # print decile agg funcs
-  for k, v in decileFtr_config.items():
-    print(k, v)
-
-  models = [LGR, KNN, RMFCLF, XGBCLF] if models is None else models  # GBCLF,
-  for k in tqdm(range(len(k_datasets))):
-    # Fit and eval models
-    for md in models:
-      print('md=', md)
-      cohort_to_clf_pproc = train_cohort_clf(md=md, class_weight=None, cohort_to_dataset=k_datasets[k])
-      train_perf_df, test_perf_df = eval_cohort_clf(
-        k_datasets[k], cohort_to_clf_pproc, None, k, train_perf_df, test_perf_df
-      )
-
-  return train_perf_df, test_perf_df

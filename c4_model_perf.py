@@ -174,7 +174,6 @@ def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, 
 
 
 def eval_surgeon_perf(dataset: Dataset, scorers: Iterable, show_confmat, years=None):
-  # TODO: add year filter
   train_scores_row_dict, test_scores_row_dict = {}, {}
   if dataset.Xtrain is not None and len(dataset.Xtrain) > 0:
     train_true_preds = dataset.get_surgeon_pred_df_by_case_key(dataset.train_case_keys, years=years)
@@ -188,60 +187,84 @@ def eval_surgeon_perf(dataset: Dataset, scorers: Iterable, show_confmat, years=N
   return train_scores_row_dict, test_scores_row_dict, confmat_test
 
 
+# Helper function for eval_model_by_cohort()
+def eval_model_by_cohort_Xydata(trial_i, dataset: Dataset, clf, cohort_to_XyKeys, Xtype,
+                                scorers, perf_df, surg_only, years):
+  # Get classifier name
+  md_name = get_clf_name(clf)
+
+  # Get year label (None means using all years in dataset)
+  year_name = get_year_label(years, dataset)
+
+  # Evaluate on each cohort, include surgeon's performance by request
+  for cohort in cohort_to_XyKeys:
+    X, y, cohort_case_keys = cohort_to_XyKeys.get(cohort, (np.array([]), np.array([]), np.array([])))
+    if len(X) > 0:
+      pred = clf.predict(X)
+      scores = MyScorer.apply_scorers(scorers, y, pred)
+      class_to_counts = get_class_count(y)
+      perf_df = append_perf_row_generic(
+        perf_df, scores, {**class_to_counts,
+                          **{'Xtype': Xtype, 'Cohort': cohort, 'Model': md_name, 'Count': X.shape[0],
+                             'Trial': trial_i, 'Year': year_name}
+                          })
+      if surg_only:
+        true_surg_preds = dataset.get_surgeon_pred_df_by_case_key(cohort_case_keys, years=years)
+        scores_surg = MyScorer.apply_scorers(scorers, true_surg_preds[dataset.outcome], true_surg_preds[SPS_PRED])
+        perf_df = append_perf_row_generic(
+          perf_df, scores_surg, {**class_to_counts,
+                                 **{'Xtype': Xtype, 'Cohort': cohort, 'Model': 'Surgeon', 'Count': X.shape[0],
+                                    'Trial': trial_i, 'Year': year_name}
+                                 })
+  return perf_df
+
+
+# Evaluates the model performance on each cohort
 def eval_model_by_cohort(dataset: Dataset, clf, scorers=None, cohort_type=SURG_GROUP, trial_i=None,
                          sda_only=False, surg_only=False, years=None,
                          train_perf_df=None, test_perf_df=None):
+  assert cohort_type in COHORT_TYPE_SET, f'cohort_type must be ont of {COHORT_TYPE_SET}'
+
   if scorers is None:
     scorers = deepcopy(DEFAULT_SCORERS)
-
   if train_perf_df is None:
     train_perf_df = get_default_perf_df(scorers)
   if test_perf_df is None:
     test_perf_df = get_default_perf_df(scorers)
 
-  # Get classifier name
-  try:
-    md_name = clf.model_type
-    assert clf.__class__.__name__ == 'SafeOneClassWrapper'
-  except AttributeError:
-    md_name = clf.__class__.__name__
+  # Evaluate on Training set for each cohort
+  cohort_to_XyKeys_train = dataset.get_cohort_to_Xytrains(cohort_type, sda_only=sda_only, surg_only=surg_only, years=years)
+  train_perf_df = eval_model_by_cohort_Xydata(trial_i, dataset, clf, cohort_to_XyKeys_train, 'train', scorers=scorers,
+                                              perf_df=train_perf_df, surg_only=surg_only, years=years)
 
-  # Get year label (None means 2018 - 2021)
-  if years is None:
-    year_name = f'{min(dataset.year_to_case_keys)} - {max(dataset.year_to_case_keys)}'
-  elif len(years) > 1:
-    year_name = f'{min(years)} - {max(years)}'
-  else:
-    year_name = str(years[0])
+  # Evaluate on Test set for each cohort
+  cohort_to_XyKeys_test = dataset.get_cohort_to_Xytests(cohort_type, sda_only=sda_only, surg_only=surg_only, years=years)
+  test_perf_df = eval_model_by_cohort_Xydata(trial_i, dataset, clf, cohort_to_XyKeys_test, 'test', scorers=scorers,
+                                             perf_df=test_perf_df, surg_only=surg_only, years=years)
 
-  if cohort_type not in COHORT_TYPE_SET:
-    raise ValueError('cohort_type must be ont of {SURG_GROUP, PRIMARY_PROC}')
-
-  # TODO: add eval by SDA &/ Surg only
-  cohort_to_Xytrain = dataset.get_cohort_to_Xytrains(cohort_type, sda_only=sda_only, surg_only=surg_only, years=years)
-  cohort_to_Xytest = dataset.get_cohort_to_Xytests(cohort_type, sda_only=sda_only, surg_only=surg_only, years=years)
-  for cohort in cohort_to_Xytrain.keys():
-    Xtrain, ytrain = cohort_to_Xytrain.get(cohort, (None, None))
-    if (Xtrain is not None) and len(Xtrain) > 0:
-      train_pred = clf.predict(Xtrain)
-      train_scores = MyScorer.apply_scorers(scorers, ytrain, train_pred)
-      train_perf_df = append_perf_row_generic(
-        train_perf_df, train_scores, {**get_class_count(ytrain),
-                                      **{'Xtype': 'train', 'Cohort': cohort, 'Model': md_name, 'Count': Xtrain.shape[0],
-                                         'Trial': trial_i, 'Year': year_name}})
-    Xtest, ytest = cohort_to_Xytest.get(cohort, (None, None))
-    if (Xtest is not None) and len(Xtest) > 0:
-      test_pred = clf.predict(Xtest)
-      test_scores = MyScorer.apply_scorers(scorers, ytest, test_pred)
-      test_perf_df = append_perf_row_generic(
-        test_perf_df, test_scores, {**get_class_count(ytest),
-                                    **{'Xtype': 'test', 'Cohort': cohort, 'Model': md_name, 'Count': Xtest.shape[0],
-                                       'Trial': trial_i, 'Year': year_name}})
-
-  train_perf_df.sort_values(by='accuracy', ascending=False, inplace=True)
-  test_perf_df.sort_values(by='accuracy', ascending=False, inplace=True)
-
+  train_perf_df.sort_values(by=['Count', 'Cohort', 'Model'], ascending=False, inplace=True)  # 'accuracy'
+  test_perf_df.sort_values(by=['Count', 'Cohort', 'Model'], ascending=False, inplace=True)  # 'accuracy'
   return train_perf_df, test_perf_df
+
+  # for cohort in cohort_to_XyKeys_test:
+  #   Xtest, ytest, cohort_case_keys_test = cohort_to_XyKeys_test.get(cohort, (np.array([]), np.array([]), np.array([])))
+  #   if len(Xtest) > 0:
+  #     test_pred = clf.predict(Xtest)
+  #     test_scores = MyScorer.apply_scorers(scorers, ytest, test_pred)
+  #     class_to_counts = get_class_count(ytest)
+  #     test_perf_df = append_perf_row_generic(
+  #       test_perf_df, test_scores, {**class_to_counts,
+  #                                   **{'Xtype': 'test', 'Cohort': cohort, 'Model': md_name, 'Count': Xtest.shape[0],
+  #                                      'Trial': trial_i, 'Year': year_name}})
+  #     if surg_only:
+  #       test_true_surg_preds = dataset.get_surgeon_pred_df_by_case_key(cohort_case_keys_test, years=years)
+  #       test_scores_surg = MyScorer.apply_scorers(scorers, test_true_surg_preds[dataset.outcome],
+  #                                                 test_true_surg_preds[SPS_PRED])
+  #       test_perf_df = append_perf_row_generic(
+  #         test_perf_df, test_scores_surg, {**class_to_counts,
+  #                                          **{'Xtype': 'test', 'Cohort': cohort, 'Model': 'Surgeon',
+  #                                             'Count': Xtest.shape[0], 'Trial': trial_i, 'Year': year_name}
+  #                                          })
 
 
 # Evaluate model on various groups of cases (e.g. pure SDA cases, cases with surgeon prediction, all cases etc.)
@@ -255,19 +278,10 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
     test_perf_df = get_default_perf_df(scorers)
 
   # Get classifier name
-  try:
-    md_name = clf.model_type
-    assert clf.__class__.__name__ == 'SafeOneClassWrapper'
-  except AttributeError:
-    md_name = clf.__class__.__name__
+  md_name = get_clf_name(clf)
 
-  # Get year label (None means 2018 - 2021)
-  if years is None:
-    year_name = f'{min(dataset.year_to_case_keys)} - {max(dataset.year_to_case_keys)}'
-  elif len(years) > 1:
-    year_name = f'{min(years)} - {max(years)}'
-  else:
-    year_name = str(years[0])
+  # Get year label (None means using all years in dataset)
+  year_name = get_year_label(years, dataset)
 
   # Get train & test X, y under sda, surg, years filters
   Xtrain, ytrain = dataset.get_Xytrain_by_case_key(dataset.train_case_keys,
@@ -311,6 +325,24 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
   return train_perf_df, test_perf_df, confmat_test, surg_confmat_test
 
 
+def get_clf_name(clf):
+  try:
+    md_name = clf.model_type
+    assert clf.__class__.__name__ == 'SafeOneClassWrapper'
+  except AttributeError:
+    md_name = clf.__class__.__name__
+  return md_name
+
+
+def get_year_label(years, dataset: Dataset):
+  if years is None:
+    return f'{min(dataset.year_to_case_keys)} - {max(dataset.year_to_case_keys)}'
+  elif len(years) > 1:
+    return f'{min(years)} - {max(years)}'
+  else:
+    return str(years[0])
+
+
 def append_perf_row_generic(perf_df, score_dict: Dict, info_col_dict: Dict[str, Any]):
   score_dict.update(info_col_dict)
   perf_df = perf_df.append(score_dict, ignore_index=True)
@@ -333,7 +365,7 @@ def append_perf_row_surg(surg_perf_df: pd.DataFrame, trial, scores_row_dict):
   return surg_perf_df
 
 
-def summarize_clf_perfs(perf_df: pd.DataFrame, Xtype, sort_by='accuracy'):
+def summarize_clf_perfs(perf_df: pd.DataFrame, Xtype, sort_by=['accuracy_mean']):
   print(f'[{Xtype}] Model performance summary:')
   for col in perf_df.columns:
     if col.startswith('Count'):
@@ -345,8 +377,8 @@ def summarize_clf_perfs(perf_df: pd.DataFrame, Xtype, sort_by='accuracy'):
                        how='left',
                        suffixes=('_mean', '_std')) \
     .dropna(axis=1) \
-    .sort_values(by=sort_by+'_mean', ascending=False)
-  print(clf_perfs.columns)
+    .sort_values(by=sort_by, ascending=False) \
+    .reset_index(drop=True)
   clf_perfs_styler = format_perf_df(clf_perfs)
   return clf_perfs, clf_perfs_styler
 

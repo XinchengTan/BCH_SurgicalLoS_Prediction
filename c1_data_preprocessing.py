@@ -229,11 +229,11 @@ class Dataset(object):
       df_by_cohort = self.df.set_index('SURG_CASE_KEY')\
         .loc[target_case_keys].reset_index()\
         .groupby(by=by_cohort)['SURG_CASE_KEY']
-      cohort_to_Xdata = {}
+      cohort_to_Xy_case_keys = {}
       for cohort, case_keys in df_by_cohort:
         idxs = np.where(np.in1d(data_case_keys, case_keys))[0]
-        cohort_to_Xdata[cohort] = (X[idxs, :], y[idxs])
-      return cohort_to_Xdata
+        cohort_to_Xy_case_keys[cohort] = (X[idxs, :], y[idxs], data_case_keys[idxs])
+      return cohort_to_Xy_case_keys
     return {}
 
   def get_cohort_to_Xytrains(self, by_cohort, sda_only=False, surg_only=False, years=None) -> Dict:
