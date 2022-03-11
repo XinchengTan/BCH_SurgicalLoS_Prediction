@@ -8,7 +8,10 @@ from c1_data_preprocessing import Dataset
 from c4_model_perf import MyScorer, append_perf_row_generic, format_perf_df, get_clf_name, get_default_perf_df
 
 
-def get_year_label(years):
+# TODO: add class_count
+
+
+def get_year_label(years) -> str:
   if years is None:
     return f'All'
   elif len(years) > 1:
@@ -16,9 +19,35 @@ def get_year_label(years):
   else:
     return str(years[0])
 
+def get_placeholder_perf_scores_dict(scorers: List) -> Dict:
+  return {s: -1.0 for s in scorers}
+
+
+def add_surgeon_cohort_perf(cohort, clf, dataset: Dataset, Xtype, scorers, trial_i, years, perf_df):
+  year_label = get_year_label(years)
+  md_name = get_clf_name(clf)
+
+  if Xtype == 'train':
+    X, y, data_case_keys = dataset.Xtrain, dataset.ytrain, dataset.train_case_keys
+  else:
+    X, y, data_case_keys = dataset.Xtest, dataset.ytest, dataset.test_case_keys
+
+  # Fetch surg_pred and true outcome
+  surg_pred_true = dataset.get_surgeon_pred_df_by_case_key(data_case_keys, years=years)
+  if surg_pred_true.empty:
+    scores_dict = get_placeholder_perf_scores_dict(scorers)
+  else:
+    scores_dict = MyScorer.apply_scorers(scorers, surg_pred_true[dataset.outcome], surg_pred_true[SPS_PRED])
+  # Append scores with info to perf_df
+  perf_df = append_perf_row_generic(perf_df, scores_dict,
+                                    {'Xtype': Xtype, 'Cohort': cohort, 'Count': surg_pred_true.shape[0],
+                                     'Model': md_name, 'Trial': trial_i, 'Year': year_label
+                                     })
+  return perf_df
+
 
 def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[str, Any], scorers: List = None,
-                    trial_i=None, years=None, train_perf_df=None, test_perf_df=None):
+                    trial_i=None, surg_only=False, years=None, train_perf_df=None, test_perf_df=None):
   if scorers is None:
     scorers = deepcopy(DEFAULT_SCORERS)
   outcome_type = list(cohort_to_dataset.values())[0].outcome
@@ -55,6 +84,10 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
       test_perf_df = append_perf_row_generic(
         test_perf_df, test_score_dict, {'Xtype': 'test', 'Cohort': cohort, 'Model': md_name,
                                         'Count': dataset.Xtest.shape[0], 'Trial': trial_i, 'Year': year_label})
+      if surg_only:
+        train_perf_df = add_surgeon_cohort_perf(cohort, clf, dataset, 'train', scorers, trial_i, years, train_perf_df)
+        test_perf_df = add_surgeon_cohort_perf(cohort, clf, dataset, 'test', scorers, trial_i, years, test_perf_df)
+
   return train_perf_df, test_perf_df
 
 

@@ -242,7 +242,7 @@ class Dataset(object):
   def get_cohort_to_Xytests(self, by_cohort, sda_only=False, surg_only=False, years=None) -> Dict:
     return self.get_cohort_to_Xydata_(by_cohort, isTrain=False, sda_only=sda_only, surg_only=surg_only, years=years)
 
-  def get_surgeon_pred_df_by_case_key(self, query_case_keys, years=None):
+  def get_surgeon_pred_df_by_case_key(self, query_case_keys, years=None) -> pd.DataFrame:
     # Generates a df with surgeon's prediction along with preprocessed true outcome for filtered query_case_keys
     if query_case_keys is None or len(query_case_keys) == 0:
       return pd.DataFrame(columns=['SURG_CASE_KEY', SPS_PRED])
@@ -462,6 +462,9 @@ def update_rare_pproc_with_primary_cptgroup(Xdf: pd.DataFrame):
 
 def preprocess_y(df: pd.DataFrame, outcome, surg_y=False, inplace=False):
   # Generate an outcome vector y with shape: (n_samples, )
+  if df.empty:
+    return df
+
   df = df.copy() if not inplace else df
 
   if outcome == LOS:
