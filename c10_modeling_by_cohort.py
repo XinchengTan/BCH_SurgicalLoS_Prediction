@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from copy import deepcopy
 from tqdm import tqdm
-from typing import Dict, Hashable, Any
+from typing import Dict, Hashable, List, Iterable
 
 from globals import *
 from c1_data_preprocessing import Dataset
@@ -20,6 +20,7 @@ def filter_df_by_cohort_count(dashb_df: pd.DataFrame,  cohort_col: str, min_coho
   return dashb_df
 
 
+# TODO: use case keys instead of idxs!!!!!
 # Generate 'ktrials' of cohort-to-test-indices mapping, save the shuffled dashb_df as well
 def gen_ktrial_cohort_test_idxs(dashb_df: pd.DataFrame, cohort_col: str, min_cohort_size=50, ktrials=10, test_pct=0.2):
   assert cohort_col in {SURG_GROUP, PRIMARY_PROC}, f'cohort_col must be one of [{SURG_GROUP, PRIMARY_PROC}]!'
@@ -45,6 +46,14 @@ def gen_ktrial_cohort_test_idxs(dashb_df: pd.DataFrame, cohort_col: str, min_coh
   return kt_pprocDf, kt_cohort2testIdxs
 
 
+def gen_pproc_ktrial_datasets_from_test_case_keys(data_df: pd.DataFrame, kt_test_case_keys: List[Iterable]):
+  kt_datasets = []
+  for kt, test_case_keys in enumerate(kt_test_case_keys):
+    pass
+  return
+
+
+# TODO: use case keys instead of idxs!!!!!
 def gen_pproc_ktrial_datasets(ktrials, decileFtr_config, kt_dfs, kt_cohort2testIdxs, test_pct, min_cohort_size):
   kt_datasets = []
   for k in range(ktrials):
@@ -59,6 +68,7 @@ def gen_pproc_ktrial_datasets(ktrials, decileFtr_config, kt_dfs, kt_cohort2testI
   return kt_datasets
 
 
+# TODO: use case keys instead of idxs!!!!!
 def gen_cohort_datasets(dashb_df: pd.DataFrame, cohort_col: str, min_cohort_size=10, cohort2testIdxs=None,
                         **kwargs) -> Dict[Hashable, Dataset]:
   """

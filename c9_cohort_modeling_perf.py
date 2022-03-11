@@ -9,6 +9,7 @@ from c4_model_perf import MyScorer, append_perf_row_generic, format_perf_df, get
 
 
 # TODO: add class_count
+# TODO: update show_best_xxxx: 1. change function name, 2. exclude surgeon perf from model perf
 
 
 def get_year_label(years) -> str:

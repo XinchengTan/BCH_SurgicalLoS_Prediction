@@ -28,7 +28,7 @@ def gen_ktrials_test_idxs(dashb_df: pd.DataFrame, ktrials=10, test_pct=0.2):
 
 # Generate ktrials of SDA_df and a set of randomly selected test indices from output of gen_ktrials_test_idxs()
 # To randomly shuffle and generate test_idxs from dashb_sda_df, simply use gen_ktrials_test_idxs()
-def gen_ktrials_sda_test_idxs_from_full(kt_data_df, kt_test_idxs):
+def gen_ktrials_sda_test_idxs_from_full(kt_data_df: List[pd.DataFrame], kt_test_idxs: List):
   # Pure SDA dataset
   kt_sda_df, kt_sda_test_idxs = [], []
   for k, data_df_k in enumerate(kt_data_df):
