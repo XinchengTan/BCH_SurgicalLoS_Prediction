@@ -74,7 +74,7 @@ class MyScorer:
   def classwise_recall(ytrue, ypred, cls):
     # This is not meant to be made a Scorer object in sklearn, but only for evaluation
     if cls not in ytrue:
-      return -1
+      return -1.0
     cls_idxs = np.where(ytrue == cls)[0]
     recall_cls = sum(np.array(ypred[cls_idxs] != cls)) / len(cls_idxs)
     return recall_cls
@@ -370,6 +370,7 @@ def summarize_clf_perfs(perf_df: pd.DataFrame, Xtype, sort_by=['accuracy_mean'])
   for col in perf_df.columns:
     if col.startswith('Count'):
       perf_df[col] = pd.to_numeric(perf_df[col])
+
   # Group by md, aggregate across trial
   clf_perfs = pd.merge(perf_df.groupby(by=['Model', 'Cohort', 'Year']).mean().reset_index(),
                        perf_df.groupby(by=['Model', 'Cohort', 'Year']).std().reset_index(),
