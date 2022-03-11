@@ -8,15 +8,15 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from time import time
-from typing import Dict
+from typing import Dict, Iterable
 
 from globals import *
 from c1_feature_engineering import FeatureEngineeringModifier, DecileGenerator
 
 
-def gen_cohort_df(df, cohort):
+def gen_cohort_df(df: pd.DataFrame, cohort):
   if cohort == COHORT_ALL:
-    return df
+    return df.copy()
   else:
     ch_pprocs = COHORT_TO_PPROCS[cohort]
     return df.query("PRIMARY_PROC in @ch_pprocs")
@@ -226,7 +226,7 @@ class Dataset(object):
     if data_case_keys is not None and len(data_case_keys) > 0:
       # filter train_case_keys, depending on 'sda_only', 'surg_only' and 'years' filters
       target_case_keys = self.filter_X_case_keys(data_case_keys, sda_only, surg_only, years)
-      df_by_cohort = self.df.set_index('SURG_CASE_KEY')\
+      df_by_cohort = self.cohort_df.set_index('SURG_CASE_KEY')\
         .loc[target_case_keys].reset_index()\
         .groupby(by=by_cohort)['SURG_CASE_KEY']
       cohort_to_Xy_case_keys = {}
@@ -306,6 +306,7 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
 
   # Filter out rare primary procedure cases, and replace them with the CPT group with max decile
   # for ties, simply use 1 of the 7 tie groups
+  # TODO: track rare_pproc in FtrEng? handle unseen cptgrp; consider update cohort_df
   rare_pproc_to_pr_cptgrp = {}  # rare primary procedure to primary cpt group
 
 
@@ -400,19 +401,18 @@ def get_df_by_case_keys(df, case_keys):
   return df.set_index('SURG_CASE_KEY').loc[case_keys].reset_index()
 
 
-def gen_rare_pproc_Xdf(Xdf: pd.DataFrame, rare_pprocs=None, min_train_cohort_size=40):
+def gen_rare_pproc_Xdf(Xdf: pd.DataFrame, rare_pprocs: Iterable = None, min_train_cohort_size=40):
   if rare_pprocs is None:
     pproc_size = Xdf.groupby(PRIMARY_PROC).size().reset_index(name='pproc_size')
     rare_pproc_df = Xdf.join(pproc_size.set_index(PRIMARY_PROC), on=PRIMARY_PROC, how='left')
     rare_pproc_df = rare_pproc_df[rare_pproc_df['pproc_size'] < min_train_cohort_size]
-    return rare_pproc_df
   else:
-    # Handle Xtest TODO: track rare_pprocs from Xtrain
+    # Handle Xtest: use rare_pprocs from Xtrain
+    rare_pproc_df = Xdf.loc[(Xdf[PRIMARY_PROC].isin(rare_pprocs))]
+  return rare_pproc_df
 
-    return
 
-
-def replace_pproc_with_primary_cptgrp(rare_Xdf: pd.DataFrame, cptgrp_decile: pd.DataFrame):
+def gen_primary_cptgrp_for_rare_pproc_cases(rare_Xdf: pd.DataFrame, cptgrp_decile: pd.DataFrame):
   # explode on cptgroups, join with cptgrp decile, groupby surg key & agg on max without tie breaking
   # if only 1 max decile, use the corresponding cptgroup, else replace with 'CPTGROUP_TIE?' ? = max decile
   print('[pproc <-- pr_cptgrp] Input Xdf case count: ', rare_Xdf['SURG_CASE_KEY'].nunique())
@@ -420,7 +420,7 @@ def replace_pproc_with_primary_cptgrp(rare_Xdf: pd.DataFrame, cptgrp_decile: pd.
     .rename(columns={CPT_GROUPS: CPT_GROUP})  # shouldn't contain na after explosion
   prev_exp_N = rare_Xdf_exp.shape[0]
   rare_Xdf_exp = rare_Xdf_exp.dropna(subset=[CPT_GROUP])
-  assert prev_exp_N == rare_Xdf_exp.shape[0], 'Certain cases have CPT_GROUPS = [] !'
+  assert prev_exp_N == rare_Xdf_exp.shape[0], 'Certain cases have CPT_GROUPS = []!'
 
   # Generate all max CPT group deciles for the exploded Xdf
   rare_Xdf_cptgrp_decile = rare_Xdf_exp.join(cptgrp_decile.set_index(CPT_GROUP), on=CPT_GROUP, how='inner').reset_index(drop=True)
@@ -440,24 +440,36 @@ def replace_pproc_with_primary_cptgrp(rare_Xdf: pd.DataFrame, cptgrp_decile: pd.
     max_decile_cnt[max_decile_cnt[MAX_CPTGRP_DECILE_CNT] == 1], on='SURG_CASE_KEY', how='inner')
   single_max_cptgrp_decile_Xdf[PRIMARY_PROC_CPTGRP] = single_max_cptgrp_decile_Xdf[CPT_GROUP]
 
-  # Cases with multiple cptgrp decile max -- primary_proc_cptgrp = pr_cptgrp_x (x = cptgrp_decile)
+  # Cases with multiple cptgrp decile max -- primary_proc_cptgrp = pr_cptgrp_x, where x = cptgrp_decile
   multi_max_cptgrp_decile_Xdf = rare_Xdf_max_cptgrp_decile.join(
     max_decile_cnt[max_decile_cnt[MAX_CPTGRP_DECILE_CNT] > 1], on='SURG_CASE_KEY', how='inner') \
     .drop_duplicates(subset=['SURG_CASE_KEY', MAX_CPTGRP_DECILE_CNT], keep='first')
   multi_max_cptgrp_decile_Xdf[PRIMARY_PROC_CPTGRP] = multi_max_cptgrp_decile_Xdf[MAX_CPTGRP_DECILE] \
     .apply(lambda x: PR_CPTGRP_X + str(x))
 
-  return single_max_cptgrp_decile_Xdf, multi_max_cptgrp_decile_Xdf
+  # Combine single and multi Xdf --> df[[surg_case_keys, primary_proc_cptgrp]]
+  rare_pproc_Xdf_ret = pd.concat([single_max_cptgrp_decile_Xdf,
+                                  multi_max_cptgrp_decile_Xdf])[['SURG_CASE_KEY', PRIMARY_PROC_CPTGRP]]
+  assert rare_pproc_Xdf_ret['SURG_CASE_KEY'].is_unique, 'SURG_CASE_KEY in rare_pproc_Xdf_ret must be unique!'
+  return rare_pproc_Xdf_ret
 
 # TODO: what if 1 pproc is mapped to multiple primary cpt groups?? -- double check, acceptable I think
 # TODO: when processing Xtest, need to filter out unseen Primary CPTGRP??
-
-
-def update_rare_pproc_with_primary_cptgroup(Xdf: pd.DataFrame):
-  # encompass the above 2 funcs, join case w/ rare pproc with the original Xdf
-
-  return
 # TODO: how to use this? add an arg (e.g. replace_rare_pproc?) in Dataset init?
+
+def add_primary_proc_cptgroup_col(Xdf: pd.DataFrame, cptgrp_decile, rare_pprocs=None, min_train_cohort_size=40):
+  Xdf = Xdf.copy()
+  # 1. Fetch rare primary procedure cases
+  rare_df = gen_rare_pproc_Xdf(Xdf, rare_pprocs=rare_pprocs, min_train_cohort_size=min_train_cohort_size)
+  # 2. Add primary_proc_cptgrp column
+  rare_df_primary_proc_cptgrp = gen_primary_cptgrp_for_rare_pproc_cases(rare_df, cptgrp_decile)
+
+  # 3. Add new column that defaults to values of Primary_proc
+  Xdf.loc[:, PRIMARY_PROC_CPTGRP] = Xdf[PRIMARY_PROC]
+  Xdf = Xdf.set_index('SURG_CASE_KEY')
+  # 4. Replace rare_pproc cases with rare_df_primary_proc_cptgpr
+  Xdf.loc[rare_df_primary_proc_cptgrp['SURG_CASE_KEY'], PRIMARY_PROC_CPTGRP] = rare_df_primary_proc_cptgrp[PRIMARY_PROC_CPTGRP].to_list()
+  return Xdf.reset_index(drop=False), rare_df[PRIMARY_PROC].unique()
 
 
 def preprocess_y(df: pd.DataFrame, outcome, surg_y=False, inplace=False):

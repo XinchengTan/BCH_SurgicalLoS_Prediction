@@ -146,7 +146,7 @@ def show_confmat_of_median_perf_(perf_df, kt_to_confmats, md, Xtype, criterion):
 
 
 def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, scorers=None,
-                           eval_sda_only=False, eval_surg_only=False, years=None, show_confmat=None,
+                           eval_sda_only=False, eval_surg_only=False, years=None, md_to_show_confmat=None,
                            train_perf_df=None, test_perf_df=None):
   model_to_k_confmats_test = defaultdict(dict)  # only for modeling-all, do not support cohort perf yet
   for kt, dataset_k in tqdm(enumerate(k_datasets), total=len(k_datasets)):
@@ -161,14 +161,14 @@ def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, 
       else:
         train_perf_df, test_perf_df, confmat_test, surg_confmat_test = eval_model(
           dataset_k, clf, scorers, trial_i=kt, sda_only=eval_sda_only, surg_only=eval_surg_only, years=years,
-          show_confmat=show_confmat, train_perf_df=train_perf_df, test_perf_df=test_perf_df
+          show_confmat=md_to_show_confmat, train_perf_df=train_perf_df, test_perf_df=test_perf_df
         )
         model_to_k_confmats_test[md][kt] = confmat_test
         model_to_k_confmats_test['Surgeon'][kt] = surg_confmat_test
 
-  if show_confmat:
+  if md_to_show_confmat:
     # show confusion matrix of the median performance
-    show_confmat_of_median_perf_for_mds(test_perf_df, model_to_k_confmats_test, show_confmat, Xtype='Test', criterion=SCR_ACC)
+    show_confmat_of_median_perf_for_mds(test_perf_df, model_to_k_confmats_test, md_to_show_confmat, Xtype='Test', criterion=SCR_ACC)
 
   return train_perf_df, test_perf_df
 
