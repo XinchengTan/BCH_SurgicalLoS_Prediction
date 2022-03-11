@@ -42,9 +42,10 @@ class Dataset(object):
     self.cohort_df = gen_cohort_df(df, cohort)
     print('cohort df shape: ', self.cohort_df.shape)
 
-    # 0. Save pure SDA case keys, and those having surgeon prediction case keys
+    # 0. Save I. pure SDA case keys, II. case keys that have surgeon prediction, III. dict of year to case keys
     self.sda_case_keys = self.gen_sda_case_keys(self.cohort_df)
     self.surg_only_case_keys = self.gen_surg_only_case_keys(self.cohort_df)
+    self.year_to_case_keys = self.gen_year_to_case_keys(self.cohort_df)
 
     # 1. Train-test split
     if test_idxs is None:
@@ -97,6 +98,15 @@ class Dataset(object):
     surg_df = df[df[SPS_PRED].notnull()]
     return surg_df['SURG_CASE_KEY'].unique().astype(int)
 
+  def gen_year_to_case_keys(self, df) -> Dict:
+    year_to_case_keys = {}
+    assert ADMIT_DTM in df.columns, f"Missing column '{ADMIT_DTM}' in the input df!"
+    yr_df = df.loc[:, ['SURG_CASE_KEY', ADMIT_DTM]]
+    yr_df.loc[:, ADMIT_YEAR] = yr_df[ADMIT_DTM].dt.year
+    for yr, df_yr in yr_df.groupby(ADMIT_YEAR):
+      year_to_case_keys[yr] = df_yr['SURG_CASE_KEY'].unique().astype(int)
+    return year_to_case_keys
+
   def scale_Xtrain(self, how='minmax', only_numeric=True):  # ['minmax', 'std', 'robust']  -- only normalize continuous / ordinal features
     if self.train_df_raw is None or self.Xtrain.shape[0] == 0:
       return self.Xtrain
@@ -114,7 +124,7 @@ class Dataset(object):
       self.Xtrain[:, numeric_colidxs] = scaler.fit_transform(self.Xtrain[:, numeric_colidxs])
     else:
       self.Xtrain = scaler.fit_transform(self.Xtrain)
-    self.input_scaler = scaler
+    self.input_scaler = scaler  # TODO: consider save to FeatureEngineer field
     return self.Xtrain
 
   def scale_Xtest(self, scaler=None):
@@ -177,69 +187,72 @@ class Dataset(object):
       self.Xtest, self.ytest, self.test_case_keys = np.array([]), np.array([]), np.array([])
       self.test_cohort_df = self.test_df_raw
 
-  def get_Xytrain_by_case_key(self, query_case_keys):
+  def get_Xytrain_by_case_key(self, query_case_keys, sda_only=False, surg_only=False, years=None):
+    filtered_case_keys = self.filter_X_case_keys(query_case_keys, sda_only=sda_only, surg_only=surg_only, years=years)
     if self.train_case_keys is not None and len(self.train_case_keys) > 0:
-      idxs = np.where(np.in1d(self.train_case_keys, query_case_keys))[0]
+      idxs = np.where(np.in1d(self.train_case_keys, filtered_case_keys))[0]
       return self.Xtrain[idxs, :], self.ytrain[idxs]
     return np.array([]), np.array([])
 
-  def get_Xytest_by_case_key(self, query_case_keys):
+  def get_Xytest_by_case_key(self, query_case_keys, sda_only=False, surg_only=False, years=None):
+    filtered_case_keys = self.filter_X_case_keys(query_case_keys, sda_only=sda_only, surg_only=surg_only, years=years)
     if self.test_case_keys is not None and len(self.test_case_keys) > 0:
-      idxs = np.where(np.in1d(self.test_case_keys, query_case_keys))[0]
+      idxs = np.where(np.in1d(self.test_case_keys, filtered_case_keys))[0]
       return self.Xtest[idxs, :], self.ytest[idxs]
     return np.array([]), np.array([])
 
-  def get_sda_Xytrain(self):
-    if self.train_case_keys is not None and len(self.train_case_keys) > 0:
-      sda_idxs = np.where(np.in1d(self.train_case_keys, self.sda_case_keys))[0]
-      return self.Xtrain[sda_idxs, :], self.ytrain[sda_idxs]
-    return np.array([]), np.array([])
+  def filter_X_case_keys(self, query_case_keys, sda_only=False, surg_only=False, years=None):
+    filtered_case_keys = query_case_keys
+    # Filter query_case_keys to include pure SDA cases
+    if sda_only:
+      filtered_case_keys = np.intersect1d(filtered_case_keys, self.sda_case_keys)
+    # Filter query_case_keys to include only cases with surgeon's prediction
+    if surg_only:
+      filtered_case_keys = np.intersect1d(filtered_case_keys, self.surg_only_case_keys)
+    # Filter query_case_keys to include only cases in particular years
+    if years is not None and len(years) > 0:
+      years_case_keys = np.concatenate([self.year_to_case_keys.get(yr, []) for yr in years])
+      filtered_case_keys = np.intersect1d(filtered_case_keys, years_case_keys)
+    return filtered_case_keys.astype(int)
 
-  def get_sda_Xytest(self):
-    if self.test_case_keys is not None and len(self.test_case_keys) > 0:
-      sda_idxs = np.where(np.in1d(self.test_case_keys, self.sda_case_keys))[0]
-      return self.Xtest[sda_idxs, :], self.ytest[sda_idxs]
-    return np.array([]), np.array([])
+  def get_cohort_to_Xydata_(self, by_cohort, isTrain=True, sda_only=False, surg_only=False, years=None):
+    assert by_cohort in COHORT_TYPE_SET, f"'by_cohort' must be one of f{COHORT_TYPE_SET}"
+    if isTrain:
+      data_case_keys, X, y = self.train_case_keys, self.Xtrain, self.ytrain
+    else:
+      data_case_keys, X, y = self.test_case_keys, self.Xtest, self.ytest
 
-  def get_cohort_to_Xytrains(self, by_cohort) -> Dict:
-    assert by_cohort in {PRIMARY_PROC, SURG_GROUP}
-    if self.train_case_keys is not None and len(self.train_case_keys) > 0:
-      train_df_by_cohort = self.df.set_index('SURG_CASE_KEY').loc[self.train_case_keys].reset_index() \
+    # Generate a mapping between cohort label and the corresponding X, y matrix for modeling
+    if data_case_keys is not None and len(data_case_keys) > 0:
+      # filter train_case_keys, depending on 'sda_only', 'surg_only' and 'years' filters
+      target_case_keys = self.filter_X_case_keys(data_case_keys, sda_only, surg_only, years)
+      df_by_cohort = self.df.set_index('SURG_CASE_KEY')\
+        .loc[target_case_keys].reset_index()\
         .groupby(by=by_cohort)['SURG_CASE_KEY']
       cohort_to_Xdata = {}
-      for cohort, case_keys in train_df_by_cohort:
-        idxs = np.where(np.in1d(self.train_case_keys, case_keys))[0]
-        cohort_to_Xdata[cohort] = (self.Xtrain[idxs, :], self.ytrain[idxs])
+      for cohort, case_keys in df_by_cohort:
+        idxs = np.where(np.in1d(data_case_keys, case_keys))[0]
+        cohort_to_Xdata[cohort] = (X[idxs, :], y[idxs])
       return cohort_to_Xdata
     return {}
 
-  def get_cohort_to_Xytests(self, by_cohort):
-    assert by_cohort in {PRIMARY_PROC, SURG_GROUP}
-    if self.test_case_keys is not None and len(self.test_case_keys) > 0:
-      test_df_by_cohort = self.df.set_index('SURG_CASE_KEY').loc[self.test_case_keys].reset_index() \
-        .groupby(by=by_cohort)['SURG_CASE_KEY']
-      cohort_to_Xdata = {}
-      for cohort, case_keys in test_df_by_cohort:
-        idxs = np.where(np.in1d(self.test_case_keys, case_keys))[0]
-        cohort_to_Xdata[cohort] = (self.Xtest[idxs, :], self.ytest[idxs])
-      return cohort_to_Xdata
-    return {}
+  def get_cohort_to_Xytrains(self, by_cohort, sda_only=False, surg_only=False, years=None) -> Dict:
+    return self.get_cohort_to_Xydata_(by_cohort, isTrain=True, sda_only=sda_only, surg_only=surg_only, years=years)
 
-  def get_surgeon_pred_df_by_case_key(self, query_case_keys):
+  def get_cohort_to_Xytests(self, by_cohort, sda_only=False, surg_only=False, years=None) -> Dict:
+    return self.get_cohort_to_Xydata_(by_cohort, isTrain=False, sda_only=sda_only, surg_only=surg_only, years=years)
+
+  def get_surgeon_pred_df_by_case_key(self, query_case_keys, years=None):
+    # Generates a df with surgeon's prediction along with preprocessed true outcome for filtered query_case_keys
     if query_case_keys is None or len(query_case_keys) == 0:
       return pd.DataFrame(columns=['SURG_CASE_KEY', SPS_PRED])
-    surg_df = self.df[['SURG_CASE_KEY', SPS_PRED, self.outcome, ADMIT_DTM]]\
-      .set_index('SURG_CASE_KEY').loc[query_case_keys].reset_index()
-    surg_df = surg_df[surg_df[SPS_PRED].notnull()]
+    filtered_case_keys = self.filter_X_case_keys(query_case_keys, surg_only=True, years=years)
+    surg_df = self.df.loc[:, ['SURG_CASE_KEY', SPS_PRED, self.outcome]] \
+      .set_index('SURG_CASE_KEY') \
+      .loc[filtered_case_keys, :].reset_index()
     preprocess_y(surg_df, self.outcome, True, inplace=True)  # preprocess surgeon prediction
     preprocess_y(surg_df, self.outcome, False, inplace=True)  # preprocess true outcome
     return surg_df
-
-  def get_year_by_case_key(self, query_case_keys):
-    if query_case_keys is None or len(query_case_keys) == 0:
-      return pd.DataFrame(columns=['SURG_CASE_KEY', 'YEAR', self.outcome])
-    # TODO
-    return
 
   def get_raw_nnt(self, xtype='train'):
     case_keys = self.train_case_keys if xtype.lower() == 'train' else self.test_case_keys
@@ -297,7 +310,7 @@ def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModif
 
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
-  X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy().astype(int)
+  X_case_keys = Xdf['SURG_CASE_KEY'].unique().astype(int)
   if remove_nonnumeric:
     Xdf.drop(columns=NON_NUMERIC_COLS + ftrEng_dep_cols_to_drop, inplace=True, errors='ignore')
   print("\nAfter droppping nonnumeric cols: Xdf - ", Xdf.shape)
@@ -361,7 +374,7 @@ def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeri
   # TODO: Scan for uniform columns
 
   # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
-  X_case_keys = Xdf['SURG_CASE_KEY'].to_numpy().astype(int)
+  X_case_keys = Xdf['SURG_CASE_KEY'].unique().astype(int)
   Xdf.drop(columns=NON_NUMERIC_COLS, inplace=True, errors='ignore')
 
   # Reorder columns such that it aligns with target_features
@@ -395,6 +408,7 @@ def gen_rare_pproc_Xdf(Xdf: pd.DataFrame, rare_pprocs=None, min_train_cohort_siz
     return rare_pproc_df
   else:
     # Handle Xtest TODO: track rare_pprocs from Xtrain
+
     return
 
 
@@ -596,20 +610,3 @@ def gen_o2m_cases(X, y, features, unique=True, save_fp=None, X_case_keys=None):
     o2m_df.to_csv(save_fp, index=False)
   return o2m_df
 
-
-# Get X, y for pure SDA cases and/or cases with a surgeon prediction
-def get_Xys_sda_surg(dataset: Dataset, sda_only, surg_only):
-  if sda_only:
-    query_case_keys = dataset.sda_case_keys
-    if surg_only:
-      query_case_keys = np.intersect1d(query_case_keys, dataset.surg_only_case_keys)
-    Xtrain, ytrain = dataset.get_Xytrain_by_case_key(query_case_keys)
-    Xtest, ytest = dataset.get_Xytest_by_case_key(query_case_keys)
-  else:
-    if surg_only:
-      Xtrain, ytrain = dataset.get_Xytrain_by_case_key(dataset.surg_only_case_keys)
-      Xtest, ytest = dataset.get_Xytest_by_case_key(dataset.surg_only_case_keys)
-    else:
-      Xtrain, ytrain = dataset.Xtrain, dataset.ytrain
-      Xtest, ytest = dataset.Xtest, dataset.ytest
-  return Xtrain, ytrain, Xtest, ytest
