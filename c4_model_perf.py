@@ -246,26 +246,6 @@ def eval_model_by_cohort(dataset: Dataset, clf, scorers=None, cohort_type=SURG_G
   test_perf_df.sort_values(by=['Count', 'Cohort', 'Model'], ascending=False, inplace=True)  # 'accuracy'
   return train_perf_df, test_perf_df
 
-  # for cohort in cohort_to_XyKeys_test:
-  #   Xtest, ytest, cohort_case_keys_test = cohort_to_XyKeys_test.get(cohort, (np.array([]), np.array([]), np.array([])))
-  #   if len(Xtest) > 0:
-  #     test_pred = clf.predict(Xtest)
-  #     test_scores = MyScorer.apply_scorers(scorers, ytest, test_pred)
-  #     class_to_counts = get_class_count(ytest)
-  #     test_perf_df = append_perf_row_generic(
-  #       test_perf_df, test_scores, {**class_to_counts,
-  #                                   **{'Xtype': 'test', 'Cohort': cohort, 'Model': md_name, 'Count': Xtest.shape[0],
-  #                                      'Trial': trial_i, 'Year': year_name}})
-  #     if surg_only:
-  #       test_true_surg_preds = dataset.get_surgeon_pred_df_by_case_key(cohort_case_keys_test, years=years)
-  #       test_scores_surg = MyScorer.apply_scorers(scorers, test_true_surg_preds[dataset.outcome],
-  #                                                 test_true_surg_preds[SPS_PRED])
-  #       test_perf_df = append_perf_row_generic(
-  #         test_perf_df, test_scores_surg, {**class_to_counts,
-  #                                          **{'Xtype': 'test', 'Cohort': cohort, 'Model': 'Surgeon',
-  #                                             'Count': Xtest.shape[0], 'Trial': trial_i, 'Year': year_name}
-  #                                          })
-
 
 # Evaluate model on various groups of cases (e.g. pure SDA cases, cases with surgeon prediction, all cases etc.)
 def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False, surg_only=False, years=None,
