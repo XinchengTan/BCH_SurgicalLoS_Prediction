@@ -25,6 +25,8 @@ class FeatureEngineeringModifier(object):
 
   def discretize_columns_df(self, Xdf: pd.DataFrame, discretize_cols, inplace=False):
     if discretize_cols is None:
+      discretize_cols = self.discretize_cols
+    if discretize_cols is None:
       return Xdf
 
     if not inplace:
@@ -283,7 +285,9 @@ class FeatureEngineeringModifier(object):
                      or x.startswith(MED3)) or x.startswith(MED123), feature_set)))
 
   # Apply one-hot encoding to the designated columns
-  def onehot_encode_cols(self, Xdf, onehot_cols, onehot_dtypes):
+  def onehot_encode_cols(self, Xdf, onehot_cols, onehot_dtypes=None):
+    if onehot_dtypes is None:
+      onehot_dtypes = self.onehot_dtypes
     if onehot_cols is None or onehot_dtypes is None:
       return Xdf
 
@@ -301,7 +305,11 @@ class FeatureEngineeringModifier(object):
       Xdf = Xdf.join(dummies).fillna(0)
     return Xdf
 
-  def trim_ccsr_in_X(self, Xdf, onehot_cols, trimmed_ccsrs):
+  def trim_ccsr_in_X(self, Xdf, onehot_cols=None, trimmed_ccsrs=None):
+    if onehot_cols is None:
+      onehot_cols = self.onehot_cols
+    if trimmed_ccsrs is None:
+      trimmed_ccsrs = self.trimmed_ccsr
     if onehot_cols is None or trimmed_ccsrs is None: return Xdf, onehot_cols
 
     # add a column with only the target set of CCSRs
@@ -338,6 +346,21 @@ class FeatureEngineeringModifier(object):
   def set_decile_gen(self, decile_gen):
     assert isinstance(decile_gen, DecileGenerator), 'Input decile_gen must be a DecileGenerator object!'
     self.decile_generator = decile_gen
+
+  def set_cpt_decile(self, cpt_decile: pd.DataFrame):
+    self.decile_generator.set_cpt_decile(cpt_decile)
+
+  def set_cptgrp_decile(self, cptgrp_decile: pd.DataFrame):
+    self.decile_generator.set_cptgrp_decile(cptgrp_decile)
+
+  def set_ccsr_decile(self, ccsr_decile: pd.DataFrame):
+    self.decile_generator.set_ccsr_decile(ccsr_decile)
+
+  def set_pproc_decile(self, pproc_decile: pd.DataFrame):
+    self.set_pproc_decile(pproc_decile)
+
+  def set_med_decile(self, med_level, med_decile):
+    self.set_med_decile(med_level, med_decile)
 
 
 # Generator of medical complexity of different types of medical codes
@@ -503,3 +526,18 @@ class DecileGenerator(object):
     if save_dir:
       med_decile.to_csv(Path(save_dir) / ('med%d_decile.csv' % level), index=False)
     return med_decile
+
+  def set_cpt_decile(self, cpt_decile: pd.DataFrame):
+    self.cpt_decile = cpt_decile
+
+  def set_cptgrp_decile(self, cptgrp_decile: pd.DataFrame):
+    self.cpt_group_decile = cptgrp_decile
+
+  def set_ccsr_decile(self, ccsr_decile: pd.DataFrame):
+    self.ccsr_decile = ccsr_decile
+
+  def set_med_decile(self, med_level, med_decile):
+    self.med_level2decile[med_level] = med_decile
+
+  def set_pproc_decile(self, pproc_decile):
+    self.pproc_decile = pproc_decile
