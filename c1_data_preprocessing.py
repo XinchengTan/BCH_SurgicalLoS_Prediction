@@ -124,7 +124,7 @@ class Dataset(object):
       self.Xtrain[:, numeric_colidxs] = scaler.fit_transform(self.Xtrain[:, numeric_colidxs])
     else:
       self.Xtrain = scaler.fit_transform(self.Xtrain)
-    self.input_scaler = scaler  # TODO: consider save to FeatureEngineer field
+    self.input_scaler = scaler  # TODO: consider saving to FeatureEngMod field
     return self.Xtrain
 
   def scale_Xtest(self, scaler=None):
