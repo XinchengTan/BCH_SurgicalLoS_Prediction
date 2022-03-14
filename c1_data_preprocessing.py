@@ -25,7 +25,7 @@ def gen_cohort_df(df: pd.DataFrame, cohort):
 class Dataset(object):
 
   def __init__(self, df, outcome=NNT, ftr_cols=FEATURE_COLS, col2decile_ftrs2aggf=None,
-               onehot_cols=[], discretize_cols=None, test_pct=0.2, test_idxs=None, cohort=COHORT_ALL,
+               onehot_cols=[], discretize_cols=None, test_pct=0.2, test_case_keys=None, cohort=COHORT_ALL,
                trimmed_ccsr=None, target_features=None, decile_gen=None, ftr_eng=None, remove_o2m=(True, True),
                scaler=None, scale_numeric_only=True):
     # Check args
@@ -48,7 +48,7 @@ class Dataset(object):
     self.year_to_case_keys = self.gen_year_to_case_keys(self.cohort_df)
 
     # 1. Train-test split
-    if test_idxs is None:
+    if test_case_keys is None:
       if test_pct == 0:
         train_df, test_df = self.cohort_df, None
       elif test_pct == 1:
@@ -59,8 +59,8 @@ class Dataset(object):
       else:
         train_df, test_df = train_test_split(self.cohort_df, test_size=test_pct)
     else:
-      test_df = self.cohort_df.iloc[test_idxs]
-      train_df = self.cohort_df.iloc[list(set(range(self.cohort_df.shape[0])) - set(test_idxs))]
+      test_df = self.cohort_df.set_index('SURG_CASE_KEY').loc[test_case_keys].reset_index(drop=False)
+      train_df = self.cohort_df.loc[~self.cohort_df['SURG_CASE_KEY'].isin(test_case_keys)].reset_index(drop=False)
 
     # 2. Initialize required fields
     self.train_df_raw, self.test_df_raw = train_df, test_df

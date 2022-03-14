@@ -8,10 +8,42 @@ from typing import Dict, List, Tuple
 import joblib
 import numpy as np
 import pandas as pd
+import random
 
 import globals
 from globals import *
 from c1_data_preprocessing import Dataset
+
+
+# Generate ktrials of randomly selected surg_case_keys for test/validation set
+def gen_ktrials_test_surg_case_keys(dashb_df: pd.DataFrame, ktrials=10, test_pct=0.2, save_fp=None) -> Dict:
+  assert dashb_df['SURG_CASE_KEY'].is_unique, 'Input dashb_df contains duplicated surg_case_key!'
+  assert ktrials >= 1, 'ktrials must be a positive int!'
+
+  test_size = int(test_pct * dashb_df.shape[0])
+  kt_test_case_keys = {}
+  for k in range(ktrials):
+    test_case_keys = random.sample(dashb_df['SURG_CASE_KEY'].to_list(), test_size)
+    kt_test_case_keys[k] = test_case_keys
+
+  if save_fp is not None:
+    pd.DataFrame(kt_test_case_keys).to_csv(save_fp)
+  return kt_test_case_keys
+
+
+def gen_ktrial_datasets_from_test_case_keys(dashb_df: pd.DataFrame, kt_test_case_keys, **kwargs):
+  kt_datasets = []
+  decileFtr_aggs = kwargs.get('col2decile_ftrs2aggf', DEFAULT_COL2DECILE_FTR2AGGF)
+  print('\nDecile feature aggregations:')
+  for k, v in decileFtr_aggs.items():
+    print(k, v)
+
+  for test_keys in kt_test_case_keys:
+    dataset_k = Dataset(dashb_df, test_case_keys=test_keys, outcome=NNT, ftr_cols=FEATURE_COLS_NO_WEIGHT_ALLMEDS,
+                        col2decile_ftrs2aggf=decileFtr_aggs, onehot_cols=[CCSRS], discretize_cols=['AGE_AT_PROC_YRS'],
+                        scaler='robust')
+    kt_datasets.append(dataset_k)
+  return kt_datasets
 
 
 # Generate ktrials of shuffled data_df and a set of randomly selected test indices
@@ -131,8 +163,9 @@ def gen_kfolds_datasets(df, kfold, features, shuffle_df=False, outcome=globals.N
   datasets = []
   for k in tqdm(range(kfold)):
     test_idxs = np.arange(int(k * test_pct * N), int((k+1) * test_pct * N))
+    test_keys = df['SURG_CASE_KEY'].to_numpy()[test_idxs]
     dataset_k = Dataset(df, outcome, features, onehot_cols=onehot_cols, discretize_cols=discretize_cols,
-                        col2decile_ftrs2aggf=col2decile_ftr2aggf, cohort=cohort, test_idxs=test_idxs,
+                        col2decile_ftrs2aggf=col2decile_ftr2aggf, cohort=cohort, test_case_keys=test_keys,
                         remove_o2m=remove_o2m, scaler=scaler, scale_numeric_only=scale_numeric_only)
     datasets.append(dataset_k)
 
