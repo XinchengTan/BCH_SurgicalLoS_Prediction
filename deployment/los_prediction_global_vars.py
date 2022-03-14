@@ -51,7 +51,7 @@ NNT_CLASS_CNT = len(NNT_CUTOFFS) + 1
 
 # Model abbrv.
 LGR = 'lgr'
-SVC = 'svc'
+SVCLF = 'svc'
 KNN = 'knn'
 DTCLF = 'dt-clf'
 RMFCLF = 'rmf-clf'

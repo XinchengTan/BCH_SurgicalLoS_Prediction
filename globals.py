@@ -248,7 +248,7 @@ reg2name = {LR: "Linear Regression",
             }
 
 LGR = 'lgr'
-SVC = 'svc'
+SVCLF = 'svc'
 KNN = 'knn'
 KNNCV = 'knn-cv'
 DTCLF = 'dt'
@@ -281,7 +281,7 @@ clf2name_eval[SURGEON] = "Surgeon Prediction"
 
 
 binclf2name = {LGR: "Logistic Regression",
-               SVC: "Support Vector Classifier",
+               SVCLF: "Support Vector Classifier",
                DTCLF: "Decision Tree Classifier",
                RMFCLF: "Random Forest Classifier",
                GBCLF: "Gradient Boosting Classifier",

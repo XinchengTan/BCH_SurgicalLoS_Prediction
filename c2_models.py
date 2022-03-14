@@ -158,16 +158,16 @@ def get_model(model, cls_weight='balanced'):
     #                            cv=5)
   elif model == PR:
     clf = RegressionBasedClassifier(PR, alpha=0.01, max_iter=300)
-  elif model == SVC:
+  elif model == SVCLF:
     clf = SVC(gamma='auto', class_weight=cls_weight, probability=False)
   elif model == KNN:
-    clf = KNeighborsClassifier(n_neighbors=25)
+    clf = KNeighborsClassifier(n_neighbors=50)
   elif model == KNNCV:
     clf = KNeighborsClassifierCV({'n_neighbors': np.arange(5, 41, 5)})
   elif model == DTCLF:
     clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight=cls_weight)
   elif model == RMFCLF:
-    clf = RandomForestClassifier(random_state=0, class_weight=cls_weight)
+    clf = RandomForestClassifier(random_state=0, max_depth=20, class_weight=cls_weight)
   elif model == GBCLF:
     clf = GradientBoostingClassifier(random_state=0, max_depth=3)
   elif model == XGBCLF:
@@ -193,7 +193,7 @@ def get_model_by_cohort(model, cls_weight='balanced', cohort=None):
     #                            cv=5)
   elif model == PR:
     clf = RegressionBasedClassifier(PR, alpha=0.01, max_iter=300)
-  elif model == SVC:
+  elif model == SVCLF:
     clf = SVC(gamma='auto', class_weight=cls_weight, probability=False)
   elif model == KNN:
     clf = KNeighborsClassifierCV({'n_neighbors': np.arange(4, 16)})
@@ -221,7 +221,7 @@ def get_model_by_cohort(model, cls_weight='balanced', cohort=None):
 def train_model(md, params, X, y):
   if md == LGR:
     clf = LogisticRegression(random_state=SEED)
-  elif md == SVC:
+  elif md == SVCLF:
     clf = SVC(random_state=SEED, probability=True)
   elif md == KNN:
     clf = KNeighborsClassifier()
@@ -279,7 +279,7 @@ def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search
                    'l1_ratio': [0, 0.01, 0.03, 0.1, 0.3, 0.5, 0.8, 0.9, 0.95, 0.99, 1],
                    'class_weight': [None, 'balanced']}
     clf = LogisticRegression(random_state=SEED, penalty='elasticnet', solver='saga', max_iter=300)
-  elif md == SVC:
+  elif md == SVCLF:
     clf = SVC(random_state=SEED, probability=False)
     param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'gamma': sorted(list({1 / n_frts, 1, 0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001})),
