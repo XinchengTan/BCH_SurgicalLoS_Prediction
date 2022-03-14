@@ -11,16 +11,67 @@ from c2_models import get_model_by_cohort, SafeOneClassWrapper
 from c9_cohort_modeling_perf import eval_cohort_clf
 
 
-# helper function to filter dashb_df by cohort count
+# helper function to filter dashb_df by cohort count (keep cases whose cohart has >= 'min_cohort_size' count)
 def filter_df_by_cohort_count(dashb_df: pd.DataFrame,  cohort_col: str, min_cohort_size: int):
   cohort_groupby = dashb_df.groupby(cohort_col)
   if min_cohort_size > 1:
     filtered_cohort = cohort_groupby.filter(lambda x: len(x) >= min_cohort_size)
     return filtered_cohort
-  return dashb_df
+  return pd.DataFrame(dashb_df)
 
 
-# TODO: use case keys instead of idxs!!!!!
+def gen_ktrial_cohort_test_case_keys(dashb_df: pd.DataFrame, cohort_type: str, min_cohort_size=50,
+                                     ktrials=10, test_pct=0.2):
+  assert cohort_type in COHORT_TYPE_SET, f'cohort_col must be one of [{COHORT_TYPE_SET}]!'
+  assert cohort_type in dashb_df.columns, f'{cohort_type} must exist in dashb_df columns!'
+  assert dashb_df['SURG_CASE_KEY'].is_unique, 'Input dashb_df contains duplicated surg_case_key!'
+  assert min_cohort_size >= 1, 'min_cohort_size must be a positive int!'
+  assert ktrials >= 1, 'ktrials must be a positive int!'
+
+  # Filter data df by thresholding cohort size
+  cohort_df = filter_df_by_cohort_count(dashb_df, cohort_type, min_cohort_size)
+
+  # Generate k randomized trials of train-test split, tracking test case surg_case_keys
+  kt_test_surg_case_keys = {}
+  for kt in range(ktrials):
+    # generate each mini set of test case keys independently?
+    pass
+
+  return kt_test_surg_case_keys
+
+
+# Generate k trials of Dataset object for each cohort from k trials of combined test case keys
+def gen_pproc_ktrial_datasets_from_combined_test_case_keys(dashb_df: pd.DataFrame, kt_test_case_keys: Dict[Iterable],
+                                                           cohort_type: str, min_cohort_size=50):
+  assert cohort_type in COHORT_TYPE_SET, f'cohort_col must be one of [{COHORT_TYPE_SET}]!'
+  assert cohort_type in dashb_df.columns, f'{cohort_type} must exist in dashb_df columns!'
+  assert dashb_df['SURG_CASE_KEY'].is_unique, 'Input dashb_df contains duplicated surg_case_key!'
+  assert min_cohort_size >= 1, 'min_cohort_size must be a positive int!'
+
+  # Filter data df by thresholding cohort size
+  cohort_df = filter_df_by_cohort_count(dashb_df, cohort_type, min_cohort_size)
+
+  kt_datasets = {}
+  for kt, test_case_keys in kt_test_case_keys.items():
+    if cohort_type == PRIMARY_PROC_CPTGRP:
+      # 1. create a Dataset object based on each combined test case keys --> get primary_proc_cptgrp col
+      # 2. create train_df, test_df from cohort_df & test_case_keys, then add the primary_proc_cptgrp col from 1.
+      # 3. Combine each cohort's train_df, test_df --> data_df, and then use test_case_keys to construct Dataset
+      pass
+    else:
+      kt_test_df = cohort_df.set_index('SURG_CASE_KEY').loc[test_case_keys].reset_index(drop=False)
+      # Iterate through each cohort in groupby of kt_test_df by cohort_type, construct Dataset object from test_case_keys
+
+    pass
+  return kt_datasets
+
+
+def gen_pproc_ktrial_datasets_from_cohortwise_test_case_keys(data_df: pd.DataFrame):
+
+  return
+
+
+# TODO: use case keys instead of idxs; once done, remove this function!!!
 # Generate 'ktrials' of cohort-to-test-indices mapping, save the shuffled dashb_df as well
 def gen_ktrial_cohort_test_idxs(dashb_df: pd.DataFrame, cohort_col: str, min_cohort_size=50, ktrials=10, test_pct=0.2):
   assert cohort_col in {SURG_GROUP, PRIMARY_PROC}, f'cohort_col must be one of [{SURG_GROUP, PRIMARY_PROC}]!'
@@ -44,14 +95,6 @@ def gen_ktrial_cohort_test_idxs(dashb_df: pd.DataFrame, cohort_col: str, min_coh
     kt_cohort2testIdxs.append(cohort2testIdxs)
 
   return kt_pprocDf, kt_cohort2testIdxs
-
-
-# TODO: finish me
-def gen_pproc_ktrial_datasets_from_test_case_keys(data_df: pd.DataFrame, kt_test_case_keys: List[Iterable]):
-  kt_datasets = []
-  for kt, test_case_keys in enumerate(kt_test_case_keys):
-    pass
-  return
 
 
 # TODO: use case keys instead of idxs!!!!!

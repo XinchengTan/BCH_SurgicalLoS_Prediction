@@ -20,6 +20,8 @@ def get_year_label(years) -> str:
   else:
     return str(years[0])
 
+
+# If certain evaluation metrics does not apply, display -1
 def get_placeholder_perf_scores_dict(scorers: List) -> Dict:
   return {s: -1.0 for s in scorers}
 
