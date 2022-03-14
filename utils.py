@@ -24,7 +24,7 @@ def gen_ktrials_test_surg_case_keys(dashb_df: pd.DataFrame, ktrials=10, test_pct
   kt_test_case_keys = {}
   for k in range(ktrials):
     test_case_keys = random.sample(dashb_df['SURG_CASE_KEY'].to_list(), test_size)
-    kt_test_case_keys[k] = test_case_keys
+    kt_test_case_keys[k] = np.array(test_case_keys)
 
   if save_fp is not None:
     pd.DataFrame(kt_test_case_keys).to_csv(save_fp)

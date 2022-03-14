@@ -69,13 +69,13 @@ class Dataset(object):
     self.o2m_df_train = None
     self.feature_names = None
     if ftr_eng is None:
-      self.FeatureEngineer = FeatureEngineeringModifier(
+      self.FeatureEngMod = FeatureEngineeringModifier(
         onehot_cols, onehot_dtypes, trimmed_ccsr, discretize_cols, col2decile_ftrs2aggf)
     else:
       assert ftr_eng.__class__.__name__ == 'FeatureEngineeringModifier', 'ftr_eng must be of type FeatureEngineeringModifier!'
-      self.FeatureEngineer = ftr_eng  # when test_pct = 1
+      self.FeatureEngMod = ftr_eng  # when test_pct = 1
     if decile_gen is not None:
-      self.FeatureEngineer.set_decile_gen(decile_gen)  # when test_pct = 1
+      self.FeatureEngMod.set_decile_gen(decile_gen)  # when test_pct = 1
 
     # 3. Preprocess train & test data
     self.preprocess_train(outcome, ftr_cols, remove_o2m_train=remove_o2m[0])
@@ -151,7 +151,7 @@ class Dataset(object):
 
       # Modify data matrix
       self.Xtrain, self.feature_names, self.train_case_keys, self.ytrain, self.o2m_df_train = preprocess_Xtrain(
-        train_df, outcome, ftr_cols, self.FeatureEngineer, remove_o2m=remove_o2m_train)
+        train_df, outcome, ftr_cols, self.FeatureEngMod, remove_o2m=remove_o2m_train)
       self.train_cohort_df = self.train_df_raw.set_index('SURG_CASE_KEY').loc[self.train_case_keys]
     else:
       self.Xtrain, self.ytrain, self.train_case_keys = np.array([]), np.array([]), np.array([])
@@ -180,7 +180,7 @@ class Dataset(object):
           raise ValueError("target_features cannot be None when test_pct = 1!")
 
       self.Xtest, _, self.test_case_keys = preprocess_Xtest(test_df, self.feature_names, ftr_cols,
-                                                            ftrEng=self.FeatureEngineer, skip_cases_df_or_fp=o2m_df)
+                                                            ftrEng=self.FeatureEngMod, skip_cases_df_or_fp=o2m_df)
       self.test_cohort_df = test_df.set_index('SURG_CASE_KEY').loc[self.test_case_keys]
       self.ytest = np.array(self.test_cohort_df[outcome])
     else:
