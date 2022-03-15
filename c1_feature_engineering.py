@@ -11,7 +11,7 @@ class FeatureEngineeringModifier(object):
 
   def __init__(self, onehot_cols=None, onehot_dtypes=None, trimmed_ccsr=None, discretize_cols=None,
                col2decile_ftrs2aggf=DEFAULT_COL2DECILE_FTR2AGGF, decile_outcome=LOS,
-               add_hybrid_pproc_cptgrp_col=False, rare_pprocs=None):
+               add_hybrid_pproc_cptgrp_col=False, rare_pprocs=None, rare_pproc_cptgrp_cohorts=None):
     self.onehot_cols, self.onehot_dtypes = onehot_cols, onehot_dtypes
     self.trimmed_ccsr = trimmed_ccsr
     self.discretize_cols = discretize_cols
@@ -19,6 +19,7 @@ class FeatureEngineeringModifier(object):
     self.decile_outcome = decile_outcome
     self.add_hybrid_pproc_cptgrp_col = add_hybrid_pproc_cptgrp_col
     self.rare_pprocs = rare_pprocs
+    self.rare_pproc_cptgrp_cohorts = rare_pproc_cptgrp_cohorts
     self.decile_generator = DecileGenerator()
     self.miles_nan_replacer = None
 
@@ -374,6 +375,9 @@ class FeatureEngineeringModifier(object):
 
   def set_rare_pprocs(self, rare_pprocs):
     self.rare_pprocs = rare_pprocs
+
+  def set_rare_pproc_cptgrp_cohorts(self, rare_pproc_cptgrp):
+    self.rare_pproc_cptgrp_cohorts = rare_pproc_cptgrp
 
 
 # Generator of medical complexity of different types of medical codes
