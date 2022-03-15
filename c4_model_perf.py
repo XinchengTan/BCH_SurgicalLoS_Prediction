@@ -347,11 +347,16 @@ def append_perf_row_surg(surg_perf_df: pd.DataFrame, trial, scores_row_dict):
   return surg_perf_df
 
 
-def summarize_clf_perfs(perf_df: pd.DataFrame, Xtype, sort_by=['accuracy_mean']):
-  print(f'[{Xtype}] Model performance summary:')
+def to_numeric_count_cols(perf_df: pd.DataFrame):
   for col in perf_df.columns:
     if col.startswith('Count'):
       perf_df[col] = pd.to_numeric(perf_df[col])
+  return perf_df
+
+
+def summarize_clf_perfs(perf_df: pd.DataFrame, Xtype, sort_by=['accuracy_mean']):
+  print(f'[{Xtype}] Model performance summary:')
+  perf_df = to_numeric_count_cols(perf_df)
 
   # Group by md, aggregate across trial
   clf_perfs = pd.merge(perf_df.groupby(by=['Model', 'Cohort', 'Year']).mean().reset_index(),
