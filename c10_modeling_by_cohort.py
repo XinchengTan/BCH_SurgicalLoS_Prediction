@@ -89,7 +89,7 @@ def gen_ktrial_cohort2datasets_from_combined_test_case_keys(dashb_df: pd.DataFra
   return kt_cohort2datasets
 
 
-
+# Train a particular type of model on each cohort individually
 def train_cohort_clf(md, class_weight, cohort_to_dataset, sda_only=False, surg_only=False, years=None):
   cohort_to_clf = {}
   for cohort, dataset in cohort_to_dataset.items():
@@ -106,6 +106,7 @@ def train_cohort_clf(md, class_weight, cohort_to_dataset, sda_only=False, surg_o
   return cohort_to_clf
 
 
+# Train models cohort-wise for k trials
 def cohort_modeling_ktrials(decileFtr_config, models: Iterable, kt_cohort2dataset: Dict[int, Iterable],
                             sda_only=False, surg_only=False, years=None):
   # print decile agg funcs
@@ -121,10 +122,10 @@ def cohort_modeling_ktrials(decileFtr_config, models: Iterable, kt_cohort2datase
       cohort2clf = train_cohort_clf(md=md, class_weight=None, cohort_to_dataset=cohort2dataset,
                                     sda_only=sda_only, surg_only=surg_only)
       kt_md2cohort2clf[kt][md] = cohort2clf
-
   return kt_md2cohort2clf
 
 
+# Entry point of evaluating k trials of cohort-wise modeling
 def cohortwise_modeling_ktrials_eval(models: Iterable,
                                      kt_md2cohort2clf: Dict[int, Dict],
                                      kt_cohort2dataset: Dict[int, Iterable],
@@ -133,7 +134,7 @@ def cohortwise_modeling_ktrials_eval(models: Iterable,
   for kt, cohort2dataset in tqdm(kt_cohort2dataset.items()):
     for md in models:
       train_perf_df, test_perf_df = eval_cohort_clf(
-        cohort2dataset, kt_md2cohort2clf[kt][md], None, kt, years=years, surg_only=surg_only,
+        cohort2dataset, kt_md2cohort2clf[kt][md], None, kt, sda_only=sda_only, surg_only=surg_only, years=years,
         train_perf_df=train_perf_df, test_perf_df=test_perf_df
       )
 

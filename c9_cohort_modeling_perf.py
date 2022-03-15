@@ -51,7 +51,7 @@ def add_surgeon_cohort_perf(cohort, clf, dataset: Dataset, Xtype, scorers, trial
 
 
 def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[str, Any], scorers: List = None,
-                    trial_i=None, surg_only=False, years=None, train_perf_df=None, test_perf_df=None):
+                    trial_i=None, sda_only=False, surg_only=False, years=None, train_perf_df=None, test_perf_df=None):
   if scorers is None:
     scorers = deepcopy(DEFAULT_SCORERS)
   outcome_type = list(cohort_to_dataset.values())[0].outcome
@@ -64,9 +64,14 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
 
   # For each cohort dataset, evaluate the performance of the model trained specifically from its Xtrain
   for cohort, dataset in cohort_to_dataset.items():
+    # TODO: enable surg_only, sda_only flags
+    Xtrain, ytrain = dataset.get_Xytrain_by_case_key(dataset.train_case_keys,
+                                                     sda_only=sda_only, surg_only=surg_only, years=years)
+    Xtest, ytest = dataset.get_Xytest_by_case_key(dataset.test_case_keys,
+                                                  sda_only=sda_only, surg_only=surg_only, years=years)
     clf = cohort_to_clf.get(cohort)
-    if clf is not None:
-      train_pred, test_pred = clf.predict(dataset.Xtrain), clf.predict(dataset.Xtest)
+    if (clf is not None) and (Xtrain.shape[0] > 0 and Xtest.shape[0] > 0):
+      train_pred, test_pred = clf.predict(Xtrain), clf.predict(Xtest)
       md_name = get_clf_name(clf)
       label_to_xgb_cls = None
       if 'XGB' in md_name:
@@ -79,17 +84,18 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
         print(cohort, 'training', set(train_pred), set(dataset.ytrain))
       if not set(test_pred).issubset(np.unique(dataset.ytrain).astype(np.float)):
         print(label_to_xgb_cls)
-        print('!!![c9]', cohort, 'test', set(test_pred), set(dataset.ytest))
-      train_score_dict = MyScorer.apply_scorers(scorers, dataset.ytrain, train_pred)
+        print('!!![c9]', cohort, 'test', set(test_pred), set(ytest))
+      # apply and save eval scores
+      train_score_dict = MyScorer.apply_scorers(scorers, ytrain, train_pred)
       train_perf_df = append_perf_row_generic(
-        train_perf_df, train_score_dict, {**get_class_count(dataset.ytrain),
+        train_perf_df, train_score_dict, {**get_class_count(ytrain),
                                           **{'Xtype': 'train', 'Cohort': cohort, 'Model': md_name,
-                                             'Count': dataset.Xtrain.shape[0], 'Trial': trial_i, 'Year': year_label}})
-      test_score_dict = MyScorer.apply_scorers(scorers, dataset.ytest, test_pred)
+                                             'Count': Xtrain.shape[0], 'Trial': trial_i, 'Year': year_label}})
+      test_score_dict = MyScorer.apply_scorers(scorers, ytest, test_pred)
       test_perf_df = append_perf_row_generic(
-        test_perf_df, test_score_dict, {**get_class_count(dataset.ytest),
+        test_perf_df, test_score_dict, {**get_class_count(ytest),
                                         **{'Xtype': 'test', 'Cohort': cohort, 'Model': md_name,
-                                           'Count': dataset.Xtest.shape[0], 'Trial': trial_i, 'Year': year_label}})
+                                           'Count': Xtest.shape[0], 'Trial': trial_i, 'Year': year_label}})
       if surg_only:
         train_perf_df = add_surgeon_cohort_perf(cohort, clf, dataset, 'train', scorers, trial_i, years, train_perf_df)
         test_perf_df = add_surgeon_cohort_perf(cohort, clf, dataset, 'test', scorers, trial_i, years, test_perf_df)
@@ -104,7 +110,7 @@ def summarize_cohortwise_modeling_perf(perf_df: pd.DataFrame, Xtype, models=None
   print(f'{Xtype} set performance by cohort:')
 
   if models is not None:
-    perf_df = perf_df.loc[perf_df['Model'].isin(models)]
+    perf_df = perf_df.loc[perf_df['Model'].isin(models)]  # TODO: separate out surgeon pred from aggregation
 
   # Obtain overall perf eval (groupby trial and model and compile cohort perf into 1 row for overall perf)
   no_cohort_col_list = perf_df.columns.to_list()
@@ -167,6 +173,17 @@ def summarize_cohortwise_modeling_perf(perf_df: pd.DataFrame, Xtype, models=None
   print('\n**Overall performance: ')
   display(format_perf_df(overall_perf))
   print('\n**Best clfs Overall performance:')
-  display(pd.DataFrame({'Mean': best_overall_perf.mean(), 'Std': best_overall_perf.std()}))
+  best_overall_perf_df = pd.DataFrame({'Mean': best_overall_perf.mean(), 'Std': best_overall_perf.std()})
+  formatters = {"accuracy": lambda x: f"{x:.1%}", SCR_ACC_ERR1: lambda x: f"{x:.1%}",
+                SCR_OVERPRED: lambda x: f"{x:.1%}", SCR_UNDERPRED: lambda x: f"{x:.1%}", SCR_RMSE: lambda x: f"{x:.2f}",}
+  display(format_row_wise(best_overall_perf_df.style, formatters))
   return best_clf_perf, overall_perf, best_overall_perf
 
+
+def format_row_wise(styler, formatter):
+  for row, row_formatter in formatter.items():
+    row_num = styler.index.get_loc(row)
+
+    for col_num in range(len(styler.columns)):
+      styler._display_funcs[(row_num, col_num)] = row_formatter
+  return styler
