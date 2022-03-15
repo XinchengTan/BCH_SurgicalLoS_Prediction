@@ -27,7 +27,7 @@ class Dataset(object):
   def __init__(self, df, outcome=NNT, ftr_cols=FEATURE_COLS, col2decile_ftrs2aggf=None,
                onehot_cols=[], discretize_cols=None, test_pct=0.2, test_case_keys=None, cohort=COHORT_ALL,
                trimmed_ccsr=None, target_features=None, decile_gen=None, ftr_eng: FeatureEngineeringModifier=None,
-               add_hybrid_pproc_cptgrp_col=False, rare_pprocs=None, rare_pproc_cptgrp_cohorts=None,
+               add_hybrid_pproc_cptgrp_col=False, nonrare_pprocs=None, rare_pproc_cptgrp_cohorts=None,
                remove_o2m=(True, True), scaler=None, scale_numeric_only=True):
     # Check args
     assert all(oh in ONEHOT_COL2DTYPE.keys() for oh in onehot_cols), \
@@ -73,7 +73,7 @@ class Dataset(object):
     if ftr_eng is None:
       self.FeatureEngMod = FeatureEngineeringModifier(
         onehot_cols, onehot_dtypes, trimmed_ccsr, discretize_cols, col2decile_ftrs2aggf, decile_outcome=LOS,
-        add_hybrid_pproc_cptgrp_col=add_hybrid_pproc_cptgrp_col, rare_pprocs=rare_pprocs,
+        add_hybrid_pproc_cptgrp_col=add_hybrid_pproc_cptgrp_col, nonrare_pprocs=nonrare_pprocs,
         rare_pproc_cptgrp_cohorts=rare_pproc_cptgrp_cohorts)
     else:
       assert ftr_eng.__class__.__name__ == 'FeatureEngineeringModifier', 'ftr_eng must be of type FeatureEngineeringModifier!'
@@ -290,20 +290,20 @@ class Dataset(object):
         print('generated CPT group decile!')
       # Filter out rare primary procedure cases, and replace them with the CPT group with max decile
       # -- for ties, simply use one of the 'MAX_NNT + 2' decile groups
-      X_keys_hybrid_col_df, rare_pprocs, rare_pproc_cptgrp = gen_primary_proc_cptgroup_col_for_case_keys(
+      X_keys_hybrid_col_df, nonrare_pprocs, rare_pproc_cptgrp = gen_primary_proc_cptgroup_col_for_case_keys(
         Xdf,
         cptgrp_decile=cptgrp_decile,
-        rare_pprocs=None,
+        nonrare_pprocs=None,
         rare_hybrid_cohorts=None,
         min_train_cohort_size=40)
       # Update record keeping fields
-      self.FeatureEngMod.set_rare_pprocs(rare_pprocs)
+      self.FeatureEngMod.set_nonrare_pprocs(nonrare_pprocs)
       self.FeatureEngMod.set_rare_pproc_cptgrp_cohorts(rare_pproc_cptgrp)
     else:
       X_keys_hybrid_col_df, _, _ = gen_primary_proc_cptgroup_col_for_case_keys(
         Xdf,
         cptgrp_decile=cptgrp_decile,
-        rare_pprocs=self.FeatureEngMod.rare_pprocs,
+        nonrare_pprocs=self.FeatureEngMod.nonrare_pprocs,
         rare_hybrid_cohorts=self.FeatureEngMod.rare_pproc_cptgrp_cohorts)
 
     print(f'\n***[gen_hybrid_cohort_col - {"train" if is_train else "test"}] '
@@ -459,15 +459,13 @@ def get_df_by_case_keys(df, case_keys):
   return df.set_index('SURG_CASE_KEY').loc[case_keys].reset_index()
 
 
-def gen_rare_pproc_Xdf(Xdf: pd.DataFrame, rare_pprocs: Iterable = None, min_train_cohort_size=40):
-  if rare_pprocs is None:
-    pproc_size = Xdf.groupby(PRIMARY_PROC).size().reset_index(name='pproc_size')
-    rare_pproc_df = Xdf.join(pproc_size.set_index(PRIMARY_PROC), on=PRIMARY_PROC, how='left')
-    rare_pproc_df = rare_pproc_df[rare_pproc_df['pproc_size'] < min_train_cohort_size]
-  else:
-    # Handle Xtest: use rare_pprocs from Xtrain
-    rare_pproc_df = Xdf.loc[(Xdf[PRIMARY_PROC].isin(rare_pprocs))]
-  return rare_pproc_df
+def gen_rare_pproc_Xdf(Xdf: pd.DataFrame, nonrare_pprocs: Iterable = None, min_cohort_size=40):
+  if nonrare_pprocs is None:
+    pproc_to_size = Xdf.groupby(PRIMARY_PROC).size().reset_index(name='pproc_size')
+    nonrare_pprocs = pproc_to_size[pproc_to_size['pproc_size'] >= min_cohort_size][PRIMARY_PROC].unique()
+  # Handle Xtest: use rare_pprocs from Xtrain
+  rare_pproc_df = Xdf.loc[(~Xdf[PRIMARY_PROC].isin(nonrare_pprocs))]
+  return rare_pproc_df, nonrare_pprocs
 
 
 # Generate primary CPT group for rare primary procedure cases, returns a df [surg_case_keys, primary_proc_cptgrp]
@@ -533,7 +531,7 @@ def filter_by_hybrid_cohort_size(rare_df_pproc_cptgrp: pd.DataFrame, rare_cohort
 
 
 # Generate a new cohort label column that is a hybrid of primary proccedure (pproc) and CPT group for rare pproc cases
-def gen_primary_proc_cptgroup_col_for_case_keys(Xdf: pd.DataFrame, cptgrp_decile, rare_pprocs=None,
+def gen_primary_proc_cptgroup_col_for_case_keys(Xdf: pd.DataFrame, cptgrp_decile, nonrare_pprocs=None,
                                                 rare_hybrid_cohorts=None, min_train_cohort_size=40):
   assert 'SURG_CASE_KEY' in Xdf.columns, 'SURG_CASE_KEY must be in Xdf columns!'
   assert PRIMARY_PROC in Xdf.columns, f'{PRIMARY_PROC} must be in Xdf columns!'
@@ -542,7 +540,7 @@ def gen_primary_proc_cptgroup_col_for_case_keys(Xdf: pd.DataFrame, cptgrp_decile
   Xdf = Xdf[['SURG_CASE_KEY', PRIMARY_PROC, CPT_GROUPS]].copy()
 
   # 1. Fetch rare primary procedure cases
-  rare_df = gen_rare_pproc_Xdf(Xdf, rare_pprocs=rare_pprocs, min_train_cohort_size=min_train_cohort_size)
+  rare_df, nonrare_pprocs = gen_rare_pproc_Xdf(Xdf, nonrare_pprocs=nonrare_pprocs, min_cohort_size=min_train_cohort_size)
   # 2. Add primary_proc_cptgrp column
   rare_df_pproc_cptgrp = gen_primary_cptgrp_for_rare_pproc_cases(rare_df, cptgrp_decile)
   # 3. Apply count filter again to drop the cases that are rare under the hybrid cohort grouping
@@ -550,6 +548,7 @@ def gen_primary_proc_cptgroup_col_for_case_keys(Xdf: pd.DataFrame, cptgrp_decile
     rare_df_pproc_cptgrp, rare_cohorts=rare_hybrid_cohorts, min_cohort_size=min_train_cohort_size)
 
   # 4. Add new column that defaults to values of Primary_proc
+  Xdf = Xdf.loc[(Xdf['SURG_CASE_KEY'].isin(filtered_df_pproc_cptgrp['SURG_CASE_KEY']) | Xdf[PRIMARY_PROC].isin(nonrare_pprocs))]
   Xdf.loc[:, PRIMARY_PROC_CPTGRP] = Xdf[PRIMARY_PROC]
   Xdf = Xdf.set_index('SURG_CASE_KEY')
   # TODO: fix me by updating Xdf with rare + filtered non-rare cases!
@@ -558,7 +557,7 @@ def gen_primary_proc_cptgroup_col_for_case_keys(Xdf: pd.DataFrame, cptgrp_decile
 
   # Output Xdf: [surg_case_key, primary_proc_cptgrp]
   return Xdf.reset_index(drop=False)[['SURG_CASE_KEY', PRIMARY_PROC_CPTGRP]], \
-         rare_df[PRIMARY_PROC].unique(), \
+         nonrare_pprocs, \
          rare_hybrid_cohorts
 
 
