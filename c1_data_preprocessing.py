@@ -515,9 +515,9 @@ def gen_primary_cptgrp_for_rare_pproc_cases(rare_Xdf: pd.DataFrame, cptgrp_decil
 
 # TODO: what if 1 pproc is mapped to multiple primary cpt groups?? -- double check, acceptable I think
 # TODO: when processing Xtest, need to filter out unseen Primary CPTGRP??
-# TODO: how to use this? add an arg (e.g. replace_rare_pproc?) in Dataset init?
 
 
+# Filter rare_df_pproc_cptgrp by the hybrid cohort size, exluding rare cohorts under hybrid grouping
 def filter_by_hybrid_cohort_size(rare_df_pproc_cptgrp: pd.DataFrame, rare_cohorts: Iterable = None, min_cohort_size=40):
   if rare_cohorts is None:  # dealing with Xtrain
     cohort_to_size = rare_df_pproc_cptgrp.groupby(PRIMARY_PROC_CPTGRP).size().reset_index(name='cohort_size')
@@ -548,11 +548,12 @@ def gen_primary_proc_cptgroup_col_for_case_keys(Xdf: pd.DataFrame, cptgrp_decile
     rare_df_pproc_cptgrp, rare_cohorts=rare_hybrid_cohorts, min_cohort_size=min_train_cohort_size)
 
   # 4. Add new column that defaults to values of Primary_proc
-  Xdf = Xdf.loc[(Xdf['SURG_CASE_KEY'].isin(filtered_df_pproc_cptgrp['SURG_CASE_KEY']) | Xdf[PRIMARY_PROC].isin(nonrare_pprocs))]
+  Xdf = Xdf.loc[(Xdf['SURG_CASE_KEY'].isin(filtered_df_pproc_cptgrp['SURG_CASE_KEY'])
+                 | Xdf[PRIMARY_PROC].isin(nonrare_pprocs))]\
+    .set_index('SURG_CASE_KEY')
+
+  # 5. Add hybrid column by replacing rare_pproc cases with primary_proc_cptgrp
   Xdf.loc[:, PRIMARY_PROC_CPTGRP] = Xdf[PRIMARY_PROC]
-  Xdf = Xdf.set_index('SURG_CASE_KEY')
-  # TODO: fix me by updating Xdf with rare + filtered non-rare cases!
-  # 5. Replace rare_pproc cases with rare_df_primary_proc_cptgpr
   Xdf.loc[filtered_df_pproc_cptgrp['SURG_CASE_KEY'], PRIMARY_PROC_CPTGRP] = filtered_df_pproc_cptgrp[PRIMARY_PROC_CPTGRP].to_list()
 
   # Output Xdf: [surg_case_key, primary_proc_cptgrp]
