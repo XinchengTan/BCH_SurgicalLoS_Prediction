@@ -10,12 +10,15 @@ from globals import *
 class FeatureEngineeringModifier(object):
 
   def __init__(self, onehot_cols=None, onehot_dtypes=None, trimmed_ccsr=None, discretize_cols=None,
-               col2decile_ftrs2aggf=DEFAULT_COL2DECILE_FTR2AGGF, decile_outcome=LOS):
+               col2decile_ftrs2aggf=DEFAULT_COL2DECILE_FTR2AGGF, decile_outcome=LOS,
+               add_hybrid_pproc_cptgrp_col=False, rare_pprocs=None):
     self.onehot_cols, self.onehot_dtypes = onehot_cols, onehot_dtypes
     self.trimmed_ccsr = trimmed_ccsr
     self.discretize_cols = discretize_cols
     self.col2decile_ftr2aggf = col2decile_ftrs2aggf
     self.decile_outcome = decile_outcome
+    self.add_hybrid_pproc_cptgrp_col = add_hybrid_pproc_cptgrp_col
+    self.rare_pprocs = rare_pprocs
     self.decile_generator = DecileGenerator()
     self.miles_nan_replacer = None
 
@@ -23,7 +26,7 @@ class FeatureEngineeringModifier(object):
     # TODO: FINISH THIS
     return
 
-  def discretize_columns_df(self, Xdf: pd.DataFrame, discretize_cols, inplace=False):
+  def discretize_columns_df(self, Xdf: pd.DataFrame, discretize_cols=None, inplace=False):
     if discretize_cols is None:
       discretize_cols = self.discretize_cols
     if discretize_cols is None:
@@ -333,6 +336,11 @@ class FeatureEngineeringModifier(object):
       "Field 'decile_generator' must be a DecileGenerator object!"
     return self.decile_generator.cpt_decile
 
+  def get_cptgrp_decile(self):
+    assert isinstance(self.decile_generator, DecileGenerator), \
+      "Field 'decile_generator' must be a DecileGenerator object!"
+    return self.decile_generator.cpt_group_decile
+
   def get_med_decile(self, level):
     assert isinstance(self.decile_generator, DecileGenerator), \
       "Field 'decile_generator' must be a DecileGenerator object!"
@@ -361,6 +369,9 @@ class FeatureEngineeringModifier(object):
 
   def set_med_decile(self, med_level, med_decile):
     self.set_med_decile(med_level, med_decile)
+
+  def set_rare_pprocs(self, rare_pprocs):
+    self.rare_pprocs = rare_pprocs
 
 
 # Generator of medical complexity of different types of medical codes
