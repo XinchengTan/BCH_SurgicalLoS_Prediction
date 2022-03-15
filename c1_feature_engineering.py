@@ -128,7 +128,7 @@ class FeatureEngineeringModifier(object):
     #   Xdf = Xdf[Xdf[WEIGHT_ZS].notnull()]
     #   print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {WEIGHT_ZS}")
     #   prevN = Xdf.shape[0]
-    # TODO: get columns that end with '_SD' and filter out NA entries, or assign 0?
+    # TODO: get columns that end with '_SD' and filter out NA entries, or assign 0? -- currently usin ddof=0
 
     print('Xdf shape after handling NAs: ', Xdf.shape)
     return Xdf
@@ -249,9 +249,10 @@ class FeatureEngineeringModifier(object):
   def match_Xdf_cols_to_target_features(self, Xdf: pd.DataFrame, target_features):
     Xdf_cols = Xdf.columns.to_list()
 
-    # Drop rows that has certain indicator columns not covered in the target feature list (e.g. an unseen CPT code)
+    # Drop rows that have certain indicator columns not covered in the target feature list (e.g. an unseen CPT code)
     new_ftrs = set(Xdf_cols) - set(target_features) - set(NON_NUMERIC_COLS)
-    # TODO: think about how to handle different types of unseen codes (e.g. always drop if pproc is unseen, but unseen CCSR/CPT could be fine)
+    # TODO: think about how to handle different types of unseen codes
+    #       e.g. always drop if pproc is unseen, but unseen CCSR/CPT could be fine
     if len(new_ftrs) > 0:
       case_idxs_with_new_ftrs = set()
       for new_ftr in new_ftrs:
@@ -265,7 +266,7 @@ class FeatureEngineeringModifier(object):
       if Xdf.shape[0] == 0:
         warnings.warn("All cases in this dataset contain at least 1 unseen indicator!")
 
-    # Add unobserved indicators as columns of 0
+    # Add unobserved indicators as columns of 0 (placeholder value to match the observations in Xtrain)
     uncovered_ftrs = set(target_features) - set(Xdf_cols)
     Xdf[list(uncovered_ftrs)] = 0.0
     self._print_feature_match_details(uncovered_ftrs, 'uncovered')
@@ -316,14 +317,15 @@ class FeatureEngineeringModifier(object):
     if onehot_cols is None or trimmed_ccsrs is None: return Xdf, onehot_cols
 
     # add a column with only the target set of CCSRs
-    if 'CCSRS' in onehot_cols:
-      Xdf['Trimmed_CCSRS'] = Xdf['CCSRS'].apply(lambda row: [cc for cc in row if cc in trimmed_ccsrs])
-      onehot_cols = list(map(lambda item: item.replace('CCSRS', 'Trimmed_CCSRS'), onehot_cols))
+    if CCSRS in onehot_cols:
+      Xdf['Trimmed_CCSRS'] = Xdf[CCSRS].apply(lambda row: [cc for cc in row if cc in trimmed_ccsrs])
+      onehot_cols = list(map(lambda item: item.replace(CCSRS, 'Trimmed_CCSRS'), onehot_cols))
     # add a column with only the ICD10s of the target CCSR set
     if 'ICD10S' in onehot_cols:
       Xdf['Trimmed_ICD10S'] = Xdf[['CCSRS', 'ICD10S']].apply(
         lambda row: [row['ICD10S'][i] for i in range(len(row['ICD10S'])) if row['CCSRS'][i] in trimmed_ccsrs], axis=1)
       onehot_cols = list(map(lambda item: item.replace('ICD10S', 'Trimmed_ICD10S'), onehot_cols))
+    # Note: self.onehot_cols should have been updated, given how array referencing works in Python
     return Xdf, onehot_cols
 
   def get_ccsr_decile(self):

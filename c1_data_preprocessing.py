@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from time import time
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Any
 
 from globals import *
 from c1_feature_engineering import FeatureEngineeringModifier, DecileGenerator
@@ -26,7 +26,8 @@ class Dataset(object):
 
   def __init__(self, df, outcome=NNT, ftr_cols=FEATURE_COLS, col2decile_ftrs2aggf=None,
                onehot_cols=[], discretize_cols=None, test_pct=0.2, test_case_keys=None, cohort=COHORT_ALL,
-               trimmed_ccsr=None, target_features=None, decile_gen=None, ftr_eng=None, remove_o2m=(True, True),
+               trimmed_ccsr=None, target_features=None, decile_gen=None, ftr_eng: FeatureEngineeringModifier=None,
+               add_hybrid_pproc_cptgrp_col=False, rare_pprocs=None, remove_o2m=(True, True),
                scaler=None, scale_numeric_only=True):
     # Check args
     assert all(oh in ONEHOT_COL2DTYPE.keys() for oh in onehot_cols), \
@@ -68,9 +69,11 @@ class Dataset(object):
     self.Xtest, self.ytest, self.test_case_keys, self.test_cohort_df = None, None, None, None
     self.o2m_df_train = None
     self.feature_names = None
+    self.rare_pproc_cases_to_hybrid_col = pd.DataFrame(columns=['SURG_CASE_KEY', PRIMARY_PROC_CPTGRP])
     if ftr_eng is None:
       self.FeatureEngMod = FeatureEngineeringModifier(
-        onehot_cols, onehot_dtypes, trimmed_ccsr, discretize_cols, col2decile_ftrs2aggf)
+        onehot_cols, onehot_dtypes, trimmed_ccsr, discretize_cols, col2decile_ftrs2aggf, decile_outcome=LOS,
+        add_hybrid_pproc_cptgrp_col=add_hybrid_pproc_cptgrp_col, rare_pprocs=rare_pprocs)
     else:
       assert ftr_eng.__class__.__name__ == 'FeatureEngineeringModifier', 'ftr_eng must be of type FeatureEngineeringModifier!'
       self.FeatureEngMod = ftr_eng  # when test_pct = 1
@@ -80,6 +83,7 @@ class Dataset(object):
     # 3. Preprocess train & test data
     self.preprocess_train(outcome, ftr_cols, remove_o2m_train=remove_o2m[0])
     self.preprocess_test(outcome, ftr_cols, target_features, remove_o2m_test=remove_o2m[1])
+    self.left_join_add_new_col_to_dfs(self.rare_pproc_cases_to_hybrid_col, is_train=None)  # update cohort_df
 
     # 4. Apply data matrix scaling (e.g. normalization, standardization)
     self.input_scaler = scaler
@@ -147,12 +151,13 @@ class Dataset(object):
       # Preprocess outcome values / SPS prediction in df
       train_df = preprocess_y(self.train_df_raw, outcome, inplace=False)
       if SPS_PRED in train_df.columns:
-        train_df = preprocess_y(train_df, outcome, surg_y=True)
+        preprocess_y(train_df, outcome, surg_y=True, inplace=True)
 
       # Modify data matrix
-      self.Xtrain, self.feature_names, self.train_case_keys, self.ytrain, self.o2m_df_train = preprocess_Xtrain(
-        train_df, outcome, ftr_cols, self.FeatureEngMod, remove_o2m=remove_o2m_train)
-      self.train_cohort_df = self.train_df_raw.set_index('SURG_CASE_KEY').loc[self.train_case_keys]
+      self.Xtrain, self.feature_names, self.train_case_keys, self.ytrain, self.o2m_df_train = self._preprocess_Xtrain(
+        train_df, outcome, ftr_cols, remove_o2m=remove_o2m_train)
+      self.train_cohort_df = train_df.set_index('SURG_CASE_KEY').loc[self.train_case_keys]
+      self.left_join_add_new_col_to_dfs(self.rare_pproc_cases_to_hybrid_col, is_train=True)
     else:
       self.Xtrain, self.ytrain, self.train_case_keys = np.array([]), np.array([]), np.array([])
       self.train_cohort_df = self.train_df_raw
@@ -162,7 +167,7 @@ class Dataset(object):
     # II. Preprocess test set, if it's not empty
     if self.test_df_raw is not None:
       # Preprocess ytest & sps prediction
-      test_df = preprocess_y(self.test_df_raw, outcome)
+      test_df = preprocess_y(self.test_df_raw, outcome, inplace=False)
       preprocess_y(test_df, outcome, surg_y=True, inplace=True)
 
       if isinstance(remove_o2m_test, pd.DataFrame):
@@ -179,10 +184,11 @@ class Dataset(object):
         if self.feature_names is None:
           raise ValueError("target_features cannot be None when test_pct = 1!")
 
-      self.Xtest, _, self.test_case_keys = preprocess_Xtest(test_df, self.feature_names, ftr_cols,
-                                                            ftrEng=self.FeatureEngMod, skip_cases_df_or_fp=o2m_df)
+      self.Xtest, _, self.test_case_keys = self._preprocess_Xtest(test_df, self.feature_names, ftr_cols,
+                                                                  skip_cases_df_or_fp=o2m_df)
       self.test_cohort_df = test_df.set_index('SURG_CASE_KEY').loc[self.test_case_keys]
       self.ytest = np.array(self.test_cohort_df[outcome])
+      self.left_join_add_new_col_to_dfs(self.rare_pproc_cases_to_hybrid_col, is_train=False)
     else:
       self.Xtest, self.ytest, self.test_case_keys = np.array([]), np.array([]), np.array([])
       self.test_cohort_df = self.test_df_raw
@@ -221,20 +227,22 @@ class Dataset(object):
       data_case_keys, X, y = self.train_case_keys, self.Xtrain, self.ytrain
     else:
       data_case_keys, X, y = self.test_case_keys, self.Xtest, self.ytest
+    # Return empty dict if data is empty
+    if data_case_keys is None or len(data_case_keys) == 0:
+      return {}
 
-    # Generate a mapping between cohort label and the corresponding X, y matrix for modeling
-    if data_case_keys is not None and len(data_case_keys) > 0:
-      # filter train_case_keys, depending on 'sda_only', 'surg_only' and 'years' filters
-      target_case_keys = self.filter_X_case_keys(data_case_keys, sda_only, surg_only, years)
-      df_by_cohort = self.cohort_df.set_index('SURG_CASE_KEY')\
-        .loc[target_case_keys].reset_index()\
-        .groupby(by=by_cohort)['SURG_CASE_KEY']
-      cohort_to_Xy_case_keys = {}
-      for cohort, case_keys in df_by_cohort:
-        idxs = np.where(np.in1d(data_case_keys, case_keys))[0]
-        cohort_to_Xy_case_keys[cohort] = (X[idxs, :], y[idxs], data_case_keys[idxs])
-      return cohort_to_Xy_case_keys
-    return {}
+    # 1. Filter train_case_keys, depending on 'sda_only', 'surg_only' and 'years' filters
+    target_case_keys = self.filter_X_case_keys(data_case_keys, sda_only, surg_only, years)
+
+    # 2. Generate a mapping between cohort label and the corresponding X, y matrix for modeling
+    df_by_cohort = self.cohort_df.set_index('SURG_CASE_KEY')\
+      .loc[target_case_keys].reset_index()\
+      .groupby(by=by_cohort)['SURG_CASE_KEY']
+    cohort_to_Xy_case_keys = {}
+    for cohort, coh_case_keys in df_by_cohort:
+      idxs = np.where(np.in1d(data_case_keys, coh_case_keys))[0]
+      cohort_to_Xy_case_keys[cohort] = (X[idxs, :], y[idxs], data_case_keys[idxs])
+    return cohort_to_Xy_case_keys
 
   def get_cohort_to_Xytrains(self, by_cohort, sda_only=False, surg_only=False, years=None) -> Dict:
     return self.get_cohort_to_Xydata_(by_cohort, isTrain=True, sda_only=sda_only, surg_only=surg_only, years=years)
@@ -259,142 +267,184 @@ class Dataset(object):
     df = self.df.set_index('SURG_CASE_KEY').loc[case_keys]
     return df[NNT]
 
+  def left_join_add_new_col_to_dfs(self, new_col_df: pd.DataFrame, is_train: Any = True):
+    if new_col_df is None or new_col_df.empty:
+      return
+    if is_train is None:
+      self.cohort_df = self.cohort_df.join(new_col_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='left')
+    elif is_train:
+      self.train_df_raw = self.train_df_raw.join(new_col_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='left')
+      self.train_cohort_df = self.train_cohort_df.join(new_col_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='left')
+    else:
+      self.test_df_raw = self.test_df_raw.join(new_col_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='left')
+      self.test_cohort_df = self.test_cohort_df.join(new_col_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='left')
+
+  def gen_hybrid_pproc_cptgrp_col(self, Xdf, is_train=True):
+    if is_train:
+      cptgrp_decile = self.FeatureEngMod.get_cptgrp_decile()
+      if cptgrp_decile is None:
+        cptgrp_decile = self.FeatureEngMod.decile_generator.gen_cpt_group_decile(Xdf, self.FeatureEngMod.decile_outcome)
+        self.FeatureEngMod.set_cptgrp_decile(cptgrp_decile)
+        print('generated CPT group decile!')
+      # Filter out rare primary procedure cases, and replace them with the CPT group with max decile
+      # -- for ties, simply use one of the 'MAX_NNT + 2' decile groups
+      X_keys_hybrid_col_df, rare_pprocs = gen_primary_proc_cptgroup_col_for_case_keys(Xdf, cptgrp_decile, None,
+                                                                                      min_train_cohort_size=40)
+      # Update record keeping fields
+      self.FeatureEngMod.set_rare_pprocs(rare_pprocs)
+    else:
+      # TODO: handle unseen cptgrp in test set; consider update cohort_df
+      X_keys_hybrid_col_df, _ = gen_primary_proc_cptgroup_col_for_case_keys(Xdf, self.FeatureEngMod.get_cptgrp_decile(),
+                                                                            self.FeatureEngMod.rare_pprocs)
+
+    print(f'***[gen_hybrid_cohort_col - {"train" if is_train else "test"}] '
+          f'Input Xdf #cases: {Xdf.shape[0]}; '
+          f'Output X_keys_hybrid_col_df #cases: {X_keys_hybrid_col_df.shape[0]}')  # should be equal for Xtrain
+    return X_keys_hybrid_col_df
+
+  def _preprocess_Xtrain(self, df, outcome, feature_cols, remove_nonnumeric=True, verbose=False, remove_o2m=True):
+    train_cohort_df = None
+    # Make data matrix X numeric
+    ftrEng_dep_cols_to_drop = [self.outcome]  # dependent columns for data cleaning / feature engineering
+    if STATE not in feature_cols:
+      ftrEng_dep_cols_to_drop.append(STATE)
+    # Force add primary proc & cpt groups column if either is not in feature_cols, then drop from df after finished
+    if self.FeatureEngMod.add_hybrid_pproc_cptgrp_col:
+      if PRIMARY_PROC not in feature_cols:
+        ftrEng_dep_cols_to_drop.append(PRIMARY_PROC)
+      if CPT_GROUPS not in feature_cols:
+        ftrEng_dep_cols_to_drop.append(CPT_GROUPS)
+    Xdf = df.copy()[feature_cols + ftrEng_dep_cols_to_drop]
+
+    # Handle NaNs -- only remove NAs if the nullable column IS IN 'feature_cols'
+    # Note that removed cases would not be accounted for in decile calculation that follows
+    Xdf = self.FeatureEngMod.handle_nans(Xdf)
+
+    # Discard unwanted CCSRs, such that onehot_cols would contain the column 'Trimmed_CCSRS' instead of 'CCSRS'
+    Xdf, onehot_cols = self.FeatureEngMod.trim_ccsr_in_X(Xdf)
+
+    # Encode categorical variables
+    Xdf = self.FeatureEngMod.dummy_code_discrete_cols(Xdf)
+
+    # Discretize certain continuous columns by request
+    self.FeatureEngMod.discretize_columns_df(Xdf, inplace=True)
+
+    # One-hot encode indicator variables
+    Xdf = self.FeatureEngMod.onehot_encode_cols(Xdf, onehot_cols)  # onehot_dtypes should have been specified in FeatureEngMod
+
+    # Generate decile features
+    s = time()
+    decile_cols = self.FeatureEngMod.decile_generator.gen_decile_cols(Xdf, self.FeatureEngMod.decile_outcome,
+                                                                      self.FeatureEngMod.col2decile_ftr2aggf)
+    # Add decile-related columns to Xdf
+    Xdf = self.FeatureEngMod.join_with_all_deciles(Xdf)
+    print("\nAfter adding decile cols: Xdf - ", Xdf.shape)
+    print('Took %d sec to generate & add all decile features' % (time() - s))
+
+    # Define hybrid cohort, by request
+    # Additionally generate CPT Group decile, if this is not meant to be a feature in Xdata
+    if self.FeatureEngMod.add_hybrid_pproc_cptgrp_col:
+      X_keys_hybrid_col_df = self.gen_hybrid_pproc_cptgrp_col(Xdf, is_train=True)
+      # Save hybrid cohort col to the following field to later update df fields once all data preprocessing steps are done
+      self.rare_pproc_cases_to_hybrid_col = pd.concat([self.rare_pproc_cases_to_hybrid_col, X_keys_hybrid_col_df])
+
+    # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
+    X_case_keys = Xdf['SURG_CASE_KEY'].unique().astype(int)
+    if remove_nonnumeric:
+      Xdf.drop(columns=NON_NUMERIC_COLS + ftrEng_dep_cols_to_drop, inplace=True, errors='ignore')
+    print("\nAfter droppping nonnumeric cols: Xdf - ", Xdf.shape)
+    # Convert dataframe to numerical numpy matrix and save the corresponding features' names
+    X = Xdf.to_numpy(dtype=np.float64)
+    target_features = Xdf.columns.to_list()
+
+    # Remove cases that have multiple possible outcomes
+    o2m_df, y = None, df.set_index('SURG_CASE_KEY').loc[X_case_keys][outcome].to_numpy()
+    if remove_o2m:
+      s = time()
+      o2m_df, X, X_case_keys, y = discard_o2m_cases_from_self(X, X_case_keys, y, target_features)  # training set
+      print("\nRemoving o2m cases from self took %d sec" % (time() - s))
+      # TODO: ??? regenerate decile if o2m_df.shape[0] > 0
+    print('\nAfter removing o2m cases: X - ', X.shape)
+
+    if verbose:
+      display(pd.DataFrame(X, columns=target_features).head(20))
+
+    assert len(X_case_keys) == len(np.unique(X_case_keys)), 'Xrain contains duplicated case keys!'
+    assert X.shape[1] == len(target_features), 'Generated data matrix has %d features, but feature list has %d items' % \
+                                               (X.shape[1], len(target_features))  # Basic sanity check
+    return X, target_features, X_case_keys, y, o2m_df
+
+  # Data preprocessing (clean, discretize and one-hot encode certain features)
+  def _preprocess_Xtest(self, df, target_features, feature_cols, skip_cases_df_or_fp=None):
+    # Get target feature names from training data
+    if skip_cases_df_or_fp is None:
+      skip_cases_df = None
+    elif isinstance(skip_cases_df_or_fp, pd.DataFrame):
+      skip_cases_df = skip_cases_df_or_fp
+    else:
+      skip_cases_df = pd.read_csv(skip_cases_df_or_fp)
+
+    Xdf = df.copy()[feature_cols]
+
+    # Handle NAs
+    Xdf = self.FeatureEngMod.handle_nans(Xdf, isTrain=False)
+
+    # Add a column of trimmed CCSRs with/without a column of the corresponding trimmed ICD10s
+    Xdf, onehot_cols = self.FeatureEngMod.trim_ccsr_in_X(Xdf)
+
+    # Make data matrix X numeric
+    Xdf = self.FeatureEngMod.dummy_code_discrete_cols(Xdf)
+
+    # Discretize certain continuous columns by request
+    self.FeatureEngMod.discretize_columns_df(Xdf, inplace=True)
+
+    if onehot_cols is not None:
+      # One-hot encode the required columns according to a given historical set of features (e.g. CPT, CCSR etc.)
+      Xdf = self.FeatureEngMod.onehot_encode_cols(Xdf, onehot_cols)
+
+      # Match Xdf to the target features from the training data matrix (for now, only medical codes lead to such need)
+      Xdf = self.FeatureEngMod.match_Xdf_cols_to_target_features(Xdf, target_features)
+
+    # Join with existing deciles (do this step before match_Xdf_cols_to_target_features())
+    Xdf = self.FeatureEngMod.join_with_all_deciles(Xdf, self.FeatureEngMod.col2decile_ftr2aggf)
+
+    # Define hybrid cohort, by request
+    if self.FeatureEngMod.add_hybrid_pproc_cptgrp_col:
+      X_keys_hybrid_col_df = self.gen_hybrid_pproc_cptgrp_col(Xdf, is_train=True)
+      # Save hybrid cohort col to the following field to later update df fields once all data preprocessing steps are done
+      self.rare_pproc_cases_to_hybrid_col = pd.concat([self.rare_pproc_cases_to_hybrid_col, X_keys_hybrid_col_df])
+      # If certain cases are filtered out (e.g. due to unseen cpt group), update Xdf accordingly!
+      if X_keys_hybrid_col_df.shape[0] < Xdf.shape[0]:
+        Xdf = Xdf.loc[Xdf['SURG_CASE_KEY'].isin(X_keys_hybrid_col_df['SURG_CASE_KEY'].to_list())]
+
+    # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
+    X_case_keys = Xdf['SURG_CASE_KEY'].unique().astype(int)
+    Xdf.drop(columns=NON_NUMERIC_COLS, inplace=True, errors='ignore')
+
+    # Reorder columns such that it aligns with target_features
+    Xdf = Xdf[target_features]
+
+    # Convert feature-engineered data matrix to numerical numpy array
+    X = Xdf.to_numpy(dtype=np.float64)
+
+    # Remove cases identical to any in skip_cases, update X_case_keys correspondingly
+    if (skip_cases_df is not None) and (not skip_cases_df.empty):
+      s = time()
+      X, X_case_keys = discard_o2m_cases_from_historical_data(X, X_case_keys, skip_cases_df)
+      print("Removing o2m cases according to training set took %d sec" % (time() - s))
+
+    # Basic sanity check
+    assert len(X_case_keys) == len(np.unique(X_case_keys)), 'Xtest contains duplicated case keys!'
+    assert X.shape[1] == len(target_features), 'Generated data matrix has %d features, but feature list has %d items' % \
+                                               (X.shape[1], len(target_features))
+    return X, target_features, X_case_keys
+
   def __str__(self):
     res = "Training set size: %d\n" \
           "Test set size: %d\n"\
           "Number of features: %d\n\n" % (self.ytrain.shape[0], self.ytest.shape[0], len(self.feature_names))
     res += "Feature names: \n" + "\n".join(self.feature_names)
     return res
-
-# TODO: primary cpt
-def preprocess_Xtrain(df, outcome, feature_cols, ftrEng: FeatureEngineeringModifier,
-                      remove_nonnumeric=True, verbose=False, remove_o2m=True):
-  # Make data matrix X numeric
-  ftrEng_dep_cols_to_drop = [ftrEng.decile_outcome]  # dependent columns for data cleaning / feature engineering
-  if STATE not in feature_cols:
-    ftrEng_dep_cols_to_drop.append(STATE)
-  Xdf = df.copy()[feature_cols + ftrEng_dep_cols_to_drop]
-
-  # Handle NaNs -- only remove NAs if the nullable column IS IN 'feature_cols'
-  Xdf = ftrEng.handle_nans(Xdf)
-
-  # Discard unwanted CCSRs
-  Xdf, onehot_cols = ftrEng.trim_ccsr_in_X(Xdf, ftrEng.onehot_cols, ftrEng.trimmed_ccsr)
-
-  # Encode categorical variables
-  Xdf = ftrEng.dummy_code_discrete_cols(Xdf)
-
-  # Discretize certain continuous columns by request
-  ftrEng.discretize_columns_df(Xdf, ftrEng.discretize_cols, inplace=True)
-
-  # One-hot encode indicator variables
-  Xdf = ftrEng.onehot_encode_cols(Xdf, onehot_cols, ftrEng.onehot_dtypes)
-
-  # Generate deciles
-  s = time()
-  decile_cols = ftrEng.decile_generator.gen_decile_cols(Xdf, ftrEng.decile_outcome, ftrEng.col2decile_ftr2aggf)
-  # Generate CPT Group decile if this is not meant to be a feature in Xdata
-  cptgrp_decile = ftrEng.decile_generator.gen_cpt_group_decile(Xdf, ftrEng.decile_outcome)
-  # if CPT_GROUP not in ftrEng.col2decile_ftr2aggf.keys():
-  #   print('generated CPT group decile!')
-  ftrEng.decile_generator.cpt_group_decile = cptgrp_decile
-  print('Took %d sec to generate all deciles' % (time() - s))
-
-  # Add decile-related columns to Xdf
-  Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
-  print("\nAfter adding decile cols: Xdf - ", Xdf.shape)
-
-  # Filter out rare primary procedure cases, and replace them with the CPT group with max decile
-  # for ties, simply use 1 of the 7 tie groups
-  # TODO: track rare_pproc in FtrEng? handle unseen cptgrp; consider update cohort_df
-  rare_pproc_to_pr_cptgrp = {}  # rare primary procedure to primary cpt group
-
-
-  # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
-  X_case_keys = Xdf['SURG_CASE_KEY'].unique().astype(int)
-  if remove_nonnumeric:
-    Xdf.drop(columns=NON_NUMERIC_COLS + ftrEng_dep_cols_to_drop, inplace=True, errors='ignore')
-  print("\nAfter droppping nonnumeric cols: Xdf - ", Xdf.shape)
-  # Convert dataframe to numerical numpy matrix and save the corresponding features' names
-  X = Xdf.to_numpy(dtype=np.float64)
-  target_features = Xdf.columns.to_list()
-
-  # Remove cases that have multiple possible outcomes
-  o2m_df, y = None, df.set_index('SURG_CASE_KEY').loc[X_case_keys][outcome].to_numpy()
-  if remove_o2m:
-    s = time()
-    o2m_df, X, X_case_keys, y = discard_o2m_cases_from_self(X, X_case_keys, y, target_features)  # training set
-    print("\nRemoving o2m cases from self took %d sec" % (time() - s))
-    # TODO: ??? regenerate decile if o2m_df.shape[0] > 0
-  print('\nAfter removing o2m cases: X - ', X.shape)
-
-  if verbose:
-    display(pd.DataFrame(X, columns=target_features).head(20))
-
-  assert len(X_case_keys) == len(np.unique(X_case_keys)), 'Xrain contains duplicated case keys!'
-  assert X.shape[1] == len(target_features), 'Generated data matrix has %d features, but feature list has %d items' % \
-                                             (X.shape[1], len(target_features))  # Basic sanity check
-  return X, target_features, X_case_keys, y, o2m_df
-
-
-# TODO: primary cpt
-# Data preprocessing (clean, discretize and one-hot encode certain features)
-def preprocess_Xtest(df, target_features, feature_cols, ftrEng: FeatureEngineeringModifier, skip_cases_df_or_fp=None):
-  # Get target feature names from training data
-  if skip_cases_df_or_fp is None:
-    skip_cases_df = None
-  elif isinstance(skip_cases_df_or_fp, pd.DataFrame):
-    skip_cases_df = skip_cases_df_or_fp
-  else:
-    skip_cases_df = pd.read_csv(skip_cases_df_or_fp)
-
-  Xdf = df.copy()[feature_cols]
-
-  # Handle NAs
-  Xdf = ftrEng.handle_nans(Xdf, isTrain=False)
-
-  # Add a column of trimmed CCSRs with/without a column of the corresponding trimmed ICD10s
-  Xdf, onehot_cols = ftrEng.trim_ccsr_in_X(Xdf, ftrEng.onehot_cols, ftrEng.trimmed_ccsr)
-
-  # Make data matrix X numeric
-  Xdf = ftrEng.dummy_code_discrete_cols(Xdf)
-
-  # Discretize certain continuous columns by request
-  ftrEng.discretize_columns_df(Xdf, ftrEng.discretize_cols, inplace=True)
-
-  if onehot_cols is not None:
-    # One-hot encode the required columns according to a given historical set of features (e.g. CPT, CCSR etc.)
-    Xdf = ftrEng.onehot_encode_cols(Xdf, onehot_cols, ftrEng.onehot_dtypes)
-
-    # Match Xdf to the target features from the training data matrix (for now, only medical codes lead to such need)
-    Xdf = ftrEng.match_Xdf_cols_to_target_features(Xdf, target_features)
-
-  # Join with existing deciles (do this step before match_Xdf_cols_to_target_features())
-  Xdf = ftrEng.join_with_all_deciles(Xdf, ftrEng.col2decile_ftr2aggf)
-
-  # TODO: Scan for uniform columns
-
-  # Save SURG_CASE_KEY, but drop with other non-numeric columns for data matrix
-  X_case_keys = Xdf['SURG_CASE_KEY'].unique().astype(int)
-  Xdf.drop(columns=NON_NUMERIC_COLS, inplace=True, errors='ignore')
-
-  # Reorder columns such that it aligns with target_features
-  Xdf = Xdf[target_features]
-
-  # Convert feature-engineered data matrix to numerical numpy array
-  X = Xdf.to_numpy(dtype=np.float64)
-
-  # Remove cases identical to any in skip_cases, update X_case_keys correspondingly
-  if (skip_cases_df is not None) and (not skip_cases_df.empty):
-    s = time()
-    X, X_case_keys = discard_o2m_cases_from_historical_data(X, X_case_keys, skip_cases_df)
-    print("Removing o2m cases according to training set took %d sec" % (time() - s))
-
-  # Basic sanity check
-  assert len(X_case_keys) == len(np.unique(X_case_keys)), 'Xtest contains duplicated case keys!'
-  assert X.shape[1] == len(target_features), 'Generated data matrix has %d features, but feature list has %d items' % \
-                                             (X.shape[1], len(target_features))
-  return X, target_features, X_case_keys
 
 
 def get_df_by_case_keys(df, case_keys):
@@ -412,6 +462,7 @@ def gen_rare_pproc_Xdf(Xdf: pd.DataFrame, rare_pprocs: Iterable = None, min_trai
   return rare_pproc_df
 
 
+# Generate primary CPT group for rare primary procedure cases, returns a df [surg_case_keys, primary_proc_cptgrp]
 def gen_primary_cptgrp_for_rare_pproc_cases(rare_Xdf: pd.DataFrame, cptgrp_decile: pd.DataFrame):
   # explode on cptgroups, join with cptgrp decile, groupby surg key & agg on max without tie breaking
   # if only 1 max decile, use the corresponding cptgroup, else replace with 'CPTGROUP_TIE?' ? = max decile
@@ -420,11 +471,14 @@ def gen_primary_cptgrp_for_rare_pproc_cases(rare_Xdf: pd.DataFrame, cptgrp_decil
     .rename(columns={CPT_GROUPS: CPT_GROUP})  # shouldn't contain na after explosion
   prev_exp_N = rare_Xdf_exp.shape[0]
   rare_Xdf_exp = rare_Xdf_exp.dropna(subset=[CPT_GROUP])
-  assert prev_exp_N == rare_Xdf_exp.shape[0], 'Certain cases have CPT_GROUPS = []!'
+  assert prev_exp_N == rare_Xdf_exp.shape[0], 'Certain cases have an empty list for CPT_GROUPS!'
 
   # Generate all max CPT group deciles for the exploded Xdf
-  rare_Xdf_cptgrp_decile = rare_Xdf_exp.join(cptgrp_decile.set_index(CPT_GROUP), on=CPT_GROUP, how='inner').reset_index(drop=True)
-  max_mask = rare_Xdf_cptgrp_decile.groupby('SURG_CASE_KEY')[CPT_GROUP_DECILE].apply(lambda x: x == x.max())  # do not break tie
+  rare_Xdf_cptgrp_decile = rare_Xdf_exp.join(cptgrp_decile.set_index(CPT_GROUP),
+                                             on=CPT_GROUP,
+                                             how='inner').reset_index(drop=True)  # auto drop unseen cpt group in Xtest
+  # do not break ties
+  max_mask = rare_Xdf_cptgrp_decile.groupby('SURG_CASE_KEY')[CPT_GROUP_DECILE].apply(lambda x: x == x.max())
   MAX_CPTGRP_DECILE = 'MAX_' + CPT_GROUP_DECILE
   MAX_CPTGRP_DECILE_CNT = MAX_CPTGRP_DECILE + '_COUNT'
   rare_Xdf_max_cptgrp_decile = rare_Xdf_cptgrp_decile[max_mask].rename(columns={CPT_GROUP_DECILE: MAX_CPTGRP_DECILE})
@@ -457,19 +511,29 @@ def gen_primary_cptgrp_for_rare_pproc_cases(rare_Xdf: pd.DataFrame, cptgrp_decil
 # TODO: when processing Xtest, need to filter out unseen Primary CPTGRP??
 # TODO: how to use this? add an arg (e.g. replace_rare_pproc?) in Dataset init?
 
-def add_primary_proc_cptgroup_col(Xdf: pd.DataFrame, cptgrp_decile, rare_pprocs=None, min_train_cohort_size=40):
-  Xdf = Xdf.copy()
+
+# Generate a new cohort label column that is a hybrid of primary proccedure (pproc) and CPT group for rare pproc cases
+def gen_primary_proc_cptgroup_col_for_case_keys(Xdf: pd.DataFrame, cptgrp_decile, rare_pprocs=None,
+                                                min_train_cohort_size=40):
+  assert 'SURG_CASE_KEY' in Xdf.columns, 'SURG_CASE_KEY must be in Xdf columns!'
+  assert PRIMARY_PROC in Xdf.columns, f'{PRIMARY_PROC} must be in Xdf columns!'
+  assert CPT_GROUPS in Xdf.columns, f'{CPT_GROUPS} must be in Xdf columns!'
+  # Input Xdf: [surg_case_key, primary_proc, cpt_groups]
+  Xdf = Xdf[['SURG_CASE_KEY', PRIMARY_PROC, CPT_GROUPS]].copy()
+
   # 1. Fetch rare primary procedure cases
   rare_df = gen_rare_pproc_Xdf(Xdf, rare_pprocs=rare_pprocs, min_train_cohort_size=min_train_cohort_size)
   # 2. Add primary_proc_cptgrp column
-  rare_df_primary_proc_cptgrp = gen_primary_cptgrp_for_rare_pproc_cases(rare_df, cptgrp_decile)
+  rare_df_pproc_cptgrp = gen_primary_cptgrp_for_rare_pproc_cases(rare_df, cptgrp_decile)
 
   # 3. Add new column that defaults to values of Primary_proc
   Xdf.loc[:, PRIMARY_PROC_CPTGRP] = Xdf[PRIMARY_PROC]
   Xdf = Xdf.set_index('SURG_CASE_KEY')
   # 4. Replace rare_pproc cases with rare_df_primary_proc_cptgpr
-  Xdf.loc[rare_df_primary_proc_cptgrp['SURG_CASE_KEY'], PRIMARY_PROC_CPTGRP] = rare_df_primary_proc_cptgrp[PRIMARY_PROC_CPTGRP].to_list()
-  return Xdf.reset_index(drop=False), rare_df[PRIMARY_PROC].unique()
+  Xdf.loc[rare_df_pproc_cptgrp['SURG_CASE_KEY'], PRIMARY_PROC_CPTGRP] = rare_df_pproc_cptgrp[PRIMARY_PROC_CPTGRP].to_list()
+
+  # Output Xdf: [surg_case_key, primary_proc_cptgrp]
+  return Xdf.reset_index(drop=False)[['SURG_CASE_KEY', PRIMARY_PROC_CPTGRP]], rare_df[PRIMARY_PROC].unique()
 
 
 def preprocess_y(df: pd.DataFrame, outcome, surg_y=False, inplace=False):
