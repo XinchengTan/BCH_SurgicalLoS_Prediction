@@ -74,7 +74,7 @@ class FeatureSelector(object):
                        AGE, GENDER, MILES, STATE, REGION, LANGUAGE, INTERPRETER, PROBLEM_CNT,
                      ] + OS_CODE_LIST + [PRIMARY_PROC, CPTS, CCSRS, DRUG_COLS[3]]
     if scorers is None:
-      scorers = MyScorer.get_scorer_dict([SCR_ACC, SCR_ACC_BAL, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED, SCR_UNDERPRED,
+      scorers = MyScorer.get_scorer_dict([SCR_ACC, SCR_ACC_BAL, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED2, SCR_UNDERPRED2,
                                           SCR_RMSE])
     train_perf_df = pd.DataFrame(columns=['Trial', 'nth_feature'] + list(scorers.keys()))
     test_perf_df = pd.DataFrame(columns=['Trial', 'nth_feature'] + list(scorers.keys()))
@@ -185,7 +185,7 @@ def train_and_get_perf_df(trial_i, nth_ftr, estimator, Xtrain, ytrain, Xtest, yt
 def feature_selection_with_eval(estimator, ktrial_datasets, scorers, fs_scorer, n_feature_values, fs_how='sfs'):
   # kwargs: scaler, remove_o2m, discretize, outcome
   if scorers is None:
-    scorers = MyScorer.get_scorer_dict([SCR_ACC, SCR_ACC_BAL, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED, SCR_UNDERPRED,
+    scorers = MyScorer.get_scorer_dict([SCR_ACC, SCR_ACC_BAL, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED2, SCR_UNDERPRED2,
                                         SCR_RMSE])
   train_perf_df = pd.DataFrame(columns=['Trial', 'n_features'] + list(scorers.keys()))
   test_perf_df = pd.DataFrame(columns=['Trial', 'n_features'] + list(scorers.keys()))

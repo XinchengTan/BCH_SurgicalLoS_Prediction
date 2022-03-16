@@ -31,14 +31,14 @@ def gen_ktrials_test_surg_case_keys(dashb_df: pd.DataFrame, ktrials=10, test_pct
   return kt_test_case_keys
 
 
-def gen_ktrial_datasets_from_test_case_keys(dashb_df: pd.DataFrame, kt_test_case_keys, **kwargs):
+def gen_ktrial_datasets_from_test_case_keys(dashb_df: pd.DataFrame, kt_test_case_keys: Dict, **kwargs):
   kt_datasets = []
   decileFtr_aggs = kwargs.get('col2decile_ftrs2aggf', DEFAULT_COL2DECILE_FTR2AGGF)
   print('\nDecile feature aggregations:')
   for k, v in decileFtr_aggs.items():
     print(k, v)
-
-  for test_keys in kt_test_case_keys:
+  # TODO: add **kwargs into Dataset creation
+  for kt, test_keys in tqdm(kt_test_case_keys.items()):
     dataset_k = Dataset(dashb_df, test_case_keys=test_keys, outcome=NNT, ftr_cols=FEATURE_COLS_NO_WEIGHT_ALLMEDS,
                         col2decile_ftrs2aggf=decileFtr_aggs, onehot_cols=[CCSRS], discretize_cols=['AGE_AT_PROC_YRS'],
                         scaler='robust')

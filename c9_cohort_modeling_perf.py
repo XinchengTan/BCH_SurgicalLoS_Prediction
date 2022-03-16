@@ -29,9 +29,10 @@ def add_surgeon_cohort_perf(cohort, clf, dataset: Dataset, Xtype, scorers, trial
     scores_dict = MyScorer.apply_scorers(scorers, surg_pred_true[dataset.outcome], surg_pred_true[SPS_PRED])
   # Append scores with info to perf_df
   perf_df = append_perf_row_generic(perf_df, scores_dict,
-                                    {'Xtype': Xtype, 'Cohort': cohort, 'Count': surg_pred_true.shape[0],
-                                     'Model': SURGEON, 'Trial': trial_i, 'Year': year_label
-                                     })
+                                    {**get_class_count(y),
+                                     **{'Xtype': Xtype, 'Cohort': cohort, 'Count': surg_pred_true.shape[0],
+                                        'Model': SURGEON, 'Trial': trial_i, 'Year': year_label
+                                        }})
   return perf_df
 
 
@@ -49,7 +50,6 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
 
   # For each cohort dataset, evaluate the performance of the model trained specifically from its Xtrain
   for cohort, dataset in cohort_to_dataset.items():
-    # TODO: enable surg_only, sda_only flags
     Xtrain, ytrain = dataset.get_Xytrain_by_case_key(dataset.train_case_keys,
                                                      sda_only=sda_only, surg_only=surg_only, years=years)
     Xtest, ytest = dataset.get_Xytest_by_case_key(dataset.test_case_keys,
@@ -91,13 +91,12 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
 
 
 def summarize_cohortwise_modeling_perf(perf_df: pd.DataFrame, Xtype, models=None, sort_by='accuracy'):
-  # overall_acc by trial --> mean, std
   print(f'{Xtype} set performance by cohort:')
 
   if models is not None:
-    perf_df = perf_df.loc[perf_df['Model'].isin(models)]  # TODO: separate out surgeon pred from aggregation
+    perf_df = perf_df.loc[perf_df['Model'].isin(models)]
 
-  # Obtain overall perf eval (groupby trial and model and compile cohort perf into 1 row for overall perf)
+  # Obtain overall performance (groupby trial, model, year and compile cohort perf into 1 row for overall perf)
   no_cohort_col_list = perf_df.columns.to_list()
   no_cohort_col_list.remove('Cohort')
   no_cohort_col_list.remove('Xtype')
@@ -111,26 +110,40 @@ def summarize_cohortwise_modeling_perf(perf_df: pd.DataFrame, Xtype, models=None
                           overall_perf_df.groupby(by=['Model', 'Year']).std().reset_index(),
                           on=['Model', 'Year'],
                           how='left',
-                          suffixes=('_mean', '_std')).dropna(axis=1)
+                          suffixes=('_mean', '_std')) \
+    .dropna(axis=1) \
+    .sort_values(by=f'{SCR_ACC}_mean', ascending=False) \
+    .reset_index(drop=True)
+
+  # Cohort-wise performance for each model -- aggregate across k trials
+  cohortwise_mds_perf = pd.merge(perf_df.groupby(by=['Model', 'Cohort', 'Year']).mean().reset_index(),
+                                 perf_df.groupby(by=['Model', 'Cohort', 'Year']).std().reset_index(),
+                                 on=['Model', 'Cohort', 'Year'],
+                                 how='left',
+                                 suffixes=('_mean', '_std')) \
+    .dropna(axis=1) \
+    .sort_values(by=['Count_mean', f'{SCR_ACC}_mean'], ascending=False) \
+    .reset_index(drop=True)
+  cohortwise_mds_perf_styler = format_perf_df(cohortwise_mds_perf)
 
   # Obtain best classifier for each cohort by their average accuracy
-  clf_perf_mean_std = pd.merge(perf_df.groupby(by=['Cohort', 'Model', 'Year']).mean().reset_index(),
-                               perf_df.groupby(by=['Cohort', 'Model', 'Year']).std().reset_index(),
+  md_only_perf_df = perf_df.loc[perf_df['Model'] != SURGEON]
+  clf_perf_mean_std = pd.merge(md_only_perf_df.groupby(by=['Cohort', 'Model', 'Year']).mean().reset_index(),
+                               md_only_perf_df.groupby(by=['Cohort', 'Model', 'Year']).std().reset_index(),
                                on=['Cohort', 'Model', 'Year'],
                                how='left',
                                suffixes=('_mean', '_std'))
   best_clf_perf_idx = clf_perf_mean_std.groupby('Cohort')['accuracy_mean'].transform(max) == clf_perf_mean_std['accuracy_mean']
   best_clf_perf = clf_perf_mean_std[best_clf_perf_idx].drop_duplicates(subset=['Cohort', 'accuracy_mean'], keep='first')
-  #display(best_clf_perf)
   best_clf_xsize = best_clf_perf['Count_mean'].sum()
   print(f'Mean overall {Xtype} size: ', best_clf_xsize)
   print('Mean overall accuracy of best clf for each cohort: ',
         np.dot(best_clf_perf['accuracy_mean'], best_clf_perf['Count_mean']) / best_clf_xsize)
 
   # Obtain overall performance of the best classifiers for each cohort put together
-  best_overall_df = perf_df.join(best_clf_perf.set_index(['Cohort', 'Model', 'Year']),
-                                 on=['Cohort', 'Model', 'Year'],
-                                 how='inner')
+  best_overall_df = md_only_perf_df.join(best_clf_perf.set_index(['Cohort', 'Model', 'Year']),
+                                         on=['Cohort', 'Model', 'Year'],
+                                         how='inner')
   no_cohort_col_list.remove('Model')
   best_overall_perf = pd.DataFrame(columns=no_cohort_col_list)
   for trial_yr, cohort_perf in best_overall_df.groupby(by=['Trial', 'Year']):
@@ -139,18 +152,20 @@ def summarize_cohortwise_modeling_perf(perf_df: pd.DataFrame, Xtype, models=None
                                                   **overall_score_dict}, ignore_index=True)
   best_overall_perf = best_overall_perf.dropna(axis=1)
 
-  print('\n**Best clf for each cohort: ')
-  display(format_perf_df(best_clf_perf.sort_values(by=sort_by+'_mean', ascending=False)))
   print('\n**Overall performance: ')
   display(format_perf_df(overall_perf))
-  print('\n**Best clfs Overall performance:')
+  print('\n**Cohort-wise performance: ')
+  display(cohortwise_mds_perf_styler)
+  print('\n**Best clf for each cohort: ')
+  display(format_perf_df(best_clf_perf.sort_values(by=sort_by+'_mean', ascending=False)))
+  print('\n**Best cohort clfs Overall performance:')
   best_overall_perf_df = pd.DataFrame({'Mean': best_overall_perf.mean(), 'Std': best_overall_perf.std()})
   formatters = {'Count': "{:.1f}".format, SCR_ACC: "{:.1%}".format, SCR_ACC_BAL: "{:.1%}".format,
                 SCR_ACC_ERR1: "{:.1%}".format, SCR_ACC_ERR2: "{:.1%}".format, SCR_RMSE: "{:.2f}".format,
                 SCR_OVERPRED0: "{:.1%}".format, SCR_UNDERPRED0: "{:.1%}".format,
                 SCR_OVERPRED2: "{:.1%}".format, SCR_UNDERPRED2: "{:.1%}".format,}
   display(format_row_wise(best_overall_perf_df.style, formatters))
-  return best_clf_perf, overall_perf, best_overall_perf
+  return best_clf_perf, overall_perf, best_overall_perf, cohortwise_mds_perf
 
 
 # Obtain overvall performance scores by aggregating over all cohorts' performance scores
