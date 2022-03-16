@@ -226,7 +226,7 @@ DENOISE_PURE_DUP = 'pure-dups'
 DENOISE_DEL_O2M = 'remove o2m'
 
 
-SURGEON = 'SPS Surgeon'
+SURGEON = 'Surgeon'
 
 # Model types
 LR = 'lr-reg'

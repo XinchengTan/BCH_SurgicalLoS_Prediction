@@ -6,26 +6,11 @@ from IPython.display import display
 from copy import deepcopy
 from globals import *
 from c1_data_preprocessing import Dataset
-from c4_model_perf import MyScorer, append_perf_row_generic, format_perf_df, get_clf_name, get_default_perf_df, get_class_count, to_numeric_count_cols
+from c4_model_perf import MyScorer, format_perf_df, get_clf_name
+from utils_eval import *
 
 
-# TODO: add class_count
 # TODO: update show_best_xxxx: 1. change function name, 2. exclude surgeon perf from model perf
-
-
-def get_year_label(years) -> str:
-  if years is None:
-    return f'All'
-  elif len(years) > 1:
-    return f'{min(years)} - {max(years)}'
-  else:
-    return str(years[0])
-
-
-# If certain evaluation metrics does not apply, display -1
-def get_placeholder_perf_scores_dict(scorers: List) -> Dict:
-  return {s: -1.0 for s in scorers}
-
 
 def add_surgeon_cohort_perf(cohort, clf, dataset: Dataset, Xtype, scorers, trial_i, years, perf_df):
   year_label = get_year_label(years)
@@ -45,7 +30,7 @@ def add_surgeon_cohort_perf(cohort, clf, dataset: Dataset, Xtype, scorers, trial
   # Append scores with info to perf_df
   perf_df = append_perf_row_generic(perf_df, scores_dict,
                                     {'Xtype': Xtype, 'Cohort': cohort, 'Count': surg_pred_true.shape[0],
-                                     'Model': 'Surgeon', 'Trial': trial_i, 'Year': year_label
+                                     'Model': SURGEON, 'Trial': trial_i, 'Year': year_label
                                      })
   return perf_df
 
@@ -174,16 +159,7 @@ def summarize_cohortwise_modeling_perf(perf_df: pd.DataFrame, Xtype, models=None
   display(format_perf_df(overall_perf))
   print('\n**Best clfs Overall performance:')
   best_overall_perf_df = pd.DataFrame({'Mean': best_overall_perf.mean(), 'Std': best_overall_perf.std()})
-  formatters = {"accuracy": lambda x: f"{x:.1%}", SCR_ACC_ERR1: lambda x: f"{x:.1%}",
-                SCR_OVERPRED: lambda x: f"{x:.1%}", SCR_UNDERPRED: lambda x: f"{x:.1%}", SCR_RMSE: lambda x: f"{x:.2f}",}
+  formatters = {'Count': lambda x: f'{x:.1f}', SCR_ACC: lambda x: f'{x:.1%}', SCR_ACC_ERR1: lambda x: f'{x:.1%}',
+                SCR_OVERPRED: lambda x: f'{x:.1%}', SCR_UNDERPRED: lambda x: f'{x:.1%}', SCR_RMSE: lambda x: f'{x:.2f}'}
   display(format_row_wise(best_overall_perf_df.style, formatters))
   return best_clf_perf, overall_perf, best_overall_perf
-
-
-def format_row_wise(styler, formatter):
-  for row, row_formatter in formatter.items():
-    row_num = styler.index.get_loc(row)
-
-    for col_num in range(len(styler.columns)):
-      styler._display_funcs[(row_num, col_num)] = row_formatter
-  return styler

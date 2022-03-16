@@ -10,8 +10,9 @@ from sklearn.metrics import accuracy_score, balanced_accuracy_score, confusion_m
 import shap
 
 import utils_plot
-from globals import *
 from c1_data_preprocessing import Dataset
+from globals import *
+from utils_eval import *
 
 
 class MyScorer:
@@ -109,42 +110,7 @@ class MyScorer:
     return perf_row_dict
 
 
-def get_default_perf_df(scorers, outcome=NNT):
-  columns = ['Trial', 'Xtype', 'Cohort', 'Model', 'Count', 'Year'] + scorers
-  if outcome == NNT:
-    return pd.DataFrame(columns=columns + [f'Count_class{c}' for c in NNT_CLASSES])
-  else:
-    return pd.DataFrame(columns=columns)  # todo: binary class fetch class label & append to 'columns'
-
-
-def get_class_count(y: Iterable):
-  counter = defaultdict(int)
-  for cls in NNT_CLASSES:
-    counter[f'Count_class{cls}'] = list(y).count(cls)
-  return counter
-
-
-# Display the confusion matrix of one or more models on the dataset where it achieves its median perf across k trials
-def show_confmat_of_median_perf_for_mds(perf_df, model_to_confmats, which_md, Xtype, criterion=SCR_ACC):
-  which_md = str(which_md)
-  if which_md.lower() == 'all':
-    for md, kt_to_confmats in model_to_confmats.items():
-      show_confmat_of_median_perf_(perf_df, kt_to_confmats, md, Xtype, criterion)
-  else:
-    kt = show_confmat_of_median_perf_(perf_df, model_to_confmats[which_md], which_md, Xtype, criterion)
-    if 'Surgeon' in model_to_confmats:
-      utils_plot.plot_confusion_matrix(model_to_confmats['Surgeon'][kt], 'Surgeon', Xtype)
-
-
-# Display the confusion matrix of a particular model on the dataset where it achieves its median perf across k trials
-def show_confmat_of_median_perf_(perf_df, kt_to_confmats, md, Xtype, criterion):
-  md_name = clf2name[md] if md != 'Surgeon' else md
-  criterion_sorted = perf_df[perf_df['Model'] == md_name].sort_values(by=criterion).reset_index(drop=True)
-  kt = criterion_sorted.iloc[len(kt_to_confmats) // 2]['Trial']
-  utils_plot.plot_confusion_matrix(kt_to_confmats[kt], md_name, Xtype)
-  return kt
-
-
+# Evaluate models' performance across k trials
 def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, scorers=None,
                            eval_sda_only=False, eval_surg_only=False, years=None, md_to_show_confmat=None,
                            train_perf_df=None, test_perf_df=None):
@@ -165,7 +131,7 @@ def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, 
           show_confmat=md_to_show_confmat, train_perf_df=train_perf_df, test_perf_df=test_perf_df
         )
         model_to_k_confmats_test[md][kt] = confmat_test
-        model_to_k_confmats_test['Surgeon'][kt] = surg_confmat_test
+        model_to_k_confmats_test[SURGEON][kt] = surg_confmat_test
 
   print(model_to_k_confmats_test.keys())
   if md_to_show_confmat:
@@ -175,6 +141,7 @@ def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, 
   return train_perf_df, test_perf_df
 
 
+# Helper function to evaluate surgeon's performance
 def eval_surgeon_perf(dataset: Dataset, scorers: Iterable, show_confmat, years=None):
   train_scores_row_dict, test_scores_row_dict = {}, {}
   if dataset.Xtrain is not None and len(dataset.Xtrain) > 0:
@@ -215,7 +182,7 @@ def eval_model_by_cohort_Xydata(trial_i, dataset: Dataset, clf, cohort_to_XyKeys
         scores_surg = MyScorer.apply_scorers(scorers, true_surg_preds[dataset.outcome], true_surg_preds[SPS_PRED])
         perf_df = append_perf_row_generic(
           perf_df, scores_surg, {**class_to_counts,
-                                 **{'Xtype': Xtype, 'Cohort': cohort, 'Model': 'Surgeon', 'Count': X.shape[0],
+                                 **{'Xtype': Xtype, 'Cohort': cohort, 'Model': SURGEON, 'Count': X.shape[0],
                                     'Trial': trial_i, 'Year': year_label}
                                  })
   return perf_df
@@ -297,63 +264,17 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
     if len(surg_train) > 0:
       train_perf_df = append_perf_row_generic(
         train_perf_df, surg_train, {**get_class_count(ytrain),
-                                    **{'Xtype': 'train', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i,
+                                    **{'Xtype': 'train', 'Cohort': cohort, 'Model': SURGEON, 'Trial': trial_i,
                                        'Count': Xtrain.shape[0], 'Year': year_label}})
     if len(surg_test) > 0:
       test_perf_df = append_perf_row_generic(
         test_perf_df, surg_test, {**get_class_count(ytest),
-                                  **{'Xtype': 'test', 'Cohort': cohort, 'Model': 'Surgeon', 'Trial': trial_i,
+                                  **{'Xtype': 'test', 'Cohort': cohort, 'Model': SURGEON, 'Trial': trial_i,
                                      'Count': Xtest.shape[0], 'Year': year_label}})
   return train_perf_df, test_perf_df, confmat_test, surg_confmat_test
 
 
-def get_clf_name(clf):
-  try:
-    md_name = clf.model_type
-    assert clf.__class__.__name__ == 'SafeOneClassWrapper'
-  except AttributeError:
-    md_name = clf.__class__.__name__
-  return md_name
-
-
-def get_year_label(years, dataset: Dataset):
-  if years is None:
-    return f'{min(dataset.year_to_case_keys)} - {max(dataset.year_to_case_keys)}'
-  elif len(years) > 1:
-    return f'{min(years)} - {max(years)}'
-  else:
-    return str(years[0])
-
-
-def append_perf_row_generic(perf_df, score_dict: Dict, info_col_dict: Dict[str, Any]):
-  score_dict.update(info_col_dict)
-  perf_df = perf_df.append(score_dict, ignore_index=True)
-  return perf_df
-
-
-def append_perf_row(perf_df, trial, md, scores_row_dict: Dict):
-  scores_row_dict['Model'] = md
-  scores_row_dict['Trial'] = trial
-  perf_df = perf_df.append(scores_row_dict, ignore_index=True)
-  return perf_df
-
-
-def append_perf_row_surg(surg_perf_df: pd.DataFrame, trial, scores_row_dict):
-  if scores_row_dict is None or len(scores_row_dict) == 0:
-    return surg_perf_df
-  scores_row_dict['Trial'] = trial
-  scores_row_dict['Model'] = 'Surgeon-train'
-  surg_perf_df = surg_perf_df.append(scores_row_dict, ignore_index=True)
-  return surg_perf_df
-
-
-def to_numeric_count_cols(perf_df: pd.DataFrame):
-  for col in perf_df.columns:
-    if col.startswith('Count'):
-      perf_df[col] = pd.to_numeric(perf_df[col])
-  return perf_df
-
-
+# Summarize the classifiers' performance for each year individually
 def summarize_clf_perfs(perf_df: pd.DataFrame, Xtype, sort_by=['accuracy_mean']):
   print(f'[{Xtype}] Model performance summary:')
   perf_df = to_numeric_count_cols(perf_df)
@@ -369,25 +290,3 @@ def summarize_clf_perfs(perf_df: pd.DataFrame, Xtype, sort_by=['accuracy_mean'])
     .reset_index(drop=True)
   clf_perfs_styler = format_perf_df(clf_perfs)
   return clf_perfs, clf_perfs_styler
-
-
-# Format numbers and floats in perf df
-def format_perf_df(perf_df: pd.DataFrame):
-  formatter = SCR_FORMATTER.copy()
-  # format count columns
-  for c in NNT_CLASSES:
-    formatter[f'Count_class{c}'] = '{:.0f}'.format
-    formatter[f'Count_class{c}_mean'] = '{:.0f}'.format
-    formatter[f'Count_class{c}_std'] = '{:.0f}'.format
-  formatter['Count'] = '{:.0f}'.format
-  formatter['Count_mean'] = '{:.0f}'.format
-  formatter['Count_std'] = '{:.0f}'.format
-
-  # define actual formatter to be applied
-  formatter_ret = deepcopy(formatter)
-  for scr in perf_df.columns.to_list():
-    if (scr not in {'Model', 'Xtype', 'Cohort', 'Trial', 'Year'}) and (not scr.startswith('Count')):
-      formatter_ret[scr] = formatter[SCR_RMSE] if scr.startswith(SCR_RMSE) else formatter[scr]
-
-  perf_styler = perf_df.style.format(formatter_ret)
-  return perf_styler
