@@ -130,15 +130,20 @@ def cohortwise_modeling_ktrials_eval(models: Iterable,
                                      kt_md2cohort2clf: Dict[int, Dict],
                                      kt_cohort2dataset: Dict[int, Iterable],
                                      sda_only=False, surg_only=False, years=None,
+                                     scorers: Iterable[str] = None,
                                      train_perf_df: pd.DataFrame = None, test_perf_df: pd.DataFrame = None):
   for kt, cohort2dataset in tqdm(kt_cohort2dataset.items()):
     for md in models:
       train_perf_df, test_perf_df = eval_cohort_clf(
-        cohort2dataset, kt_md2cohort2clf[kt][md], None, kt, sda_only=sda_only, surg_only=surg_only, years=years,
+        cohort2dataset, kt_md2cohort2clf[kt][md], scorers, kt, sda_only=sda_only, surg_only=surg_only, years=years,
         train_perf_df=train_perf_df, test_perf_df=test_perf_df
       )
 
   return train_perf_df, test_perf_df
+
+
+
+
 
 
 

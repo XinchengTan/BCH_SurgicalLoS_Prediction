@@ -35,7 +35,7 @@ def add_surgeon_cohort_perf(cohort, clf, dataset: Dataset, Xtype, scorers, trial
   return perf_df
 
 
-def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[str, Any], scorers: List = None,
+def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[str, Any], scorers: Iterable[str] = None,
                     trial_i=None, sda_only=False, surg_only=False, years=None, train_perf_df=None, test_perf_df=None):
   if scorers is None:
     scorers = deepcopy(DEFAULT_SCORERS)
@@ -145,23 +145,33 @@ def summarize_cohortwise_modeling_perf(perf_df: pd.DataFrame, Xtype, models=None
   display(format_perf_df(overall_perf))
   print('\n**Best clfs Overall performance:')
   best_overall_perf_df = pd.DataFrame({'Mean': best_overall_perf.mean(), 'Std': best_overall_perf.std()})
-  # formatters = {'Count': lambda x: f'{x:.1f}', SCR_ACC: lambda x: f'{x:.1%}', SCR_ACC_ERR1: lambda x: f'{x:.1%}',
-  #               SCR_OVERPRED2: lambda x: f'{x:.1%}', SCR_UNDERPRED2: lambda x: f'{x:.1%}', SCR_RMSE: lambda x: f'{x:.2f}'}
-  display(format_row_wise(best_overall_perf_df.style, {**{'Count': "{:.1f}".format}, **SCR_FORMATTER}))
+  formatters = {'Count': "{:.1f}".format, SCR_ACC: "{:.1%}".format, SCR_ACC_BAL: "{:.1%}".format,
+                SCR_ACC_ERR1: "{:.1%}".format, SCR_ACC_ERR2: "{:.1%}".format, SCR_RMSE: "{:.2f}".format,
+                SCR_OVERPRED0: "{:.1%}".format, SCR_UNDERPRED0: "{:.1%}".format,
+                SCR_OVERPRED2: "{:.1%}".format, SCR_UNDERPRED2: "{:.1%}".format,}
+  display(format_row_wise(best_overall_perf_df.style, formatters))
   return best_clf_perf, overall_perf, best_overall_perf
 
 
 # Obtain overvall performance scores by aggregating over all cohorts' performance scores
 def agg_cohort_perf_scores(cohort_perf: pd.DataFrame) -> Dict:
   Xsize, cohort_count = cohort_perf['Count'].sum(), cohort_perf['Count'].to_numpy()
-  overall_acc = np.dot(cohort_perf[SCR_ACC].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
-  overall_acc_err1 = np.dot(cohort_perf[SCR_ACC_ERR1].to_numpy(), cohort_count) / Xsize
-  overall_underpred2 = np.dot(cohort_perf[SCR_UNDERPRED2].to_numpy(), cohort_count) / Xsize
-  overall_overpred2 = np.dot(cohort_perf[SCR_OVERPRED2].to_numpy(), cohort_count) / Xsize
-  overall_underpred0 = np.dot(cohort_perf[SCR_UNDERPRED0].to_numpy(), cohort_count) / Xsize
-  overall_overpred0 = np.dot(cohort_perf[SCR_OVERPRED0].to_numpy(), cohort_count) / Xsize
-  overall_rmse = np.sqrt(np.dot(cohort_perf[SCR_RMSE].to_numpy() ** 2, cohort_count) / Xsize)
-  return {'Count': Xsize, SCR_ACC: overall_acc, SCR_ACC_ERR1: overall_acc_err1,
-          SCR_UNDERPRED0: overall_underpred0, SCR_OVERPRED0: overall_overpred0,
-          SCR_UNDERPRED2: overall_underpred2, SCR_OVERPRED2: overall_overpred2,
-          SCR_RMSE: overall_rmse}
+  scores_dict = {'Count': Xsize}
+  if SCR_ACC in cohort_perf.columns:
+    scores_dict[SCR_ACC] = np.dot(cohort_perf[SCR_ACC].to_numpy(), cohort_count) / Xsize
+  if SCR_ACC_ERR1 in cohort_perf.columns:
+    scores_dict[SCR_ACC_ERR1] = np.dot(cohort_perf[SCR_ACC_ERR1].to_numpy(), cohort_count) / Xsize
+  if SCR_ACC_ERR2 in cohort_perf.columns:
+    scores_dict[SCR_ACC_ERR2] = np.dot(cohort_perf[SCR_ACC_ERR2].to_numpy(), cohort_count) / Xsize
+  if SCR_OVERPRED0 in cohort_perf.columns:
+    scores_dict[SCR_OVERPRED0] = np.dot(cohort_perf[SCR_OVERPRED0].to_numpy(), cohort_count) / Xsize
+  if SCR_UNDERPRED0 in cohort_perf.columns:
+    scores_dict[SCR_UNDERPRED0] = np.dot(cohort_perf[SCR_UNDERPRED0].to_numpy(), cohort_count) / Xsize
+  if SCR_OVERPRED2 in cohort_perf.columns:
+    scores_dict[SCR_OVERPRED2] = np.dot(cohort_perf[SCR_OVERPRED2].to_numpy(), cohort_count) / Xsize
+  if SCR_UNDERPRED2 in cohort_perf.columns:
+    scores_dict[SCR_UNDERPRED2] = np.dot(cohort_perf[SCR_UNDERPRED2].to_numpy(), cohort_count) / Xsize
+  if SCR_RMSE in cohort_perf.columns:
+    scores_dict[SCR_RMSE] = np.sqrt(np.dot(cohort_perf[SCR_RMSE].to_numpy() ** 2, cohort_count) / Xsize)
+
+  return scores_dict

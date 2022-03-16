@@ -335,6 +335,7 @@ DEFAULT_SCORERS = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED0, SCR_UNDER
 # Scorer formatter for pd output
 SCR_FORMATTER = defaultdict(lambda: "{:.1%}".format)
 SCR_FORMATTER.update({SCR_RMSE: "{:.2f}".format})
+
 # SCR_ACC: "{:.1%}".format, SCR_ACC_BAL: "{:.1%}".format, SCR_ACC_ERR1: "{:.1%}".format,
 # SCR_ACC_ERR2: "{:.1%}".format, SCR_OVERPRED: "{:.1%}".format, SCR_UNDERPRED: "{:.1%}".format,
 

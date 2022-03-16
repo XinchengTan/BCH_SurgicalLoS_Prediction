@@ -85,10 +85,11 @@ def to_numeric_count_cols(perf_df: pd.DataFrame):
 # Format pd.DataFrame row-wise
 def format_row_wise(styler, formatter):
   for row, row_formatter in formatter.items():
-    row_num = styler.index.get_loc(row)
+    if row in styler.index:
+      row_num = styler.index.get_loc(row)
 
-    for col_num in range(len(styler.columns)):
-      styler._display_funcs[(row_num, col_num)] = row_formatter
+      for col_num in range(len(styler.columns)):
+        styler._display_funcs[(row_num, col_num)] = row_formatter
   return styler
 
 
