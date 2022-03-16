@@ -123,9 +123,9 @@ class MyScorer:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_1nnt_tol, greater_is_better=True)
       elif scorer == globals.SCR_ACC_ERR2:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_2nnt_tol, greater_is_better=True)
-      elif scorer == globals.SCR_OVERPRED:
+      elif scorer == globals.SCR_OVERPRED2:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_overpred_pct, greater_is_better=False)
-      elif scorer == globals.SCR_UNDERPRED:
+      elif scorer == globals.SCR_UNDERPRED2:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_underpred_pct, greater_is_better=False)
       else:
         raise Warning(f"Scorer {scorer} is not supported yet!")

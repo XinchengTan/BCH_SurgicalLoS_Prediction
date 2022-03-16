@@ -36,10 +36,14 @@ class MyScorer:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_1nnt_tol, greater_is_better=True)
       elif scorer == SCR_ACC_ERR2:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_2nnt_tol, greater_is_better=True)
-      elif scorer == SCR_OVERPRED:
+      elif scorer == SCR_OVERPRED2:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_overpred_pct, greater_is_better=False)
-      elif scorer == SCR_UNDERPRED:
+      elif scorer == SCR_UNDERPRED2:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_underpred_pct, greater_is_better=False)
+      elif scorer == SCR_OVERPRED0:
+        scr_dict[scorer] = make_scorer(MyScorer.scorer_overpred_pct0, greater_is_better=False)
+      elif scorer == SCR_UNDERPRED0:
+        scr_dict[scorer] = make_scorer(MyScorer.scorer_underpred_pct0, greater_is_better=False)
       else:
         raise Warning(f"Scorer {scorer} is not supported yet!")
     return scr_dict
@@ -72,6 +76,16 @@ class MyScorer:
     return underpred_pct
 
   @staticmethod
+  def scorer_overpred_pct0(ytrue, ypred):
+    overpred_pct = len(np.where((ypred - ytrue) > 0)[0]) / len(ytrue)
+    return overpred_pct
+
+  @staticmethod
+  def scorer_underpred_pct0(ytrue, ypred):
+    underpred_pct = len(np.where((ytrue - ypred) > 0)[0]) / len(ytrue)
+    return underpred_pct
+
+  @staticmethod
   def classwise_recall(ytrue, ypred, cls):
     # This is not meant to be made a Scorer object in sklearn, but only for evaluation
     if cls not in ytrue:
@@ -98,15 +112,19 @@ class MyScorer:
         perf_row_dict[scorer_name] = MyScorer.scorer_1nnt_tol(ytrue, ypred)
       elif scorer_name == SCR_ACC_ERR2:
         perf_row_dict[scorer_name] = MyScorer.scorer_2nnt_tol(ytrue, ypred)
-      elif scorer_name == SCR_OVERPRED:
+      elif scorer_name == SCR_OVERPRED2:
         perf_row_dict[scorer_name] = MyScorer.scorer_overpred_pct(ytrue, ypred)
-      elif scorer_name == SCR_UNDERPRED:
+      elif scorer_name == SCR_UNDERPRED2:
         perf_row_dict[scorer_name] = MyScorer.scorer_underpred_pct(ytrue, ypred)
+      elif scorer_name == SCR_OVERPRED0:
+        perf_row_dict[scorer_name] = MyScorer.scorer_overpred_pct0(ytrue, ypred)
+      elif scorer_name == SCR_UNDERPRED0:
+        perf_row_dict[scorer_name] = MyScorer.scorer_underpred_pct0(ytrue, ypred)
       elif scorer_name == SCR_AUC:
         perf_row_dict[scorer_name] = None  # TODO: find a better solution to handle this
         # perf_row_dict[scorer_name] = roc_auc_score(ytrue, ypred)  # ypred is actually yscore: clf.predict_proba(X)[:, 1]
       else:
-        raise NotImplementedError('%s not implemented' % scorer_name)
+        raise NotImplementedError('Scorer "%s" is not implemented' % scorer_name)
     return perf_row_dict
 
 
@@ -200,6 +218,7 @@ def eval_model_by_cohort(dataset: Dataset, clf, scorers=None, cohort_type=SURG_G
     train_perf_df = get_default_perf_df(scorers)
   if test_perf_df is None:
     test_perf_df = get_default_perf_df(scorers)
+  print('Scorers: ', scorers)
 
   # Evaluate on Training set for each cohort
   cohort_to_XyKeys_train = dataset.get_cohort_to_Xytrains(cohort_type, sda_only=sda_only, surg_only=surg_only, years=years)
@@ -225,7 +244,7 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
     train_perf_df = get_default_perf_df(scorers)
   if test_perf_df is None:
     test_perf_df = get_default_perf_df(scorers)
-
+  print('Scorers: ', scorers)
   # Get classifier name
   md_name = get_clf_name(clf)
 

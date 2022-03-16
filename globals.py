@@ -315,8 +315,10 @@ SCR_ACC_BAL = 'balanced_accuracy'
 SCR_ACC_ERR1 = 'Accuracy (tol = 1 NNT)'
 SCR_ACC_ERR2 = 'Accuracy (tol = 2 NNT)'
 SCR_RMSE = 'Rooted MSE'
-SCR_UNDERPRED = 'Underprediction rate'
-SCR_OVERPRED = 'Overprediction rate'
+SCR_UNDERPRED0 = 'Underprediction Rate'
+SCR_OVERPRED0 = 'Overprediction Rate'
+SCR_UNDERPRED2 = 'Extreme Underprediction Rate'
+SCR_OVERPRED2 = 'Extreme Overprediction Rate'
 SCR_RECALL_ALL_CLS = 'recall_all_classes'
 SCR_RECALL_PREFIX = 'recall_class'  # prefix for recall of a particular class: recall of class X has label 'recall_clsX'
 SCR_RECALL0 = 'recall_class0'
@@ -327,7 +329,8 @@ SCR_RECALL4 = 'recall_class4'
 SCR_RECALL5 = 'recall_class5'
 SCR_RECALL6 = 'recall_class6'  # if MAX_NNT > 5, add SCR_RECALL? accordingly
 SCR_RECALL_ALL_LIST = [SCR_RECALL0, SCR_RECALL1, SCR_RECALL2, SCR_RECALL3, SCR_RECALL4, SCR_RECALL5, SCR_RECALL6]
-DEFAULT_SCORERS = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED, SCR_UNDERPRED, SCR_RMSE] + SCR_RECALL_ALL_LIST # SCR_ACC_BAL,
+DEFAULT_SCORERS = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_OVERPRED2, SCR_UNDERPRED2,
+                   SCR_RMSE] + SCR_RECALL_ALL_LIST # SCR_ACC_BAL,
 
 # Scorer formatter for pd output
 SCR_FORMATTER = defaultdict(lambda: "{:.1%}".format)

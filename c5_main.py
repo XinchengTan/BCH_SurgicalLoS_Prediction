@@ -279,7 +279,7 @@ if __name__ == '__main__':
   # scorers: Acc, Acc_err1, Acc_err2, overpred rate, underpred rate
   md2params = get_model2params(args)
   scorers = MyScorer.get_scorer_dict([globals.SCR_ACC, globals.SCR_ACC_BAL, globals.SCR_ACC_ERR1, globals.SCR_ACC_ERR2,
-                                      globals.SCR_OVERPRED, globals.SCR_UNDERPRED, globals.SCR_RMSE])
+                                      globals.SCR_OVERPRED2, globals.SCR_UNDERPRED2, globals.SCR_RMSE])
   cv_results = defaultdict(list)  # md: [cv_result_df1, cv_result_df2, ...] --- len() = ktrial
   perf_df = pd.DataFrame(columns=['Trial', 'Model'] + list(scorers.keys()))
   surg_perf = pd.DataFrame(columns=['Trial', 'Model'] + list(scorers.keys()))  # Trial, train_scores ...

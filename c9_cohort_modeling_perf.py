@@ -104,16 +104,9 @@ def summarize_cohortwise_modeling_perf(perf_df: pd.DataFrame, Xtype, models=None
   overall_perf_df = pd.DataFrame(columns=no_cohort_col_list)
   groupby_trial_model_year = perf_df.groupby(by=['Trial', 'Model', 'Year'])
   for tr_md_yr, cohort_perf in groupby_trial_model_year:
-    Xsize = cohort_perf['Count'].sum()
-    overall_acc = np.dot(cohort_perf[SCR_ACC].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
-    overall_acc_err1 = np.dot(cohort_perf[SCR_ACC_ERR1].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
-    overall_underpred = np.dot(cohort_perf[SCR_UNDERPRED].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
-    overall_overpred = np.dot(cohort_perf[SCR_OVERPRED].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
-    overall_rmse = np.sqrt(np.dot(cohort_perf[SCR_RMSE].to_numpy()**2, cohort_perf['Count'].to_numpy()) / Xsize)
-    overall_perf_df = overall_perf_df.append({'Trial': tr_md_yr[0], 'Model': tr_md_yr[1], 'Year': tr_md_yr[2],
-                                              'Count': Xsize, SCR_ACC: overall_acc, SCR_ACC_ERR1: overall_acc_err1,
-                                              SCR_UNDERPRED: overall_underpred, SCR_OVERPRED: overall_overpred,
-                                              SCR_RMSE: overall_rmse}, ignore_index=True)
+    overall_score_dict = agg_cohort_perf_scores(cohort_perf)
+    overall_perf_df = overall_perf_df.append({**{'Trial': tr_md_yr[0], 'Model': tr_md_yr[1], 'Year': tr_md_yr[2]},
+                                              **overall_score_dict}, ignore_index=True)
   overall_perf = pd.merge(overall_perf_df.groupby(by=['Model', 'Year']).mean().reset_index(),
                           overall_perf_df.groupby(by=['Model', 'Year']).std().reset_index(),
                           on=['Model', 'Year'],
@@ -141,16 +134,9 @@ def summarize_cohortwise_modeling_perf(perf_df: pd.DataFrame, Xtype, models=None
   no_cohort_col_list.remove('Model')
   best_overall_perf = pd.DataFrame(columns=no_cohort_col_list)
   for trial_yr, cohort_perf in best_overall_df.groupby(by=['Trial', 'Year']):
-    Xsize = cohort_perf['Count'].sum()
-    overall_acc = np.dot(cohort_perf[SCR_ACC].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
-    overall_acc_err1 = np.dot(cohort_perf[SCR_ACC_ERR1].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
-    overall_underpred = np.dot(cohort_perf[SCR_UNDERPRED].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
-    overall_overpred = np.dot(cohort_perf[SCR_OVERPRED].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
-    overall_rmse = np.sqrt(np.dot(cohort_perf[SCR_RMSE].to_numpy() ** 2, cohort_perf['Count'].to_numpy()) / Xsize)
-    best_overall_perf = best_overall_perf.append({'Trial': trial_yr[0], 'Year': trial_yr[1], 'Count': Xsize,
-                                                  SCR_ACC: overall_acc, SCR_ACC_ERR1: overall_acc_err1,
-                                                  SCR_UNDERPRED: overall_underpred, SCR_OVERPRED: overall_overpred,
-                                                  SCR_RMSE: overall_rmse}, ignore_index=True)
+    overall_score_dict = agg_cohort_perf_scores(cohort_perf)
+    best_overall_perf = best_overall_perf.append({**{'Trial': trial_yr[0], 'Year': trial_yr[1]},
+                                                  **overall_score_dict}, ignore_index=True)
   best_overall_perf = best_overall_perf.dropna(axis=1)
 
   print('\n**Best clf for each cohort: ')
@@ -159,7 +145,23 @@ def summarize_cohortwise_modeling_perf(perf_df: pd.DataFrame, Xtype, models=None
   display(format_perf_df(overall_perf))
   print('\n**Best clfs Overall performance:')
   best_overall_perf_df = pd.DataFrame({'Mean': best_overall_perf.mean(), 'Std': best_overall_perf.std()})
-  formatters = {'Count': lambda x: f'{x:.1f}', SCR_ACC: lambda x: f'{x:.1%}', SCR_ACC_ERR1: lambda x: f'{x:.1%}',
-                SCR_OVERPRED: lambda x: f'{x:.1%}', SCR_UNDERPRED: lambda x: f'{x:.1%}', SCR_RMSE: lambda x: f'{x:.2f}'}
-  display(format_row_wise(best_overall_perf_df.style, formatters))
+  # formatters = {'Count': lambda x: f'{x:.1f}', SCR_ACC: lambda x: f'{x:.1%}', SCR_ACC_ERR1: lambda x: f'{x:.1%}',
+  #               SCR_OVERPRED2: lambda x: f'{x:.1%}', SCR_UNDERPRED2: lambda x: f'{x:.1%}', SCR_RMSE: lambda x: f'{x:.2f}'}
+  display(format_row_wise(best_overall_perf_df.style, {**{'Count': "{:.1f}".format}, **SCR_FORMATTER}))
   return best_clf_perf, overall_perf, best_overall_perf
+
+
+# Obtain overvall performance scores by aggregating over all cohorts' performance scores
+def agg_cohort_perf_scores(cohort_perf: pd.DataFrame) -> Dict:
+  Xsize, cohort_count = cohort_perf['Count'].sum(), cohort_perf['Count'].to_numpy()
+  overall_acc = np.dot(cohort_perf[SCR_ACC].to_numpy(), cohort_perf['Count'].to_numpy()) / Xsize
+  overall_acc_err1 = np.dot(cohort_perf[SCR_ACC_ERR1].to_numpy(), cohort_count) / Xsize
+  overall_underpred2 = np.dot(cohort_perf[SCR_UNDERPRED2].to_numpy(), cohort_count) / Xsize
+  overall_overpred2 = np.dot(cohort_perf[SCR_OVERPRED2].to_numpy(), cohort_count) / Xsize
+  overall_underpred0 = np.dot(cohort_perf[SCR_UNDERPRED0].to_numpy(), cohort_count) / Xsize
+  overall_overpred0 = np.dot(cohort_perf[SCR_OVERPRED0].to_numpy(), cohort_count) / Xsize
+  overall_rmse = np.sqrt(np.dot(cohort_perf[SCR_RMSE].to_numpy() ** 2, cohort_count) / Xsize)
+  return {'Count': Xsize, SCR_ACC: overall_acc, SCR_ACC_ERR1: overall_acc_err1,
+          SCR_UNDERPRED0: overall_underpred0, SCR_OVERPRED0: overall_overpred0,
+          SCR_UNDERPRED2: overall_underpred2, SCR_OVERPRED2: overall_overpred2,
+          SCR_RMSE: overall_rmse}
