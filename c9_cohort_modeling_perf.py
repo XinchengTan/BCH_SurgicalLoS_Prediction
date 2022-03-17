@@ -29,7 +29,7 @@ def add_surgeon_cohort_perf(cohort, clf, dataset: Dataset, Xtype, scorers, trial
     scores_dict = MyScorer.apply_scorers(scorers, surg_pred_true[dataset.outcome], surg_pred_true[SPS_PRED])
   # Append scores with info to perf_df
   perf_df = append_perf_row_generic(perf_df, scores_dict,
-                                    {**get_class_count(y),
+                                    {**get_class_count(surg_pred_true[dataset.outcome]),
                                      **{'Xtype': Xtype, 'Cohort': cohort, 'Count': surg_pred_true.shape[0],
                                         'Model': SURGEON, 'Trial': trial_i, 'Year': year_label
                                         }})
