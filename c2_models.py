@@ -56,6 +56,25 @@ except ImportError as e:
   print('OrderedClassifier() is not defined!')
 
 
+# Abstract class for cross validation
+class ClassifierCV(object):
+
+  def __init__(self):
+    self.clf = None
+
+  def fit(self, X, y):
+    self.clf.fit(X, y)
+
+  def predict(self, X):
+    pred = self.clf.predict(X)
+    pred[pred > MAX_NNT] = MAX_NNT + 1
+    return pred
+
+  def score(self, X, y, sample_weight=None):
+    preds = self.predict(X)
+    return accuracy_score(y, preds, sample_weight=sample_weight)
+
+
 # Regression-based classifier (regressor + round to nearest int)
 class RegressionBasedClassifier(object):
 
@@ -93,34 +112,6 @@ class RegressionBasedClassifier(object):
     return accuracy_score(y, preds, sample_weight=sample_weight)
 
 
-# Abstract class for cross validation
-class ClassifierCV(object):
-
-  def __init__(self):
-    self.clf = None
-
-  def fit(self, X, y):
-    self.clf.fit(X, y)
-
-  def predict(self, X):
-    pred = self.clf.predict(X)
-    pred[pred > MAX_NNT] = MAX_NNT + 1
-    return pred
-
-  def score(self, X, y, sample_weight=None):
-    preds = self.predict(X)
-    return accuracy_score(y, preds, sample_weight=sample_weight)
-
-
-# CV wrapper for KNN (grid search)
-class KNeighborsClassifierCV(ClassifierCV):
-
-  def __init__(self, param_space, kfold=5):
-    super().__init__()
-    self.clf = GridSearchCV(estimator=KNeighborsClassifier(), param_grid=param_space, scoring='accuracy', cv=kfold,
-                            n_jobs=-1, refit=True, return_train_score=True, verbose=0)
-
-
 # Wrapper for all model objects for safe handling a single class in training data
 class SafeOneClassWrapper(BaseEstimator, ClassifierMixin):
   def __init__(self, base_estimator):
@@ -151,11 +142,22 @@ class SafeOneClassWrapper(BaseEstimator, ClassifierMixin):
     return accuracy_score(y, ypred, sample_weight=sample_weight)
 
 
+# CV wrapper for KNN (grid search)
+class KNeighborsClassifierCV(ClassifierCV):
+
+  def __init__(self, param_space, kfold=5):
+    super().__init__()
+    self.clf = GridSearchCV(estimator=KNeighborsClassifier(), param_grid=param_space, scoring='accuracy', cv=kfold,
+                            n_jobs=-1, refit=True, return_train_score=True, verbose=0)
+
+
+# Returns a model wrapped in SafeOneClassWrapper based on the requested type; model is not fitted
 def get_model(model, cls_weight='balanced'):
   if model == LGR:
     clf = LogisticRegression(C=0.03, class_weight=cls_weight, max_iter=500, random_state=0)
-    # clf = LogisticRegressionCV(Cs=[0.01, 0.03, 0.1, 0.3, 1, 3], class_weight=cls_weight, max_iter=500, random_state=0,
-    #                            cv=5)
+  elif model == LGRCV:
+    clf = LogisticRegressionCV(Cs=[0.003, 0.01, 0.03, 0.1, 0.3, 1, 3], class_weight=cls_weight, max_iter=500,
+                               random_state=0, cv=5)
   elif model == PR:
     clf = RegressionBasedClassifier(PR, alpha=0.01, max_iter=300)
   elif model == SVCLF:
@@ -218,6 +220,7 @@ def get_model_by_cohort(model, cls_weight='balanced', cohort=None):
   return SafeOneClassWrapper(clf)
 
 
+# ------------------------------------------- IGNORE the functions below!!! -------------------------------------------
 def train_model(md, params, X, y):
   if md == LGR:
     clf = LogisticRegression(random_state=SEED)

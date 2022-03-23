@@ -248,6 +248,7 @@ reg2name = {LR: "Linear Regression",
             }
 
 LGR = 'lgr'
+LGRCV = 'lgr-cv'
 SVCLF = 'svc'
 KNN = 'knn'
 KNNCV = 'knn-cv'
