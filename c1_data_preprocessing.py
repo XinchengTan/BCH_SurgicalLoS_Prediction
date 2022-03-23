@@ -112,39 +112,6 @@ class Dataset(object):
       year_to_case_keys[yr] = df_yr['SURG_CASE_KEY'].unique().astype(int)
     return year_to_case_keys
 
-  # def scale_Xtrain(self, how='minmax', only_numeric=True):  # ['minmax', 'std', 'robust']  -- only normalize continuous / ordinal features
-  #   if self.train_df_raw is None or self.Xtrain.shape[0] == 0:
-  #     return self.Xtrain
-  #   if how == 'minmax':
-  #     scaler = MinMaxScaler()
-  #   elif how == 'std':
-  #     scaler = StandardScaler()
-  #   elif how == 'robust':
-  #     scaler = RobustScaler()
-  #   else:
-  #     raise NotImplementedError(f'Scaler {how} is not supported yet!')
-  #
-  #   if only_numeric:
-  #     numeric_colidxs = np.where(np.in1d(self.feature_names, ALL_POSSIBLE_NUMERIC_COLS))[0]
-  #     self.Xtrain[:, numeric_colidxs] = scaler.fit_transform(self.Xtrain[:, numeric_colidxs])
-  #   else:
-  #     self.Xtrain = scaler.fit_transform(self.Xtrain)
-  #   self.input_scaler = scaler  # TODO: consider saving to FeatureEngMod field
-  #   return self.Xtrain
-  #
-  # def scale_Xtest(self, scaler=None):
-  #   if self.test_df_raw is None or self.Xtest.shape[0] == 0:
-  #     return self.Xtest
-  #   if scaler is None:
-  #     scaler = self.input_scaler
-  #   assert scaler is not None, 'Input scaler for Xtest cannot be None!'
-  #   if self.scale_numeric_only:
-  #     numeric_colidxs = np.where(np.in1d(self.feature_names, ALL_POSSIBLE_NUMERIC_COLS))[0]
-  #     self.Xtest[:, numeric_colidxs] = scaler.fit_transform(self.Xtest[:, numeric_colidxs])
-  #   else:
-  #     self.Xtest = scaler.transform(self.Xtest)
-  #   return self.Xtest
-
   def preprocess_train(self, outcome, ftr_cols=FEATURE_COLS, remove_o2m_train=True):
     print('\n***** Start to preprocess Xtrain:')
     # I. Preprocess training set

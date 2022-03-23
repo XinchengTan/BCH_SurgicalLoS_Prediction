@@ -424,6 +424,11 @@ class FeatureEngineeringModifier(object):
   def set_rare_pproc_cptgrp_cohorts(self, rare_pproc_cptgrp):
     self.rare_pproc_cptgrp_cohorts = rare_pproc_cptgrp
 
+  def save_to_file(self, save_fp):
+    # Todo: finish me! & test!
+    # pickle or joblib?
+    return
+
 
 # Generator of medical complexity of different types of medical codes
 class DecileGenerator(object):
