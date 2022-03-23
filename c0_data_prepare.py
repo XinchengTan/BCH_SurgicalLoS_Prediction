@@ -14,8 +14,8 @@ import utils_plot as pltutil
 pd.set_option('display.max_columns', 50)
 
 
-def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=None, pproc_fp=None, exclude2021=False,
-                 force_weight=False):
+def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=None,
+                 exclude2021=False, force_weight=False):
   """
   Prepares the patient LoS dataset, combining datetime and CPT related info
   """
@@ -33,14 +33,6 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=N
   if force_weight:
     dashb_df = dashb_df[globals.DASHDATA_COLS].dropna(subset=['WEIGHT_ZSCORE'])
   print_df_info(dashb_df, dfname='Processed Dashboard (weight)')
-
-  # Add primary procedure decile column (TODO: remove this?)
-  if pproc_fp is not None:
-    pproc_df = pd.read_csv(pproc_fp)
-    dashb_df = dashb_df\
-      .join(pproc_df[['PRIMARY_PROC', 'PPROC_DECILE', 'PPROC_COUNT', 'PPROC_SD']].set_index('PRIMARY_PROC'),
-            on='PRIMARY_PROC', how='inner')
-    print_df_info(dashb_df, dfname='Dashboard df with PProc decile')
 
   # Medication data -- join by surg case key
   if medication_fp is not None:
@@ -99,7 +91,7 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, diag_fp, medication_fp, dtime_fp=N
   print_df_info(dashb_df, dfname="Dashboard DF with CPT info")
 
   # Join with CCSR df
-  diags_df, diag_codes = pd.read_csv(diag_fp), ['ccsr_1']  # ['ccsr_1', 'icd10']
+  diags_df, diag_codes = pd.read_csv(ccsr_fp), ['ccsr_1']  # ['ccsr_1', 'icd10']
   print_df_info(diags_df, "Diagnosis DF", other_cols=['ccsr_1'])
   diags_df = diags_df.dropna(axis=0, how='any', subset=['ccsr_1'])\
     .groupby('SURG_CASE_KEY')\
