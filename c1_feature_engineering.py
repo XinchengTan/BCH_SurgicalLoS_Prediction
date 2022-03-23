@@ -2,6 +2,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+import pickle
 from pathlib import Path
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 
@@ -13,7 +14,8 @@ class FeatureEngineeringModifier(object):
   def __init__(self, onehot_cols=None, trimmed_ccsr=None, discretize_cols=None,
                input_scaler_type=None, scale_numeric_only=True,
                col2decile_ftrs2aggf=DEFAULT_COL2DECILE_FTR2AGGF, decile_outcome=LOS, decile_gen=None,
-               add_hybrid_pproc_cptgrp_col=False, nonrare_pprocs=None, rare_pproc_cptgrp_cohorts=None):
+               add_hybrid_pproc_cptgrp_col=False, nonrare_pprocs=None, rare_pproc_cptgrp_cohorts=None,
+               ftr_cols=None, feature_names=None):
     # Check args
     self._check_args(onehot_cols, decile_gen)
 
@@ -36,11 +38,14 @@ class FeatureEngineeringModifier(object):
     self.rare_pproc_cptgrp_cohorts = rare_pproc_cptgrp_cohorts
     # median miles of each state, to replace nan miles
     self.miles_nan_replacer = None
+    # Record keeping fields for separate testing
+    self.feature_cols = ftr_cols
+    self.feature_names = feature_names
 
   def _check_args(self, onehot_cols, decile_gen):
     assert all(oh in ONEHOT_COL2DTYPE.keys() for oh in onehot_cols), \
       f'onehot_cols must be in {ONEHOT_COL2DTYPE.keys()}!'
-    # if decile_gen is not None:
+    # if decile_gen is not None:  # tricky to use on jupyter notebook
     #   assert isinstance(decile_gen, DecileGenerator), 'decile_gen must be a DecileGenerator object!'
 
   def add_temporal_feature_admit_hour(self, data_df: pd.DataFrame):
@@ -424,10 +429,14 @@ class FeatureEngineeringModifier(object):
   def set_rare_pproc_cptgrp_cohorts(self, rare_pproc_cptgrp):
     self.rare_pproc_cptgrp_cohorts = rare_pproc_cptgrp
 
-  def save_to_file(self, save_fp):
-    # Todo: finish me! & test!
-    # pickle or joblib?
-    return
+  def set_feature_names(self, feature_names):
+    self.feature_names = feature_names
+
+  def save_to_pickle(self, save_fp):
+    assert str(save_fp).endswith('.pkl'), 'Please use extension .pkl to save this object!'
+    with open(save_fp, 'wb') as file:
+      pickle.dump(self, file, pickle.HIGHEST_PROTOCOL)
+    print(f'FeatureEngineeringModifier object saved to {save_fp}!')
 
 
 # Generator of medical complexity of different types of medical codes

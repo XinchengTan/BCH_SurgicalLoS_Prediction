@@ -72,7 +72,10 @@ class Dataset(object):
         col2decile_ftrs2aggf=col2decile_ftrs2aggf, decile_outcome=LOS, decile_gen=decile_gen,
         add_hybrid_pproc_cptgrp_col=add_hybrid_pproc_cptgrp_col,
         nonrare_pprocs=nonrare_pprocs,
-        rare_pproc_cptgrp_cohorts=rare_pproc_cptgrp_cohorts)
+        rare_pproc_cptgrp_cohorts=rare_pproc_cptgrp_cohorts,
+        ftr_cols=ftr_cols,
+        feature_names=None
+      )
     else:
       assert ftr_eng.__class__.__name__ == 'FeatureEngineeringModifier', 'ftr_eng must be of type FeatureEngineeringModifier!'
       self.FeatureEngMod = ftr_eng  # when test_pct = 1
@@ -87,12 +90,6 @@ class Dataset(object):
       self.Xtrain = self.FeatureEngMod.scale_Xtrain(self.Xtrain, self.feature_names)
     if self.test_df_raw is not None:
       self.Xtest = self.FeatureEngMod.scale_Xtest(self.Xtest, self.feature_names)
-
-    # self.input_scaler = scaler
-    # if self.input_scaler is not None:
-    #   if type(self.input_scaler) == str:
-    #     self.scale_Xtrain(how=scaler, only_numeric=self.scale_numeric_only)
-    #   self.scale_Xtest(scaler=self.input_scaler)
 
   def gen_sda_case_keys(self, df):
     # identify pure SDA cases
@@ -121,11 +118,12 @@ class Dataset(object):
       if SPS_PRED in train_df.columns:
         preprocess_y(train_df, outcome, surg_y=True, inplace=True)
 
-      # Modify data matrix
+      # Modify data matrix, save corresponding fields
       self.Xtrain, self.feature_names, self.train_case_keys, self.ytrain, self.o2m_df_train = self._preprocess_Xtrain(
         train_df, outcome, ftr_cols, remove_o2m=remove_o2m_train)
       self.train_cohort_df = train_df.set_index('SURG_CASE_KEY').loc[self.train_case_keys]
       self.left_join_add_new_col_to_dfs(self.case_key_to_pproc_cptgrp, is_train=True)
+      self.FeatureEngMod.set_feature_names(self.feature_names)
     else:
       self.Xtrain, self.ytrain, self.train_case_keys = np.array([]), np.array([]), np.array([])
       self.train_cohort_df = self.train_df_raw
