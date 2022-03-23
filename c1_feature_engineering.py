@@ -3,28 +3,48 @@ import warnings
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 
 from globals import *
 
 
 class FeatureEngineeringModifier(object):
 
-  def __init__(self, onehot_cols=None, onehot_dtypes=None, trimmed_ccsr=None, discretize_cols=None,
-               col2decile_ftrs2aggf=DEFAULT_COL2DECILE_FTR2AGGF, decile_outcome=LOS,
+  def __init__(self, onehot_cols=None, trimmed_ccsr=None, discretize_cols=None,
+               input_scaler_type=None, scale_numeric_only=True,
+               col2decile_ftrs2aggf=DEFAULT_COL2DECILE_FTR2AGGF, decile_outcome=LOS, decile_gen=None,
                add_hybrid_pproc_cptgrp_col=False, nonrare_pprocs=None, rare_pproc_cptgrp_cohorts=None):
-    self.onehot_cols, self.onehot_dtypes = onehot_cols, onehot_dtypes
+    # Check args
+    self._check_args(onehot_cols, decile_gen)
+
+    # Basic feature modifications (one-hot encoding, ccsr trimming, discretization of continuous col)
+    self.onehot_cols = onehot_cols
+    self.onehot_dtypes = [ONEHOT_COL2DTYPE[oh] for oh in self.onehot_cols]  # dtype of the columns to be onehot-encoded
     self.trimmed_ccsr = trimmed_ccsr
     self.discretize_cols = discretize_cols
+    # Meta data for input scaler
+    self.scaler_type = input_scaler_type
+    self.scale_numeric_only = scale_numeric_only
+    self.input_scaler = None
+    # Meta data for generating decile features
     self.col2decile_ftr2aggf = col2decile_ftrs2aggf
     self.decile_outcome = decile_outcome
+    self.decile_generator = DecileGenerator() if decile_gen is None else decile_gen  # must be a DecileGenerator()
+    # Meta data for generating hybrid column: primary proc/cpt_group with enough count
     self.add_hybrid_pproc_cptgrp_col = add_hybrid_pproc_cptgrp_col
     self.nonrare_pprocs = nonrare_pprocs
     self.rare_pproc_cptgrp_cohorts = rare_pproc_cptgrp_cohorts
-    self.decile_generator = DecileGenerator()
+    # median miles of each state, to replace nan miles
     self.miles_nan_replacer = None
 
+  def _check_args(self, onehot_cols, decile_gen):
+    assert all(oh in ONEHOT_COL2DTYPE.keys() for oh in onehot_cols), \
+      f'onehot_cols must be in {ONEHOT_COL2DTYPE.keys()}!'
+    # if decile_gen is not None:
+    #   assert isinstance(decile_gen, DecileGenerator), 'decile_gen must be a DecileGenerator object!'
+
   def add_temporal_feature_admit_hour(self, data_df: pd.DataFrame):
-    # TODO: FINISH THIS
+    # TODO: FINISH THIS for post-scheduling prediction update
     return
 
   def discretize_columns_df(self, Xdf: pd.DataFrame, discretize_cols=None, inplace=False):
@@ -85,15 +105,7 @@ class FeatureEngineeringModifier(object):
       Xdf.loc[(Xdf.LANGUAGE_DESC == 'Spanish'), 'SPANISH'] = 1.0
       Xdf.loc[(Xdf.LANGUAGE_DESC == 'Unable to Collect'), 'UNKNOWN_LANGUAGE'] = 1.0
       Xdf.loc[~Xdf[LANGUAGE].isin({'English', 'Spanish', 'Unable to Collect'}), 'OTHER_LANGUAGE'] = 1.0
-      # Xdf[['ENGLISH', 'SPANISH', 'ARABIC', 'PORTUGUESE', 'HAITIAN', 'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']] = 0.0
-      # Xdf.loc[(Xdf.LANGUAGE_DESC == 'Arabic'), 'ARABIC'] = 1.0
-      # Xdf.loc[(Xdf.LANGUAGE_DESC == 'Portuguese'), 'PORTUGUESE'] = 1.0
-      # Xdf.loc[(Xdf.LANGUAGE_DESC == 'Haitian Creole'), 'HAITIAN'] = 1.0
-      # Xdf.loc[(Xdf.LANGUAGE_DESC == 'Unable to Collect'), 'UNKNOWN_LANGUAGE'] = 1.0
-      # Xdf.loc[~Xdf[LANGUAGE].isin({'English', 'Spanish', 'Arabic', 'Portuguese', 'Haitian Creole',
-      #                                      'Unable to Collect'}), 'OTHER_LANGUAGE'] = 1.0
       Xdf.drop(columns=['LANGUAGE_DESC'], inplace=True)
-
     return Xdf
 
   def handle_nans(self, Xdf: pd.DataFrame, isTrain=True):  # NOTE: Xdf is a partial dataframe with only the designated feature columns
@@ -129,7 +141,6 @@ class FeatureEngineeringModifier(object):
     #   Xdf = Xdf[Xdf[WEIGHT_ZS].notnull()]
     #   print(f"Removed {prevN - Xdf.shape[0]} cases with NA in {WEIGHT_ZS}")
     #   prevN = Xdf.shape[0]
-    # TODO: get columns that end with '_SD' and filter out NA entries, or assign 0? -- currently usin ddof=0
 
     print('Xdf shape after handling NAs: ', Xdf.shape)
     return Xdf
@@ -328,6 +339,40 @@ class FeatureEngineeringModifier(object):
       onehot_cols = list(map(lambda item: item.replace('ICD10S', 'Trimmed_ICD10S'), onehot_cols))
     # Note: self.onehot_cols should have been updated, given how array referencing works in Python
     return Xdf, onehot_cols
+
+  def scale_Xtrain(self, Xtrain, feature_names):
+    # ['minmax', 'std', 'robust']  -- only normalize continuous / ordinal features
+    if self.scaler_type is None or Xtrain.shape[0] == 0:
+      return Xtrain
+
+    if self.scaler_type == 'minmax':
+      scaler = MinMaxScaler()
+    elif self.scaler_type == 'std':
+      scaler = StandardScaler()
+    elif self.scaler_type == 'robust':
+      scaler = RobustScaler()
+    else:
+      raise NotImplementedError(f'{self.scaler_type} scaler is not supported yet!')
+
+    if self.scale_numeric_only:
+      numeric_colidxs = np.where(np.in1d(feature_names, ALL_POSSIBLE_NUMERIC_COLS))[0]
+      Xtrain[:, numeric_colidxs] = scaler.fit_transform(Xtrain[:, numeric_colidxs])
+    else:
+      Xtrain = scaler.fit_transform(Xtrain)
+    self.input_scaler = scaler
+    return Xtrain
+
+  def scale_Xtest(self, Xtest, feature_names):
+    if self.scaler_type is None or Xtest.shape[0] == 0:
+      return Xtest
+    assert self.input_scaler is not None, f'Input_scaler for {self.scaler_type} scaler cannot be None!'
+
+    if self.scale_numeric_only:
+      numeric_colidxs = np.where(np.in1d(feature_names, ALL_POSSIBLE_NUMERIC_COLS))[0]
+      Xtest[:, numeric_colidxs] = self.input_scaler.transform(Xtest[:, numeric_colidxs])
+    else:
+      Xtest = self.input_scaler.transform(Xtest)
+    return Xtest
 
   def get_ccsr_decile(self):
     assert isinstance(self.decile_generator, DecileGenerator), \

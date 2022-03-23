@@ -29,12 +29,7 @@ class Dataset(object):
                trimmed_ccsr=None, target_features=None, decile_gen=None, ftr_eng: FeatureEngineeringModifier=None,
                add_hybrid_pproc_cptgrp_col=False, nonrare_pprocs=None, rare_pproc_cptgrp_cohorts=None,
                remove_o2m=(True, True), scaler=None, scale_numeric_only=True):
-    # Check args
-    assert all(oh in ONEHOT_COL2DTYPE.keys() for oh in onehot_cols), \
-      f'onehot_cols must be in {ONEHOT_COL2DTYPE.keys()}!'
-    # Define datatype of the columns to be onehot-encoded in order
-    onehot_dtypes = [ONEHOT_COL2DTYPE[oh] for oh in onehot_cols]
-
+    # For record keeping
     self.df = df.copy()
     self.outcome = outcome
 
@@ -72,15 +67,15 @@ class Dataset(object):
     self.case_key_to_pproc_cptgrp = pd.DataFrame(columns=['SURG_CASE_KEY', PRIMARY_PROC_CPTGRP])
     if ftr_eng is None:
       self.FeatureEngMod = FeatureEngineeringModifier(
-        onehot_cols, onehot_dtypes, trimmed_ccsr, discretize_cols, col2decile_ftrs2aggf, decile_outcome=LOS,
-        add_hybrid_pproc_cptgrp_col=add_hybrid_pproc_cptgrp_col, nonrare_pprocs=nonrare_pprocs,
+        onehot_cols, trimmed_ccsr, discretize_cols,
+        input_scaler_type=scaler, scale_numeric_only=scale_numeric_only,
+        col2decile_ftrs2aggf=col2decile_ftrs2aggf, decile_outcome=LOS, decile_gen=decile_gen,
+        add_hybrid_pproc_cptgrp_col=add_hybrid_pproc_cptgrp_col,
+        nonrare_pprocs=nonrare_pprocs,
         rare_pproc_cptgrp_cohorts=rare_pproc_cptgrp_cohorts)
     else:
       assert ftr_eng.__class__.__name__ == 'FeatureEngineeringModifier', 'ftr_eng must be of type FeatureEngineeringModifier!'
       self.FeatureEngMod = ftr_eng  # when test_pct = 1
-    # TODO: remove decile_gen
-    if decile_gen is not None:
-      self.FeatureEngMod.set_decile_gen(decile_gen)  # when test_pct = 1
 
     # 3. Preprocess train & test data, update cohort_df if necessary
     self.preprocess_train(outcome, ftr_cols, remove_o2m_train=remove_o2m[0])
@@ -88,12 +83,16 @@ class Dataset(object):
     self.left_join_add_new_col_to_dfs(self.case_key_to_pproc_cptgrp, is_train=None)  # update cohort_df
 
     # 4. Apply data matrix scaling (e.g. normalization, standardization)
-    self.input_scaler = scaler
-    self.scale_numeric_only = scale_numeric_only
-    if self.input_scaler is not None:
-      if type(self.input_scaler) == str:
-        self.scale_Xtrain(how=scaler, only_numeric=self.scale_numeric_only)
-      self.scale_Xtest(scaler=self.input_scaler)
+    if self.train_df_raw is not None:
+      self.Xtrain = self.FeatureEngMod.scale_Xtrain(self.Xtrain, self.feature_names)
+    if self.test_df_raw is not None:
+      self.Xtest = self.FeatureEngMod.scale_Xtest(self.Xtest, self.feature_names)
+
+    # self.input_scaler = scaler
+    # if self.input_scaler is not None:
+    #   if type(self.input_scaler) == str:
+    #     self.scale_Xtrain(how=scaler, only_numeric=self.scale_numeric_only)
+    #   self.scale_Xtest(scaler=self.input_scaler)
 
   def gen_sda_case_keys(self, df):
     # identify pure SDA cases
@@ -113,38 +112,38 @@ class Dataset(object):
       year_to_case_keys[yr] = df_yr['SURG_CASE_KEY'].unique().astype(int)
     return year_to_case_keys
 
-  def scale_Xtrain(self, how='minmax', only_numeric=True):  # ['minmax', 'std', 'robust']  -- only normalize continuous / ordinal features
-    if self.train_df_raw is None or self.Xtrain.shape[0] == 0:
-      return self.Xtrain
-    if how == 'minmax':
-      scaler = MinMaxScaler()
-    elif how == 'std':
-      scaler = StandardScaler()
-    elif how == 'robust':
-      scaler = RobustScaler()
-    else:
-      raise NotImplementedError(f'Scaler {how} is not supported yet!')
-
-    if only_numeric:
-      numeric_colidxs = np.where(np.in1d(self.feature_names, ALL_POSSIBLE_NUMERIC_COLS))[0]
-      self.Xtrain[:, numeric_colidxs] = scaler.fit_transform(self.Xtrain[:, numeric_colidxs])
-    else:
-      self.Xtrain = scaler.fit_transform(self.Xtrain)
-    self.input_scaler = scaler  # TODO: consider saving to FeatureEngMod field
-    return self.Xtrain
-
-  def scale_Xtest(self, scaler=None):
-    if self.test_df_raw is None or self.Xtest.shape[0] == 0:
-      return self.Xtest
-    if scaler is None:
-      scaler = self.input_scaler
-    assert scaler is not None, 'Input scaler for Xtest cannot be None!'
-    if self.scale_numeric_only:
-      numeric_colidxs = np.where(np.in1d(self.feature_names, ALL_POSSIBLE_NUMERIC_COLS))[0]
-      self.Xtest[:, numeric_colidxs] = scaler.fit_transform(self.Xtest[:, numeric_colidxs])
-    else:
-      self.Xtest = scaler.transform(self.Xtest)
-    return self.Xtest
+  # def scale_Xtrain(self, how='minmax', only_numeric=True):  # ['minmax', 'std', 'robust']  -- only normalize continuous / ordinal features
+  #   if self.train_df_raw is None or self.Xtrain.shape[0] == 0:
+  #     return self.Xtrain
+  #   if how == 'minmax':
+  #     scaler = MinMaxScaler()
+  #   elif how == 'std':
+  #     scaler = StandardScaler()
+  #   elif how == 'robust':
+  #     scaler = RobustScaler()
+  #   else:
+  #     raise NotImplementedError(f'Scaler {how} is not supported yet!')
+  #
+  #   if only_numeric:
+  #     numeric_colidxs = np.where(np.in1d(self.feature_names, ALL_POSSIBLE_NUMERIC_COLS))[0]
+  #     self.Xtrain[:, numeric_colidxs] = scaler.fit_transform(self.Xtrain[:, numeric_colidxs])
+  #   else:
+  #     self.Xtrain = scaler.fit_transform(self.Xtrain)
+  #   self.input_scaler = scaler  # TODO: consider saving to FeatureEngMod field
+  #   return self.Xtrain
+  #
+  # def scale_Xtest(self, scaler=None):
+  #   if self.test_df_raw is None or self.Xtest.shape[0] == 0:
+  #     return self.Xtest
+  #   if scaler is None:
+  #     scaler = self.input_scaler
+  #   assert scaler is not None, 'Input scaler for Xtest cannot be None!'
+  #   if self.scale_numeric_only:
+  #     numeric_colidxs = np.where(np.in1d(self.feature_names, ALL_POSSIBLE_NUMERIC_COLS))[0]
+  #     self.Xtest[:, numeric_colidxs] = scaler.fit_transform(self.Xtest[:, numeric_colidxs])
+  #   else:
+  #     self.Xtest = scaler.transform(self.Xtest)
+  #   return self.Xtest
 
   def preprocess_train(self, outcome, ftr_cols=FEATURE_COLS, remove_o2m_train=True):
     print('\n***** Start to preprocess Xtrain:')
@@ -174,17 +173,14 @@ class Dataset(object):
 
       if isinstance(remove_o2m_test, pd.DataFrame):
         o2m_df = remove_o2m_test
-        self.feature_names = o2m_df.columns.to_list()  # TODO: refactor this, in case o2m_df is empty
+        self.feature_names = target_features if o2m_df.empty else o2m_df.columns.to_list()  # should == target_features
       elif remove_o2m_test == True:
-        o2m_df = self.o2m_df_train
-      elif remove_o2m_test == False:
-        o2m_df = None
-        # TODO: why not set feature_names here as well????
+        o2m_df = self.o2m_df_train  # no need to set feature_names, since it should've been set in preprocess_Xtrain
       else:
-        o2m_df = None
-        self.feature_names = target_features
-        if self.feature_names is None:
-          raise ValueError("target_features cannot be None when test_pct = 1!")
+        o2m_df = None  # no need to set feature_names
+
+      if self.feature_names is None or len(self.feature_names) == 0:
+        raise ValueError("target_features cannot be None or empty for preprocessing test data!")
 
       self.Xtest, _, self.test_case_keys = self._preprocess_Xtest(test_df, self.feature_names, ftr_cols,
                                                                   skip_cases_df_or_fp=o2m_df)
@@ -371,7 +367,6 @@ class Dataset(object):
       s = time()
       o2m_df, X, X_case_keys, y = discard_o2m_cases_from_self(X, X_case_keys, y, target_features)  # training set
       print("\nRemoving o2m cases from self took %d sec" % (time() - s))
-      # TODO: ??? regenerate decile if o2m_df.shape[0] > 0
     print('\nAfter removing o2m cases: X - ', X.shape)
 
     if verbose:
