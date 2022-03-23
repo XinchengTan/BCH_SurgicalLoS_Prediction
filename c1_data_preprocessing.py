@@ -1,6 +1,8 @@
 """
 Helper functions to preprocess the data and generate data matrix with its corresponding labels
 """
+import warnings
+
 from IPython.display import display
 from imblearn.over_sampling import SMOTENC
 import numpy as np
@@ -10,8 +12,9 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from time import time
 from typing import Dict, Iterable, Any
 
-from globals import *
 from c1_feature_engineering import FeatureEngineeringModifier, DecileGenerator
+from globals import *
+from globals_fs import *
 
 
 def gen_cohort_df(df: pd.DataFrame, cohort):
@@ -102,7 +105,9 @@ class Dataset(object):
 
   def gen_year_to_case_keys(self, df) -> Dict:
     year_to_case_keys = {}
-    assert ADMIT_DTM in df.columns, f"Missing column '{ADMIT_DTM}' in the input df!"
+    if ADMIT_DTM not in df.columns:
+      print('Admission Datetime is not contained in original dataframe!')
+      return {}
     yr_df = df.loc[:, ['SURG_CASE_KEY', ADMIT_DTM]]
     yr_df.loc[:, ADMIT_YEAR] = yr_df[ADMIT_DTM].dt.year
     for yr, df_yr in yr_df.groupby(ADMIT_YEAR):
@@ -522,8 +527,8 @@ def gen_primary_proc_cptgroup_col_for_case_keys(Xdf: pd.DataFrame, cptgrp_decile
          rare_hybrid_cohorts
 
 
+# Generate an outcome vector y with shape: (n_samples, )
 def preprocess_y(df: pd.DataFrame, outcome, surg_y=False, inplace=False):
-  # Generate an outcome vector y with shape: (n_samples, )
   if df.empty:
     return df
 
@@ -655,9 +660,10 @@ def gen_o2m_cases(X, y, features, unique=True, save_fp=None, X_case_keys=None):
   o2m_df = Xydf_dup \
     .groupby(by=features)\
     .filter(lambda x: len(x['Outcome'].value_counts().index) > 1)
-  # o2m_df.groupby(by=features)\
+  # o2m_df.to_csv(DEPLOY_DEP_FILES_DIR / 'dup_o2m_df.csv', index=False)
+  # o2m_df.groupby(by=features) \
   #   .agg(lambda x: list(x))\
-  #   .to_csv('featureVector_to_o2m_case_keys2.csv', index=False)
+  #   .to_csv(DEPLOY_DEP_FILES_DIR / 'ftrVec_to_o2m_df.csv', index=False)
   print("Covered %d o2m cases" % o2m_df.shape[0])
 
   if unique:

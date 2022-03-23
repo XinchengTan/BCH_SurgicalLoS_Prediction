@@ -20,9 +20,12 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=N
   Prepares the patient LoS dataset, combining datetime and CPT related info
   """
   # Load dashboard dataset
-  date_cols = ['HAR_ADMIT_DATE', 'HAR_DISCHARGE_DATE', 'SURGEON_START_DT_TM', 'SURGERY_END_DT_TM']
+  date_cols = [globals.ADMIT_DTM, globals.DISCHARGE_DTM, globals.SURG_START_DTM, globals.SURG_END_DTM]
   if type(data_fp) == str or type(data_fp) == PosixPath:
-    dashb_df = pd.read_csv(data_fp, parse_dates=date_cols) if dtime_fp is None else pd.read_csv(data_fp)
+    dashb_df = pd.read_csv(data_fp)
+    available_date_cols = np.array(date_cols)[np.in1d(date_cols, dashb_df.columns)]
+    if len(available_date_cols) > 0:
+      dashb_df = pd.read_csv(data_fp, parse_dates=list(available_date_cols))
   elif isinstance(data_fp, pd.DataFrame):
     dashb_df = data_fp.copy()
   else:
@@ -49,11 +52,13 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=N
     print_df_info(dtime_df, dfname='Processed Datetime DF')
     dashb_df = dashb_df.join(dtime_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')
     print_df_info(dashb_df, dfname="Combined dashboard df")
-    # TODO: Very weird that case 62211921 is null at admit and discharge time, investigate this with csv reader
 
   # Compute the number of nights
-  admit_date, discharge_date = dashb_df['HAR_ADMIT_DATE'].dt.date, dashb_df['HAR_DISCHARGE_DATE'].dt.date
-  dashb_df[globals.NNT] = (discharge_date - admit_date) / np.timedelta64(1, 'D')
+  if globals.ADMIT_DTM in dashb_df.columns and globals.DISCHARGE_DTM in dashb_df.columns:
+    admit_date, discharge_date = dashb_df[globals.ADMIT_DTM].dt.date, dashb_df[globals.DISCHARGE_DTM].dt.date
+    dashb_df[globals.NNT] = (discharge_date - admit_date) / np.timedelta64(1, 'D')
+  else:
+    dashb_df[globals.NNT] = 1000  # Placeholder outcome when it's not available
 
   # Handle basic NaNs
   dashb_df.fillna({os: 0.0 for os in globals.OS_CODE_LIST}, inplace=True)
