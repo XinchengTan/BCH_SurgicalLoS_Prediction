@@ -154,7 +154,7 @@ class KNeighborsClassifierCV(ClassifierCV):
 # Returns a model wrapped in SafeOneClassWrapper based on the requested type; model is not fitted
 def get_model(model, cls_weight='balanced'):
   if model == LGR:
-    clf = LogisticRegression(C=0.03, class_weight=cls_weight, max_iter=500, random_state=0)
+    clf = LogisticRegression(C=0.01, class_weight=cls_weight, max_iter=500, random_state=0)
   elif model == LGRCV:
     clf = LogisticRegressionCV(Cs=[0.003, 0.01, 0.03, 0.1, 0.3, 1, 3], class_weight=cls_weight, max_iter=500,
                                random_state=0, cv=5)

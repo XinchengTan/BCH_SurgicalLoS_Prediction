@@ -1,14 +1,11 @@
 """
 This script contains helper functions to prepare the raw dataset pulled from DB.
 """
-from IPython.display import display
 import pandas as pd
 import numpy as np
-from pathlib import Path, PosixPath
+from pathlib import PosixPath
 
 import globals
-import c1_data_preprocessing as dpp
-import utils_plot as pltutil
 
 
 pd.set_option('display.max_columns', 50)
@@ -163,10 +160,3 @@ def gen_sps_data(df):
 def gen_data_without_sps_pred(df):
   """Select a subset of cases where SPS surgeon estimation is not available"""
   return df.loc[df['SPS_PREDICTED_LOS'].isnull()]
-
-
-# if __name__ == "__main__":
-#   data_df = prepare_data(Path("../Data_new_all", "dashboard_data_18to21.csv"),
-#                          Path("../Data_new_all", "dtime_data_18to21.csv"))
-#
-#   gen_sps_data(data_df)
