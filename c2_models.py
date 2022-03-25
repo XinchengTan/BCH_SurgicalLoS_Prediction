@@ -8,7 +8,7 @@ from typing import List
 from imblearn.ensemble import BalancedBaggingClassifier, BalancedRandomForestClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.metrics import mean_squared_error, make_scorer, accuracy_score
-from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split
+from sklearn.model_selection import cross_val_score, GridSearchCV, RandomizedSearchCV, train_test_split
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV, PoissonRegressor, Ridge, RidgeCV
@@ -22,6 +22,7 @@ from xgboost import XGBClassifier, XGBRegressor
 
 from globals import *
 from c1_data_preprocessing import Dataset
+from c4_model_perf import MyScorer
 
 
 try:
@@ -265,6 +266,62 @@ def train_model_all_ktrials(decileFtr_config, models, k_datasets: List[Dataset],
       model_dict[md] = clf
     k_model_dict.append(model_dict)
   return k_model_dict
+
+
+def get_refit_val(scorers, refit):
+  if (len(scorers) == 1) or (type(refit) == str):
+    return refit
+
+  if SCR_AUC in scorers:
+    return SCR_AUC
+  return SCR_ACC
+
+
+def tune_model_optuna(md, X, y, kfold, scorers, refit=True):
+  minority_size = min(Counter(y).values())
+  print('Minority class size: ', minority_size)
+  if md == KNN:
+    clf = KNeighborsClassifier()
+    # param_space = {
+    #   'algorithm': optuna.distributions.CategoricalDistribution(['ball_tree', 'kd_tree', 'brute']),
+    #   'leaf_size': optuna.distributions.DiscreteUniformDistribution(10, minority_size, 10),
+    #   'n_neighbors': optuna.distributions.DiscreteUniformDistribution(5, minority_size, minority_size // 10 + 1),
+    #   'p': optuna.distributions.IntUniformDistribution(1, 3),
+    #   'weights': optuna.distributions.CategoricalDistribution(['uniform', 'distance'])
+    # }
+    param_space = {
+      'n_neighbors': optuna.distributions.IntUniformDistribution(5, minority_size, minority_size // 10 + 1),
+      'p': optuna.distributions.IntUniformDistribution(1, 3),
+    }
+  else:
+    raise NotImplementedError
+  refit = get_refit_val(scorers, refit)
+  optuna_search = optuna.integration.OptunaSearchCV(clf, param_space, cv=kfold, refit=refit, n_trials=50, verbose=2,
+                                                    scoring=scorers)
+  optuna_search.fit(X, y)
+
+  return optuna_search
+
+
+def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=10, refit=True, calibrate=False):
+  minority_size = min(Counter(y).values())
+  if md == KNN:
+    clf = KNeighborsClassifier()
+    param_space = {
+      'algorithm': ['ball_tree', 'kd_tree', 'brute'],
+      'leaf_size': list(range(20, minority_size, 10)),
+      'n_neighbors': list(range(5, minority_size + 1, minority_size // 10 + 1)),
+      'p': [1, 2, 3],
+      'weights': ['uniform', 'distance']
+    }
+  else:
+    raise NotImplementedError
+
+  refit = get_refit_val(scorers, refit)
+  rand_search = RandomizedSearchCV(clf, param_space, n_jobs=-1, refit=refit, cv=kfold, n_iter=n_iters,
+                                   scoring=MyScorer.get_scorer_dict(scorers))
+  rand_search.fit(X, y)
+  return rand_search
 
 
 # TODO: use Optuna
