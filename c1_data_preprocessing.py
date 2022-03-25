@@ -531,30 +531,25 @@ def gen_primary_proc_cptgroup_col_for_case_keys(Xdf: pd.DataFrame, cptgrp_decile
 def preprocess_y(df: pd.DataFrame, outcome, surg_y=False, inplace=False):
   if df.empty:
     return df
-
   df = df.copy() if not inplace else df
 
   if outcome == LOS:
-    return df.LENGTH_OF_STAY.to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
+    return df[LOS].to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
   elif outcome == ">12h":
-    y = df.LENGTH_OF_STAY.to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
+    y = df[LOS].to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
     y[y > 0.5] = 1
     y[y <= 0.5] = 0
-  elif outcome == ">1d":
-    y = df.LENGTH_OF_STAY.to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
-    y[y > 1] = 1
-    y[y <= 1] = 0
   elif outcome == NNT:
     y = df[NNT].to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
     y = gen_y_nnt(y)
-  elif outcome.endswith("nnt"):
+  elif outcome in BINARY_NNT_SET:
     y = df[NNT].to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
-    cutoff = int(outcome.split("nnt")[0])
+    cutoff = int(outcome[-1])
     y = gen_y_nnt_binary(y, cutoff)
   else:
-    raise NotImplementedError("Outcome type '%s' is not implemented yet!" % outcome)
+    raise NotImplementedError(f"Outcome type '{outcome}' is not implemented yet!")
 
-  # Update df by adding or updating the outcome column
+  # Update df by adding a new or updating the existing outcome column
   if surg_y:
     df[SPS_PRED] = y
   else:
