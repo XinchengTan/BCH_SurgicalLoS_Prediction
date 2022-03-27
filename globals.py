@@ -19,7 +19,14 @@ PR_CPTGRP_X = 'PRIMARY_PROC_MAX_CPTGRP_DECILE_'  # a prefix for each primary cpt
 COHORT_TYPE_SET = {SURG_GROUP, PRIMARY_PROC, PRIMARY_PROC_CPTGRP}
 
 # Customized new column names during dataframe preprocessing
-NNT = "NUM_OF_NIGHTS"
+NNT = 'NUM_OF_NIGHTS'
+NNT_B0 = 'NUM_OF_NIGHTS <= 0'
+NNT_B1 = 'NUM_OF_NIGHTS <= 1'
+NNT_B2 = 'NUM_OF_NIGHTS <= 2'
+NNT_B3 = 'NUM_OF_NIGHTS <= 3'
+NNT_B4 = 'NUM_OF_NIGHTS <= 4'
+NNT_B5 = 'NUM_OF_NIGHTS <= 5'
+BINARY_NNT_SET = {NNT_B0, NNT_B1, NNT_B2, NNT_B3, NNT_B4, NNT_B5}  # NNT_Bx  max(x) = MAX_NNT
 OS_CODES = 'OS_CODES'
 CCSRS, CCSR, CCSR_DECILE, ZERO_CCSR = 'CCSRS', 'CCSR', 'CCSR_DECILE', 'Zero_CCSRs'
 CPTS, CPT, CPT_DECILE = 'CPTS', 'CPT', 'CPT_DECILE'
@@ -302,9 +309,17 @@ BIN_CLF = 'binclf'
 TASK2Name = {TASK_REG: "Regression", TASK_MULTI_CLF: "Multi-class classification", TASK_BIN_CLF: "Binary classification"}
 ALL_TASKS = set(TASK2Name.keys())
 
-# Ensemble weighting mechanism
+# Ensemble weighting mechanism  TODO
 
 
+# CV Search
+GRID_SEARCH = 'GridSearch'
+RANDOM_SEARCH = 'RandomSearch'
+OPTUNA_SEARCH = 'OptunaSearch'
+
+
+
+# Metrics
 GMEAN = "G-mean"
 F1 = "F1 score"
 FPRPCT15 = "< 0.15"
@@ -320,6 +335,9 @@ SCR_UNDERPRED0 = 'Underprediction Rate'
 SCR_OVERPRED0 = 'Overprediction Rate'
 SCR_UNDERPRED2 = 'Extreme Underprediction Rate'
 SCR_OVERPRED2 = 'Extreme Overprediction Rate'
+SCR_F1_BINCLF = 'f1'
+SCR_PREC_BINCLF = 'precision'
+SCR_RECALL_BINCLF = 'recall'
 SCR_RECALL_ALL_CLS = 'recall_all_classes'
 SCR_RECALL_PREFIX = 'recall_class'  # prefix for recall of a particular class: recall of class X has label 'recall_clsX'
 SCR_RECALL0 = 'recall_class0'
@@ -332,10 +350,11 @@ SCR_RECALL6 = 'recall_class6'  # if MAX_NNT > 5, add SCR_RECALL? accordingly
 SCR_RECALL_ALL_LIST = [SCR_RECALL0, SCR_RECALL1, SCR_RECALL2, SCR_RECALL3, SCR_RECALL4, SCR_RECALL5, SCR_RECALL6]
 DEFAULT_SCORERS = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_OVERPRED2, SCR_UNDERPRED2,
                    SCR_RMSE] + SCR_RECALL_ALL_LIST # SCR_ACC_BAL,
+DEFAULT_SCORERS_BINCLF = [SCR_ACC, SCR_RECALL_BINCLF, SCR_PREC_BINCLF, SCR_F1_BINCLF]  # SCR_AUC
 
 # Scorer formatter for pd output
 SCR_FORMATTER = defaultdict(lambda: "{:.1%}".format)
-SCR_FORMATTER.update({SCR_RMSE: "{:.2f}".format})
+SCR_FORMATTER.update({SCR_RMSE: "{:.2f}".format, SCR_F1_BINCLF: "{:.2f}".format})
 
 # SCR_ACC: "{:.1%}".format, SCR_ACC_BAL: "{:.1%}".format, SCR_ACC_ERR1: "{:.1%}".format,
 # SCR_ACC_ERR2: "{:.1%}".format, SCR_OVERPRED: "{:.1%}".format, SCR_UNDERPRED: "{:.1%}".format,
