@@ -3,7 +3,7 @@ import numpy as np
 import optuna
 from collections import Counter
 from tqdm import tqdm
-from typing import List
+from typing import Any, Dict, List
 
 from imblearn.ensemble import BalancedBaggingClassifier, BalancedRandomForestClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -143,13 +143,20 @@ class SafeOneClassWrapper(BaseEstimator, ClassifierMixin):
     return accuracy_score(y, ypred, sample_weight=sample_weight)
 
 
-# CV wrapper for KNN (grid search)
+# CV wrapper for KNN TODO: add other searchCV methods!
 class KNeighborsClassifierCV(ClassifierCV):
 
-  def __init__(self, param_space, kfold=5):
+  def __init__(self, param_space, kfold=5, searchCV=GRID_SEARCH, scoring=SCR_ACC):
     super().__init__()
-    self.clf = GridSearchCV(estimator=KNeighborsClassifier(), param_grid=param_space, scoring='accuracy', cv=kfold,
-                            n_jobs=-1, refit=True, return_train_score=True, verbose=0)
+    if searchCV == GRID_SEARCH:
+      self.clf = GridSearchCV(estimator=KNeighborsClassifier(), param_grid=param_space, scoring=scoring, cv=kfold,
+                              n_jobs=-1, refit=True, return_train_score=True, verbose=0)
+    elif searchCV == OPTUNA_SEARCH:
+      self.clf = optuna.integration.OptunaSearchCV(estimator=KNeighborsClassifier, scoring=scoring, cv=kfold, n_jobs=-1,
+                                                   refit=True)
+    else:
+      raise NotImplementedError
+
 
 
 # Returns a model wrapped in SafeOneClassWrapper based on the requested type; model is not fitted
@@ -221,6 +228,41 @@ def get_model_by_cohort(model, cls_weight='balanced', cohort=None):
   return SafeOneClassWrapper(clf)
 
 
+def get_model_binclf(model, cls_weight='balanced'):
+  if model == LGR:
+    clf = LogisticRegression(C=0.01, class_weight=cls_weight, max_iter=500, random_state=0)
+  elif model == LGRCV:
+    clf = LogisticRegressionCV(Cs=[0.003, 0.01, 0.03, 0.1, 0.3, 1, 3], class_weight=cls_weight, max_iter=500,
+                               random_state=0, cv=5)
+  elif model == PR:
+    clf = RegressionBasedClassifier(PR, alpha=0.01, max_iter=300)
+  elif model == SVCLF:
+    clf = SVC(gamma='auto', class_weight=cls_weight, probability=False)
+  elif model == KNN:
+    clf = KNeighborsClassifier(n_neighbors=45)
+  elif model == KNNCV:
+    clf = KNeighborsClassifierCV({'n_neighbors': np.arange(5, 56, 10)})
+  elif model == DTCLF:
+    clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight=cls_weight)
+  elif model == RMFCLF:
+    clf = RandomForestClassifier(random_state=0, max_depth=10, class_weight=cls_weight)
+  elif model == GBCLF:
+    clf = GradientBoostingClassifier(random_state=0, max_depth=3)
+  elif model == XGBCLF:
+    clf = XGBClassifier(max_depth=4, learning_rate=0.1, n_estimators=100, random_state=0, use_label_encoder=False,
+                        eval_metric='mlogloss')
+  elif model == ORDCLF_LOGIT:
+    clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True)
+  elif model == ORDCLF_PROBIT:
+    clf = OrdinalClassifier(distr='probit', solver='bfgs', disp=True)
+  elif model == BAL_BAGCLF:
+    clf = BalancedBaggingClassifier(random_state=0)
+  else:
+    raise NotImplementedError("Model %s is not supported!" % model)
+
+  return SafeOneClassWrapper(clf)
+
+
 # ------------------------------------------- IGNORE the functions below!!! -------------------------------------------
 def train_model(md, params, X, y):
   if md == LGR:
@@ -246,26 +288,33 @@ def train_model(md, params, X, y):
   return clf
 
 
-def train_model_all_ktrials(decileFtr_config, models, k_datasets: List[Dataset],
-                            train_sda_only=False, train_surg_only=False):
-  # print decile agg funcs
-  for k, v in decileFtr_config.items():
-    print(k, v)
-
+def train_model_all_ktrials(models, k_datasets: Dict[Any, Dataset],
+                            train_sda_only=False, train_surg_only=False, binclf=False):
   models = [LGR, KNN, RMFCLF, XGBCLF] if models is None else models  # GBCLF,
-  k_model_dict = []
-  for kt, dataset_k in tqdm(enumerate(k_datasets), total=len(k_datasets)):
+  k_model_dict = {}
+  for kt, dataset_k in tqdm(k_datasets.items()):
     # Fit models
     Xtrain, ytrain = dataset_k.get_Xytrain_by_case_key(dataset_k.train_case_keys,
                                                        sda_only=train_sda_only, surg_only=train_surg_only)
     model_dict = {}
     for md in models:
       print('md=', md)
-      clf = get_model(md)
+      clf = get_model(md) if not binclf else get_model_binclf(md)
       clf.fit(Xtrain, ytrain)
       model_dict[md] = clf
-    k_model_dict.append(model_dict)
+    k_model_dict[kt] = model_dict
   return k_model_dict
+
+
+# Train models for all binary outcomes across k trials/folds
+def train_model_all_ktrials_binclf(models, bin_kt_datasets: Dict[str, Dict[int, Dataset]],
+                                   train_sda_only=False, train_surg_only=False):
+  bin_k_model_dict = defaultdict(dict)
+  for bin_nnt, kt_datasets in tqdm(bin_kt_datasets.items(), desc='Binary Outcomes'):
+    print('Outcome: ', bin_nnt)
+    bin_k_model_dict[bin_nnt] = train_model_all_ktrials(models, k_datasets=kt_datasets, binclf=True,
+                                                        train_sda_only=train_sda_only, train_surg_only=train_surg_only)
+  return bin_k_model_dict
 
 
 def get_refit_val(scorers, refit):
