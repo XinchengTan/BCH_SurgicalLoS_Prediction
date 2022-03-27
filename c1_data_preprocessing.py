@@ -223,9 +223,10 @@ class Dataset(object):
     if query_case_keys is None or len(query_case_keys) == 0:
       return pd.DataFrame(columns=['SURG_CASE_KEY', SPS_PRED])
     filtered_case_keys = self.filter_X_case_keys(query_case_keys, surg_only=True, years=years)
-    surg_df = self.df.loc[:, ['SURG_CASE_KEY', SPS_PRED, self.outcome]] \
+    surg_df = self.df.loc[:, ['SURG_CASE_KEY', SPS_PRED, LOS, NNT]] \
       .set_index('SURG_CASE_KEY') \
       .loc[filtered_case_keys, :].reset_index()
+    # TODO: think about whether to use train/test_cohort_df rather than raw_df here!
     preprocess_y(surg_df, self.outcome, True, inplace=True)  # preprocess surgeon prediction
     preprocess_y(surg_df, self.outcome, False, inplace=True)  # preprocess true outcome
     return surg_df

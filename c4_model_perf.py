@@ -6,7 +6,8 @@ from copy import deepcopy
 from tqdm import tqdm
 from typing import Any, Dict, Iterable
 
-from sklearn.metrics import accuracy_score, balanced_accuracy_score, confusion_matrix, make_scorer, roc_auc_score, mean_squared_error
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, confusion_matrix, make_scorer, \
+  roc_auc_score, mean_squared_error, recall_score, precision_score, f1_score
 import shap
 
 import utils_plot
@@ -30,6 +31,12 @@ class MyScorer:
         scr_dict[scorer] = 'balanced_accuracy'
       elif scorer == SCR_AUC:
         scr_dict[scorer] = 'roc_auc'
+      elif scorer == SCR_RECALL_BINCLF:
+        scr_dict[scorer] = 'recall'
+      elif scorer == SCR_PREC_BINCLF:
+        scr_dict[scorer] = 'precision'
+      elif scorer == SCR_F1_BINCLF:
+        scr_dict[scorer] = 'f1'
       elif scorer == SCR_RMSE:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_rmse, greater_is_better=False)
       elif scorer == SCR_ACC_ERR1:
@@ -120,6 +127,12 @@ class MyScorer:
         perf_row_dict[scorer_name] = MyScorer.scorer_overpred_pct0(ytrue, ypred)
       elif scorer_name == SCR_UNDERPRED0:
         perf_row_dict[scorer_name] = MyScorer.scorer_underpred_pct0(ytrue, ypred)
+      elif scorer_name == SCR_RECALL_BINCLF:
+        perf_row_dict[scorer_name] = recall_score(ytrue, ypred)
+      elif scorer_name == SCR_PREC_BINCLF:
+        perf_row_dict[scorer_name] = precision_score(ytrue, ypred)
+      elif scorer_name == SCR_F1_BINCLF:
+        perf_row_dict[scorer_name] = f1_score(ytrue, ypred)
       elif scorer_name == SCR_AUC:
         perf_row_dict[scorer_name] = None  # TODO: find a better solution to handle this
         # perf_row_dict[scorer_name] = roc_auc_score(ytrue, ypred)  # ypred is actually yscore: clf.predict_proba(X)[:, 1]
@@ -133,7 +146,7 @@ def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, 
                            eval_sda_only=False, eval_surg_only=False, years=None, md_to_show_confmat=None,
                            train_perf_df=None, test_perf_df=None):
   model_to_k_confmats_test = defaultdict(dict)  # only for modeling-all, do not support cohort perf yet
-  for kt, dataset_k in tqdm(enumerate(k_datasets), total=len(k_datasets)):
+  for kt, dataset_k in tqdm(k_datasets.items()):
     # Model performance
     model_dict = k_model_dict[kt]
     for md, clf in model_dict.items():
