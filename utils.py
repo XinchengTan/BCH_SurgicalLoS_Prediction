@@ -5,7 +5,6 @@ from sklearn.utils import shuffle
 from time import time
 from tqdm import tqdm
 from typing import Dict, List, Tuple
-import joblib
 import numpy as np
 import pandas as pd
 import random
@@ -15,37 +14,7 @@ from globals import *
 from c1_data_preprocessing import Dataset
 
 
-# Generate ktrials of randomly selected surg_case_keys for test/validation set
-def gen_ktrials_test_surg_case_keys(dashb_df: pd.DataFrame, ktrials=10, test_pct=0.2, save_fp=None) -> Dict:
-  assert dashb_df['SURG_CASE_KEY'].is_unique, 'Input dashb_df contains duplicated surg_case_key!'
-  assert ktrials >= 1, 'ktrials must be a positive int!'
-
-  test_size = int(test_pct * dashb_df.shape[0])
-  kt_test_case_keys = {}
-  for k in range(ktrials):
-    test_case_keys = random.sample(dashb_df['SURG_CASE_KEY'].to_list(), test_size)
-    kt_test_case_keys[k] = np.array(test_case_keys)
-
-  if save_fp is not None:
-    pd.DataFrame(kt_test_case_keys).to_csv(save_fp)
-  return kt_test_case_keys
-
-
-def gen_ktrial_datasets_from_test_case_keys(dashb_df: pd.DataFrame, kt_test_case_keys: Dict, **kwargs):
-  kt_datasets = []
-  decileFtr_aggs = kwargs.get('col2decile_ftrs2aggf', DEFAULT_COL2DECILE_FTR2AGGF)
-  print('\nDecile feature aggregations:')
-  for k, v in decileFtr_aggs.items():
-    print(k, v)
-  # TODO: add **kwargs into Dataset creation
-  for kt, test_keys in tqdm(kt_test_case_keys.items()):
-    dataset_k = Dataset(dashb_df, test_case_keys=test_keys, outcome=NNT, ftr_cols=FEATURE_COLS_NO_WEIGHT_ALLMEDS,
-                        col2decile_ftrs2aggf=decileFtr_aggs, onehot_cols=[CCSRS], discretize_cols=['AGE_AT_PROC_YRS'],
-                        scaler='robust')
-    kt_datasets.append(dataset_k)
-  return kt_datasets
-
-
+# TODO: remove this!!
 # Generate ktrials of shuffled data_df and a set of randomly selected test indices
 def gen_ktrials_test_idxs(dashb_df: pd.DataFrame, ktrials=10, test_pct=0.2):
   kt_data_df = []
@@ -57,7 +26,7 @@ def gen_ktrials_test_idxs(dashb_df: pd.DataFrame, ktrials=10, test_pct=0.2):
     kt_test_idxs.append(test_idxs)
   return kt_data_df, kt_test_idxs
 
-
+# TODO: remove this!!
 # Generate ktrials of SDA_df and a set of randomly selected test indices from output of gen_ktrials_test_idxs()
 # To randomly shuffle and generate test_idxs from dashb_sda_df, simply use gen_ktrials_test_idxs()
 def gen_ktrials_sda_test_idxs_from_full(kt_data_df: List[pd.DataFrame], kt_test_idxs: List):
@@ -72,6 +41,7 @@ def gen_ktrials_sda_test_idxs_from_full(kt_data_df: List[pd.DataFrame], kt_test_
   return kt_sda_df, kt_sda_test_idxs
 
 
+# TODO: remove this!!
 # Generate ktrials of Dataset objects according to a pre-shuffled data_df and the corresponding test indices
 def gen_ktrials_datasets(kt_dfs, kt_test_idxs, **kwargs):
   decileFtr_aggs = kwargs.get('col2decile_ftrs2aggf', DEFAULT_COL2DECILE_FTR2AGGF)
