@@ -48,8 +48,21 @@ class FeatureEngineeringModifier(object):
     # if decile_gen is not None:  # tricky to use on jupyter notebook
     #   assert isinstance(decile_gen, DecileGenerator), 'decile_gen must be a DecileGenerator object!'
 
-  def add_temporal_feature_admit_hour(self, data_df: pd.DataFrame):
-    # TODO: FINISH THIS for post-scheduling prediction update
+  # TODO: FINISH the following for post-scheduling prediction update
+  def add_feature_admit_month(self, data_df: pd.DataFrame):
+
+    return
+
+  def add_feature_admit_day_of_week(self, data_df: pd.DataFrame):
+
+    return
+
+  def add_feature_admit_hour(self, data_df: pd.DataFrame):
+
+    return
+
+  def add_feature_surgery_length(self, data_df: pd.DataFrame):
+
     return
 
   def discretize_columns_df(self, Xdf: pd.DataFrame, discretize_cols=None, inplace=False):
