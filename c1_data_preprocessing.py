@@ -119,9 +119,7 @@ class Dataset(object):
     # I. Preprocess training set
     if self.train_df_raw is not None:
       # Preprocess outcome values / SPS prediction in df
-      train_df = preprocess_y(self.train_df_raw, outcome, inplace=False)
-      if SPS_PRED in train_df.columns:
-        preprocess_y(train_df, outcome, surg_y=True, inplace=True)
+      train_df = preprocess_outcome_col(self.train_df_raw, outcome, preprocess_surg_pred=True, inplace=False)
 
       # Modify data matrix, save corresponding fields
       self.Xtrain, self.feature_names, self.train_case_keys, self.ytrain, self.o2m_df_train = self._preprocess_Xtrain(
@@ -138,8 +136,7 @@ class Dataset(object):
     # II. Preprocess test set, if it's not empty
     if self.test_df_raw is not None:
       # Preprocess ytest & sps prediction
-      test_df = preprocess_y(self.test_df_raw, outcome, inplace=False)
-      preprocess_y(test_df, outcome, surg_y=True, inplace=True)
+      test_df = preprocess_outcome_col(self.test_df_raw, outcome, preprocess_surg_pred=True, inplace=False)
 
       if isinstance(remove_o2m_test, pd.DataFrame):
         o2m_df = remove_o2m_test
@@ -227,8 +224,7 @@ class Dataset(object):
       .set_index('SURG_CASE_KEY') \
       .loc[filtered_case_keys, :].reset_index()
     # TODO: think about whether to use train/test_cohort_df rather than raw_df here!
-    preprocess_y(surg_df, self.outcome, True, inplace=True)  # preprocess surgeon prediction
-    preprocess_y(surg_df, self.outcome, False, inplace=True)  # preprocess true outcome
+    surg_df = preprocess_outcome_col(surg_df, self.outcome, preprocess_surg_pred=True, inplace=False)
     return surg_df
 
   def get_raw_nnt(self, xtype='train'):
@@ -528,15 +524,29 @@ def gen_primary_proc_cptgroup_col_for_case_keys(Xdf: pd.DataFrame, cptgrp_decile
          rare_hybrid_cohorts
 
 
-# Generate an outcome vector y with shape: (n_samples, )
-def preprocess_y(df: pd.DataFrame, outcome, surg_y=False, inplace=False):
+# Preprocess the outcome column in df, returns a DataFrame with outcome modified or added
+def preprocess_outcome_col(df: pd.DataFrame, outcome, preprocess_surg_pred=False, inplace=False):
   if df.empty:
     return df
   df = df.copy() if not inplace else df
 
+  if outcome in {LOS, NNT, '>12h'}.union(BINARY_NNT_SET):
+    df = preprocess_y(df, outcome, surg_y=False)
+    if preprocess_surg_pred and SPS_PRED in df.columns:
+      df = preprocess_y(df, outcome, surg_y=True)
+  else:
+    df = preprocess_y(df, outcome, surg_y=False)
+  return df
+
+
+# Generate dataframe y with outcome column transformed (n_samples, n_feature_cols)
+def preprocess_y(df: pd.DataFrame, outcome, surg_y=False):
+  if df.empty:
+    return df
+
   if outcome == LOS:
     return df[LOS].to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
-  elif outcome == ">12h":
+  elif outcome == '>12h':
     y = df[LOS].to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
     y[y > 0.5] = 1
     y[y <= 0.5] = 0
@@ -547,6 +557,10 @@ def preprocess_y(df: pd.DataFrame, outcome, surg_y=False, inplace=False):
     y = df[NNT].to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
     cutoff = int(outcome[-1])
     y = gen_y_nnt_binary(y, cutoff)
+  elif outcome in {RESPIR_DECLINE, CARDIO_DECLINE}:
+    # TODO: Find out meanings of NAs @Gabor, @Anna K
+    df = df[df[outcome].notnull()]  # discard cases with NAs in CHEWS outcome
+    y = df[outcome].to_numpy().astype(int)
   else:
     raise NotImplementedError(f"Outcome type '{outcome}' is not implemented yet!")
 
@@ -573,44 +587,6 @@ def gen_y_nnt_binary(y, cutoff):  # task: predict if LoS <= cutoff (cutoff in ra
   yb[y <= cutoff] = 1
   yb[y > cutoff] = 0
   return yb
-
-
-# Perform train-test split
-def gen_train_test(X, y, test_pct=0.2, rand_state=SEED):
-  """
-  Returns the purely integer-location based index w.r.t. the data matrix X for the train and test set respectively.
-  i.e. max(X_train.index) <= n_samples - 1 and max(X_test.index) <= n_samples - 1
-  These index lists are not the row index label of the original df, because X is already a numeric matrix and
-  has lost the index labels during the conversion.
-
-  :param X: a numeric matrix (n_samples, n_features)
-  :param y: a response vector (n_samples, )
-  :param test_pct: desired test set percentage, a float between 0 and 1
-  :param rand_state: seed for the random split
-
-  :return: training and test set data matrix, response vector and location-based index w.r.t. X
-  """
-  assert isinstance(X, pd.DataFrame), "Input data needs to be a DateFrame object"
-  X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_pct, random_state=rand_state)
-
-  return X_train, X_test, y_train, y_test, X_train.index.to_numpy(), X_test.index.to_numpy()
-
-
-# train-validation-test split
-def gen_train_val_test(X, y, val_pct=0.2, test_pct=0.2):
-  X, y = pd.DataFrame(X), pd.Series(y)
-  X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=test_pct, random_state=SEED)
-  X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=val_pct, random_state=SEED)
-  return X_train.to_numpy(), X_val.to_numpy(), X_test.to_numpy(), y_train.to_numpy(), y_val.to_numpy(), y_test.to_numpy(),\
-         X_train.index, X_val.index, X_test.index
-
-
-# Generate synthetic data ** DO NOT USE!!
-def gen_smote_Xy(X, y, feature_names):
-  categ_ftrs = np.array([False if ftr in CONTINUOUS_COLS else True for ftr in feature_names], dtype=bool)
-  sm = SMOTENC(categorical_features=categ_ftrs, random_state=SEED)
-  X, y = sm.fit_resample(X, y)
-  return X, y
 
 
 # Removes cases that historically has multiple possible outcomes
@@ -671,3 +647,41 @@ def gen_o2m_cases(X, y, features, unique=True, save_fp=None, X_case_keys=None):
     o2m_df.to_csv(save_fp, index=False)
   return o2m_df
 
+
+# --------------------------------------------------- UNUSED CODE ---------------------------------------------------
+# Perform train-test split
+def gen_train_test(X, y, test_pct=0.2, rand_state=SEED):
+  """
+  Returns the purely integer-location based index w.r.t. the data matrix X for the train and test set respectively.
+  i.e. max(X_train.index) <= n_samples - 1 and max(X_test.index) <= n_samples - 1
+  These index lists are not the row index label of the original df, because X is already a numeric matrix and
+  has lost the index labels during the conversion.
+
+  :param X: a numeric matrix (n_samples, n_features)
+  :param y: a response vector (n_samples, )
+  :param test_pct: desired test set percentage, a float between 0 and 1
+  :param rand_state: seed for the random split
+
+  :return: training and test set data matrix, response vector and location-based index w.r.t. X
+  """
+  assert isinstance(X, pd.DataFrame), "Input data needs to be a DateFrame object"
+  X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_pct, random_state=rand_state)
+
+  return X_train, X_test, y_train, y_test, X_train.index.to_numpy(), X_test.index.to_numpy()
+
+
+# train-validation-test split
+def gen_train_val_test(X, y, val_pct=0.2, test_pct=0.2):
+  X, y = pd.DataFrame(X), pd.Series(y)
+  X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=test_pct, random_state=SEED)
+  X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=val_pct, random_state=SEED)
+  return X_train.to_numpy(), X_val.to_numpy(), X_test.to_numpy(), y_train.to_numpy(), y_val.to_numpy(), y_test.to_numpy(),\
+         X_train.index, X_val.index, X_test.index
+
+
+# Generate synthetic data ** DO NOT USE!!
+def gen_smote_Xy(X, y, feature_names):
+  categ_ftrs = np.array([False if ftr in CONTINUOUS_COLS else True for ftr in feature_names], dtype=bool)
+  sm = SMOTENC(categorical_features=categ_ftrs, random_state=SEED)
+  X, y = sm.fit_resample(X, y)
+  return X, y
