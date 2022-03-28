@@ -61,7 +61,7 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=N
   dashb_df.fillna({os: 0.0 for os in globals.OS_CODE_LIST}, inplace=True)
   print_df_info(dashb_df, "Dashboard DF (fill NaN OS with 0)")
   dashb_df = dashb_df[dashb_df[globals.NNT].notna()]
-  dashb_df = dashb_df[dashb_df['STATE_CODE'].notna()]
+  dashb_df = dashb_df[dashb_df[globals.STATE].notna()]
   print_df_info(dashb_df, "Dashboard DF (dropped rows with NaN)")
 
   # Load CPTs for each case and combine with the existing hierarchy
