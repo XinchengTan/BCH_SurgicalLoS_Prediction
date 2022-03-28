@@ -1,4 +1,6 @@
 # Customized Model classes
+import warnings
+
 import numpy as np
 import optuna
 from collections import Counter
@@ -268,14 +270,18 @@ def get_model_binclf(model, cls_weight='balanced'):
 # ---------------------------------------- Respiratory Decline prediction ----------------------------------------
 def get_model_respir_decline(model, cls_weight='balanced'):
   if model == LGR:
-    clf = LogisticRegression(C=0.01, class_weight=cls_weight, max_iter=500, random_state=0)
+    clf = LogisticRegression(C=0.03, class_weight=cls_weight, max_iter=500, random_state=0)
   elif model == LGRCV:
     clf = LogisticRegressionCV(Cs=[0.003, 0.01, 0.03, 0.1, 0.3, 1, 3], class_weight=cls_weight, max_iter=500,
                                random_state=0, cv=5)
   elif model == PR:
     clf = RegressionBasedClassifier(PR, alpha=0.01, max_iter=300)
   elif model == SVCLF:
-    clf = SVC(gamma='auto', class_weight=cls_weight, probability=False)
+    clf = SVC(gamma='scale', class_weight=cls_weight, probability=False)
+  elif model == SVC_POLY3:
+    clf = SVC(gamma='scale', kernel='poly', degree=3, class_weight=cls_weight, probability=False)
+  elif model == SVC_POLY4:
+    clf = SVC(gamma='scale', kernel='poly', degree=4, class_weight=cls_weight, probability=False)
   elif model == KNN:
     clf = KNeighborsClassifier(n_neighbors=45)
   elif model == KNNCV:
@@ -287,7 +293,7 @@ def get_model_respir_decline(model, cls_weight='balanced'):
   elif model == GBCLF:
     clf = GradientBoostingClassifier(random_state=0, max_depth=3)
   elif model == XGBCLF:
-    clf = XGBClassifier(max_depth=4, learning_rate=0.1, n_estimators=100, random_state=0, use_label_encoder=False,
+    clf = XGBClassifier(max_depth=4, learning_rate=0.03, n_estimators=150, random_state=0, use_label_encoder=False,
                         eval_metric='mlogloss')
   elif model == ORDCLF_LOGIT:
     clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True)
@@ -303,18 +309,22 @@ def get_model_respir_decline(model, cls_weight='balanced'):
 # --------------------------------------- Cardiovascular Decline prediction ---------------------------------------
 def get_model_cardio_decline(model, cls_weight='balanced'):
   if model == LGR:
-    clf = LogisticRegression(C=0.01, class_weight=cls_weight, max_iter=500, random_state=0)
+    clf = LogisticRegression(C=0.03, class_weight=cls_weight, max_iter=500, random_state=0)
   elif model == LGRCV:
     clf = LogisticRegressionCV(Cs=[0.003, 0.01, 0.03, 0.1, 0.3, 1, 3], class_weight=cls_weight, max_iter=500,
                                random_state=0, cv=5)
   elif model == PR:
     clf = RegressionBasedClassifier(PR, alpha=0.01, max_iter=300)
   elif model == SVCLF:
-    clf = SVC(gamma='auto', class_weight=cls_weight, probability=False)
+    clf = SVC(gamma='scale', class_weight=cls_weight, probability=False)
+  elif model == SVC_POLY3:
+    clf = SVC(gamma='scale', kernel='poly', degree=3, class_weight=cls_weight, probability=False)
+  elif model == SVC_POLY4:
+    clf = SVC(gamma='scale', kernel='poly', degree=4, class_weight=cls_weight, probability=False)
   elif model == KNN:
     clf = KNeighborsClassifier(n_neighbors=45)
   elif model == KNNCV:
-    clf = KNeighborsClassifierCV({'n_neighbors': np.arange(5, 56, 10)})
+    clf = KNeighborsClassifierCV({'n_neighbors': [5, 10, 15, 20, 30, 40]})
   elif model == DTCLF:
     clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight=cls_weight)
   elif model == RMFCLF:
@@ -335,56 +345,42 @@ def get_model_cardio_decline(model, cls_weight='balanced'):
   return SafeOneClassWrapper(clf)
 
 
-# ------------------------------------------- IGNORE the functions below!!! -------------------------------------------
-def train_model(md, params, X, y):
-  if md == LGR:
-    clf = LogisticRegression(random_state=SEED)
-  elif md == SVCLF:
-    clf = SVC(random_state=SEED, probability=True)
-  elif md == KNN:
-    clf = KNeighborsClassifier()
-  elif md == DTCLF:
-    clf = DecisionTreeClassifier(random_state=SEED)
-  elif md == RMFCLF:
-    clf = RandomForestClassifier(random_state=SEED)
-  elif md == GBCLF:
-    clf = GradientBoostingClassifier(random_state=SEED)
-  elif md == XGBCLF:
-    clf = XGBClassifier(random_state=SEED, eval_metric='mlogloss')
-  else:
-    raise NotImplementedError(f"Model {md} is not implemented yet!")
-
-  clf.set_params(**params)
-  clf = SafeOneClassWrapper(clf)
-  clf.fit(X, y)
-  return clf
-
-
-def train_model_all_ktrials(models, k_datasets: Dict[Any, Dataset],
-                            train_sda_only=False, train_surg_only=False, binclf=False):
+# --------------------------------------- Train models on k Datasets ---------------------------------------
+def train_model_all_ktrials(models, k_datasets: Dict[Any, Dataset], cls_weight,
+                            train_sda_only=False, train_surg_only=False) -> Dict:
   models = [LGR, KNN, RMFCLF, XGBCLF] if models is None else models  # GBCLF,
   k_model_dict = {}
-  for kt, dataset_k in tqdm(k_datasets.items()):
+  for k, dataset_k in tqdm(k_datasets.items()):
     # Fit models
     Xtrain, ytrain = dataset_k.get_Xytrain_by_case_key(dataset_k.train_case_keys,
                                                        sda_only=train_sda_only, surg_only=train_surg_only)
     model_dict = {}
     for md in models:
       print('md=', md)
-      clf = get_model(md) if not binclf else get_model_binclf(md)
+      if dataset_k.outcome == NNT:
+        clf = get_model(md, cls_weight=cls_weight)
+      elif dataset_k.outcome in BINARY_NNT_SET:
+        clf = get_model_binclf(md, cls_weight=cls_weight)
+      elif dataset_k.outcome == RESPIR_DECLINE:
+        clf = get_model_respir_decline(md, cls_weight=cls_weight)
+      elif dataset_k.outcome == CARDIO_DECLINE:
+        clf = get_model_cardio_decline(md, cls_weight=cls_weight)
+      else:
+        warnings.warn(f'Outcome "{dataset_k.outcome}" is not supported yet! Skipped training')
+        continue
       clf.fit(Xtrain, ytrain)
       model_dict[md] = clf
-    k_model_dict[kt] = model_dict
+    k_model_dict[k] = model_dict
   return k_model_dict
 
 
 # Train models for all binary outcomes across k trials/folds
-def train_model_all_ktrials_binclf(models, bin_kt_datasets: Dict[str, Dict[int, Dataset]],
+def train_model_all_ktrials_binclf(models, bin_kt_datasets: Dict[str, Dict[int, Dataset]], cls_weight,
                                    train_sda_only=False, train_surg_only=False):
   bin_k_model_dict = defaultdict(dict)
   for bin_nnt, kt_datasets in tqdm(bin_kt_datasets.items(), desc='Binary Outcomes'):
     print('Outcome: ', bin_nnt)
-    bin_k_model_dict[bin_nnt] = train_model_all_ktrials(models, k_datasets=kt_datasets, binclf=True,
+    bin_k_model_dict[bin_nnt] = train_model_all_ktrials(models, k_datasets=kt_datasets, cls_weight=cls_weight,
                                                         train_sda_only=train_sda_only, train_surg_only=train_surg_only)
   return bin_k_model_dict
 
@@ -445,7 +441,31 @@ def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=10, refit=True, ca
   return rand_search
 
 
-# TODO: use Optuna
+# ------------------------------------------- IGNORE the functions below!!! -------------------------------------------
+def train_model(md, params, X, y):
+  if md == LGR:
+    clf = LogisticRegression(random_state=SEED)
+  elif md == SVCLF:
+    clf = SVC(random_state=SEED, probability=True)
+  elif md == KNN:
+    clf = KNeighborsClassifier()
+  elif md == DTCLF:
+    clf = DecisionTreeClassifier(random_state=SEED)
+  elif md == RMFCLF:
+    clf = RandomForestClassifier(random_state=SEED)
+  elif md == GBCLF:
+    clf = GradientBoostingClassifier(random_state=SEED)
+  elif md == XGBCLF:
+    clf = XGBClassifier(random_state=SEED, eval_metric='mlogloss')
+  else:
+    raise NotImplementedError(f"Model {md} is not implemented yet!")
+
+  clf.set_params(**params)
+  clf = SafeOneClassWrapper(clf)
+  clf.fit(X, y)
+  return clf
+
+
 def train_model_cv(md, X, y, kfold, scorers, refit=True):  # cv_how='grid_search',
   def minority_class_size(y):
     return min(Counter(y).values())
