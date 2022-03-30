@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Iterable
 from IPython.display import display
 
 from copy import deepcopy
@@ -30,7 +30,7 @@ def add_surgeon_cohort_perf(cohort, clf, dataset: Dataset, Xtype, scorers, trial
                                          enable_warning=False)
   # Append scores with info to perf_df
   perf_df = append_perf_row_generic(perf_df, scores_dict,
-                                    {**get_class_count(surg_pred_true[dataset.outcome]),
+                                    {**get_class_count(surg_pred_true[dataset.outcome], outcome=dataset.outcome),
                                      **{'Xtype': Xtype, 'Cohort': cohort, 'Count': surg_pred_true.shape[0],
                                         'Model': SURGEON, 'Trial': trial_i, 'Year': year_label
                                         }})
@@ -76,14 +76,14 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
       if SCR_AUC in scorers:
         train_score_dict[SCR_AUC] = MyScorer.calc_auc_roc(ytrain, clf, Xtrain)
       train_perf_df = append_perf_row_generic(
-        train_perf_df, train_score_dict, {**get_class_count(ytrain),
+        train_perf_df, train_score_dict, {**get_class_count(ytrain, outcome=dataset.outcome),
                                           **{'Xtype': 'train', 'Cohort': cohort, 'Model': md_name,
                                              'Count': Xtrain.shape[0], 'Trial': trial_i, 'Year': year_label}})
       test_score_dict = MyScorer.apply_scorers(scorers, ytest, test_pred, enable_warning=False)
       if SCR_AUC in scorers:
         test_score_dict[SCR_AUC] = MyScorer.calc_auc_roc(ytest, clf, Xtest)
       test_perf_df = append_perf_row_generic(
-        test_perf_df, test_score_dict, {**get_class_count(ytest),
+        test_perf_df, test_score_dict, {**get_class_count(ytest, outcome=dataset.outcome),
                                         **{'Xtype': 'test', 'Cohort': cohort, 'Model': md_name,
                                            'Count': Xtest.shape[0], 'Trial': trial_i, 'Year': year_label}})
       if surg_only:

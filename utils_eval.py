@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from collections import defaultdict
 from copy import deepcopy
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, List, Sized
 
 from c1_data_preprocessing import Dataset
 from globals import *
@@ -68,10 +68,17 @@ def append_perf_row_surg(surg_perf_df: pd.DataFrame, trial, scores_row_dict):
 
 # Computes the count for each true class label
 # TODO: update this for binary clf
-def get_class_count(y: Iterable):
+def get_class_count(y, outcome=NNT):
   counter = defaultdict(int)
-  for cls in NNT_CLASSES:
-    counter[f'Count_class{cls}'] = list(y).count(cls)
+  if outcome == NNT:
+    for cls in NNT_CLASSES:
+      counter[f'Count_class{cls}'] = list(y).count(cls)
+  elif outcome in BINARY_NNT_SET:
+    counter[f'Count_[{outcome}]'] = sum(y)
+    counter[f'Count_[{NNT} > {outcome[-1]}]'] = len(y) - sum(y)
+  elif outcome in PHYSIO_DECLINE_SET:
+    counter[f'Count_[{outcome}]'] = sum(y)
+    counter[f'Count_[NO_DECLINE]'] = len(y) - sum(y)
   return counter
 
 

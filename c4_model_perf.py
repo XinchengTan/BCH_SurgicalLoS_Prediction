@@ -236,7 +236,7 @@ def eval_model_by_cohort_Xydata(trial_i, dataset: Dataset, clf, cohort_to_XyKeys
       scores = MyScorer.apply_scorers(scorers, y, pred, enable_warning=False)
       if SCR_AUC in scorers:
         scores[SCR_AUC] = MyScorer.calc_auc_roc(y, clf, X)
-      class_to_counts = get_class_count(y)
+      class_to_counts = get_class_count(y, outcome=dataset.outcome)
       perf_df = append_perf_row_generic(
         perf_df, scores, {**class_to_counts,
                           **{'Xtype': Xtype, 'Cohort': cohort, 'Model': md_name, 'Count': X.shape[0],
@@ -312,7 +312,7 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
     if SCR_AUC in scorers:
       train_scores[SCR_AUC] = MyScorer.calc_auc_roc(ytrain, clf, Xtrain)
     train_perf_df = append_perf_row_generic(
-      train_perf_df, train_scores, {**get_class_count(ytrain),
+      train_perf_df, train_scores, {**get_class_count(ytrain, outcome=dataset.outcome),
                                     **{'Xtype': 'train', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
                                        'Count': Xtrain.shape[0], 'Year': year_label}})
   confmat_test = None
@@ -322,7 +322,7 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
     if SCR_AUC in scorers:
       test_scores[SCR_AUC] = MyScorer.calc_auc_roc(ytest, clf, Xtest)
     test_perf_df = append_perf_row_generic(
-      test_perf_df, test_scores, {**get_class_count(ytest),
+      test_perf_df, test_scores, {**get_class_count(ytest, outcome=dataset.outcome),
                                   **{'Xtype': 'test', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
                                      'Count': Xtest.shape[0], 'Year': year_label}})
     if show_confmat:
@@ -334,12 +334,12 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
     surg_train, surg_test, surg_confmat_test = eval_surgeon_perf(dataset, scorers, show_confmat, years=years)
     if len(surg_train) > 0:
       train_perf_df = append_perf_row_generic(
-        train_perf_df, surg_train, {**get_class_count(ytrain),
+        train_perf_df, surg_train, {**get_class_count(ytrain, outcome=dataset.outcome),
                                     **{'Xtype': 'train', 'Cohort': cohort, 'Model': SURGEON, 'Trial': trial_i,
                                        'Count': Xtrain.shape[0], 'Year': year_label}})
     if len(surg_test) > 0:
       test_perf_df = append_perf_row_generic(
-        test_perf_df, surg_test, {**get_class_count(ytest),
+        test_perf_df, surg_test, {**get_class_count(ytest, outcome=dataset.outcome),
                                   **{'Xtype': 'test', 'Cohort': cohort, 'Model': SURGEON, 'Trial': trial_i,
                                      'Count': Xtest.shape[0], 'Year': year_label}})
   return train_perf_df, test_perf_df, confmat_test, surg_confmat_test
