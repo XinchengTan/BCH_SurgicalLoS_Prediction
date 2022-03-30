@@ -21,7 +21,7 @@ def gen_kfoldCV_test_surg_case_keys(dashb_df: pd.DataFrame, cv=5, save_fp=None) 
   # random shuffle data_df
   dashb_df = dashb_df.sample(frac=1, random_state=SEED).reset_index(drop=True)
   N = dashb_df.shape[0]
-  test_size = int(1 / cv * dashb_df.shape[0])
+  test_size = int(dashb_df.shape[0] / cv)
   kf_test_case_keys = {}
   for k in range(cv):
     test_case_keys = dashb_df['SURG_CASE_KEY'].to_numpy()[k*test_size: min(N, (k+1)*test_size)]
@@ -48,7 +48,7 @@ def gen_ktrials_test_surg_case_keys(dashb_df: pd.DataFrame, ktrials=10, test_pct
   return kt_test_case_keys
 
 
-def gen_ktrial_datasets_from_test_case_keys(dashb_df: pd.DataFrame, kt_test_case_keys: Dict, **kwargs) -> Dict:
+def gen_k_datasets_from_test_case_keys(dashb_df: pd.DataFrame, kt_test_case_keys: Dict, **kwargs) -> Dict:
   kt_datasets = {}
   decileFtr_aggs = kwargs.get('col2decile_ftrs2aggf', DEFAULT_COL2DECILE_FTR2AGGF)
   print('\nDecile feature aggregations:')
