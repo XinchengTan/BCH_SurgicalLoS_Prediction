@@ -67,6 +67,7 @@ def append_perf_row_surg(surg_perf_df: pd.DataFrame, trial, scores_row_dict):
 
 
 # Computes the count for each true class label
+# TODO: update this for binary clf
 def get_class_count(y: Iterable):
   counter = defaultdict(int)
   for cls in NNT_CLASSES:
@@ -95,21 +96,20 @@ def format_row_wise(styler, formatter):
 
 # Format numbers and floats in perf df (column-wise)
 def format_perf_df(perf_df: pd.DataFrame):
-  formatter = SCR_FORMATTER.copy()
-  # format count columns
-  for c in NNT_CLASSES:
-    formatter[f'Count_class{c}'] = '{:.0f}'.format
-    formatter[f'Count_class{c}_mean'] = '{:.0f}'.format
-    formatter[f'Count_class{c}_std'] = '{:.0f}'.format
-  formatter['Count'] = '{:.0f}'.format
-  formatter['Count_mean'] = '{:.0f}'.format
-  formatter['Count_std'] = '{:.0f}'.format
-
-  # define actual formatter to be applied
-  formatter_ret = deepcopy(formatter)
+  # define actual formatter to be applied on perf_df (metric name with suffixes)
+  formatter_ret = deepcopy(SCR_FORMATTER)
   for scr in perf_df.columns.to_list():
-    if (scr not in {'Model', 'Xtype', 'Cohort', 'Trial', 'Year'}) and (not scr.startswith('Count')):
-      formatter_ret[scr] = formatter[SCR_RMSE] if scr.startswith(SCR_RMSE) else formatter[scr]
+    if scr.startswith('Count'):
+      formatter_ret[scr] = '{:.0f}'.format
+    elif scr not in {'Model', 'Xtype', 'Cohort', 'Trial', 'Year'}:
+      if scr.startswith(SCR_RMSE):
+        formatter_ret[scr] = SCR_FORMATTER[SCR_RMSE]
+      elif scr.startswith(SCR_AUC):
+        formatter_ret[scr] = SCR_FORMATTER[SCR_AUC]
+      elif scr.startswith(SCR_F1_BINCLF):
+        formatter_ret[scr] = SCR_FORMATTER[SCR_F1_BINCLF]
+      else:
+        formatter_ret[scr] = SCR_FORMATTER[scr]  # default formatter
 
   perf_styler = perf_df.style.format(formatter_ret)
   return perf_styler
