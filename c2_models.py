@@ -130,6 +130,11 @@ class SafeOneClassWrapper(BaseEstimator, ClassifierMixin):
     finally:
       self.classes_ = np.unique(y)
 
+  def decision_function(self, X):
+    if len(self.classes_) == 1:
+      return np.ones((X.shape[1], 1))
+    return self.base_estimator.decision_function(X)
+
   def predict_proba(self, X):
     if len(self.classes_) == 1:
       return np.ones((X.shape[1], 1))

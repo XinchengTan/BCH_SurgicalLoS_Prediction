@@ -368,7 +368,7 @@ DEFAULT_SCORERS_BINCLF = [SCR_ACC, SCR_RECALL_BINCLF, SCR_PREC_BINCLF, SCR_F1_BI
 
 # Scorer formatter for pd output
 SCR_FORMATTER = defaultdict(lambda: "{:.1%}".format)
-SCR_FORMATTER.update({SCR_RMSE: "{:.2f}".format, SCR_F1_BINCLF: "{:.2f}".format})
+SCR_FORMATTER.update({SCR_RMSE: "{:.2f}".format, SCR_F1_BINCLF: "{:.2f}".format, SCR_AUC: "{:.2f}".format})
 
 # SCR_ACC: "{:.1%}".format, SCR_ACC_BAL: "{:.1%}".format, SCR_ACC_ERR1: "{:.1%}".format,
 # SCR_ACC_ERR2: "{:.1%}".format, SCR_OVERPRED: "{:.1%}".format, SCR_UNDERPRED: "{:.1%}".format,

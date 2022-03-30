@@ -1,3 +1,5 @@
+import warnings
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -102,7 +104,7 @@ class MyScorer:
     return recall_cls
 
   @staticmethod
-  def apply_scorers(scorer_names, ytrue, ypred):
+  def apply_scorers(scorer_names, ytrue, ypred, enable_warning=True):
     ytrue, ypred = np.array(ytrue), np.array(ypred)
     perf_row_dict = {}
     for scorer_name in scorer_names:
@@ -134,11 +136,38 @@ class MyScorer:
       elif scorer_name == SCR_F1_BINCLF:
         perf_row_dict[scorer_name] = f1_score(ytrue, ypred)
       elif scorer_name == SCR_AUC:
-        perf_row_dict[scorer_name] = None  # TODO: find a better solution to handle this
-        # perf_row_dict[scorer_name] = roc_auc_score(ytrue, ypred)  # ypred is actually yscore: clf.predict_proba(X)[:, 1]
+        perf_row_dict[scorer_name] = -1
+        if enable_warning:
+          warnings.warn('Default ROC AUC to -1. To calculate actual AUC, please use MyScorer.calc_auc_roc()')
       else:
         raise NotImplementedError('Scorer "%s" is not implemented' % scorer_name)
     return perf_row_dict
+
+  @staticmethod
+  def calc_auc_roc(ytrue, clf, X):
+    # Multi-class classifier
+    if len(set(ytrue)) > 2:
+      try:
+        ypred_proba = clf.predict_proba(X)
+        auc = roc_auc_score(ytrue, ypred_proba, multi_class='ovr')
+        return auc
+      except Exception:
+        warnings.warn('Multi-class classifier does not have method predict_proba(), returning -1!')
+        return -1
+
+    # Binary classifier
+    try:
+      ypred_proba = clf.predict_proba(X)[:, 1]
+      auc = roc_auc_score(ytrue, ypred_proba)
+      return auc
+    except Exception:
+      try:
+        ypred_proba = clf.decision_function(X)
+        auc = roc_auc_score(ytrue, ypred_proba)
+        return auc
+      except Exception:
+        warnings.warn("Input classifier has neither predict_proba() nor decision_function() method!")
+        return -1
 
 
 # Evaluate models' performance across k trials
@@ -151,12 +180,13 @@ def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, 
     model_dict = k_model_dict[kt]
     for md, clf in model_dict.items():
       if eval_by_cohort is not None:
+        print('Cohort-wise eval: ', md)
         train_perf_df, test_perf_df = eval_model_by_cohort(
           dataset_k, clf, scorers, eval_by_cohort, trial_i=kt, sda_only=eval_sda_only, surg_only=eval_surg_only,
           years=years, train_perf_df=train_perf_df, test_perf_df=test_perf_df
         )
       else:
-        print(md)
+        print('Aggergative eval: ', md)
         train_perf_df, test_perf_df, confmat_test, surg_confmat_test = eval_model(
           dataset_k, clf, scorers, trial_i=kt, sda_only=eval_sda_only, surg_only=eval_surg_only, years=years,
           show_confmat=md_to_show_confmat, train_perf_df=train_perf_df, test_perf_df=test_perf_df
@@ -177,11 +207,13 @@ def eval_surgeon_perf(dataset: Dataset, scorers: Iterable, show_confmat, years=N
   train_scores_row_dict, test_scores_row_dict = {}, {}
   if dataset.Xtrain is not None and len(dataset.Xtrain) > 0:
     train_true_preds = dataset.get_surgeon_pred_df_by_case_key(dataset.train_case_keys, years=years)
-    train_scores_row_dict = MyScorer.apply_scorers(scorers, train_true_preds[dataset.outcome], train_true_preds[SPS_PRED])
+    train_scores_row_dict = MyScorer.apply_scorers(scorers, train_true_preds[dataset.outcome],
+                                                   train_true_preds[SPS_PRED], enable_warning=False)
   confmat_test = None
   if dataset.Xtest is not None and len(dataset.Xtest) > 0:
     test_true_preds = dataset.get_surgeon_pred_df_by_case_key(dataset.test_case_keys, years=years)
-    test_scores_row_dict = MyScorer.apply_scorers(scorers, test_true_preds[dataset.outcome], test_true_preds[SPS_PRED])
+    test_scores_row_dict = MyScorer.apply_scorers(scorers, test_true_preds[dataset.outcome], test_true_preds[SPS_PRED],
+                                                  enable_warning=False)
     if show_confmat:
       confmat_test = confusion_matrix(test_true_preds[dataset.outcome], test_true_preds[SPS_PRED], normalize='true')
   return train_scores_row_dict, test_scores_row_dict, confmat_test
@@ -201,7 +233,9 @@ def eval_model_by_cohort_Xydata(trial_i, dataset: Dataset, clf, cohort_to_XyKeys
     X, y, cohort_case_keys = cohort_to_XyKeys.get(cohort, (np.array([]), np.array([]), np.array([])))
     if len(X) > 0:
       pred = clf.predict(X)
-      scores = MyScorer.apply_scorers(scorers, y, pred)
+      scores = MyScorer.apply_scorers(scorers, y, pred, enable_warning=False)
+      if SCR_AUC in scorers:
+        scores[SCR_AUC] = MyScorer.calc_auc_roc(y, clf, X)
       class_to_counts = get_class_count(y)
       perf_df = append_perf_row_generic(
         perf_df, scores, {**class_to_counts,
@@ -210,7 +244,8 @@ def eval_model_by_cohort_Xydata(trial_i, dataset: Dataset, clf, cohort_to_XyKeys
                           })
       if surg_only:
         true_surg_preds = dataset.get_surgeon_pred_df_by_case_key(cohort_case_keys, years=years)
-        scores_surg = MyScorer.apply_scorers(scorers, true_surg_preds[dataset.outcome], true_surg_preds[SPS_PRED])
+        scores_surg = MyScorer.apply_scorers(scorers, true_surg_preds[dataset.outcome], true_surg_preds[SPS_PRED],
+                                             enable_warning=False)
         perf_df = append_perf_row_generic(
           perf_df, scores_surg, {**class_to_counts,
                                  **{'Xtype': Xtype, 'Cohort': cohort, 'Model': SURGEON, 'Count': X.shape[0],
@@ -273,7 +308,9 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
   # Apply trained clf and evaluate
   if Xtrain is not None and len(Xtrain) > 0:
     train_pred = clf.predict(Xtrain)
-    train_scores = MyScorer.apply_scorers(scorers, ytrain, train_pred)
+    train_scores = MyScorer.apply_scorers(scorers, ytrain, train_pred, enable_warning=False)
+    if SCR_AUC in scorers:
+      train_scores[SCR_AUC] = MyScorer.calc_auc_roc(ytrain, clf, Xtrain)
     train_perf_df = append_perf_row_generic(
       train_perf_df, train_scores, {**get_class_count(ytrain),
                                     **{'Xtype': 'train', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
@@ -281,7 +318,9 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
   confmat_test = None
   if Xtest is not None and len(Xtest) > 0:
     test_pred = clf.predict(Xtest)
-    test_scores = MyScorer.apply_scorers(scorers, ytest, test_pred)
+    test_scores = MyScorer.apply_scorers(scorers, ytest, test_pred, enable_warning=False)
+    if SCR_AUC in scorers:
+      test_scores[SCR_AUC] = MyScorer.calc_auc_roc(ytest, clf, Xtest)
     test_perf_df = append_perf_row_generic(
       test_perf_df, test_scores, {**get_class_count(ytest),
                                   **{'Xtype': 'test', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,

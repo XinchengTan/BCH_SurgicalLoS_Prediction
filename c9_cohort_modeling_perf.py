@@ -26,7 +26,8 @@ def add_surgeon_cohort_perf(cohort, clf, dataset: Dataset, Xtype, scorers, trial
   if surg_pred_true.empty:
     scores_dict = get_placeholder_perf_scores_dict(scorers)
   else:
-    scores_dict = MyScorer.apply_scorers(scorers, surg_pred_true[dataset.outcome], surg_pred_true[SPS_PRED])
+    scores_dict = MyScorer.apply_scorers(scorers, surg_pred_true[dataset.outcome], surg_pred_true[SPS_PRED],
+                                         enable_warning=False)
   # Append scores with info to perf_df
   perf_df = append_perf_row_generic(perf_df, scores_dict,
                                     {**get_class_count(surg_pred_true[dataset.outcome]),
@@ -71,12 +72,16 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
         print(label_to_xgb_cls)
         print('!!![c9]', cohort, 'test', set(test_pred), set(ytest))
       # apply and save eval scores
-      train_score_dict = MyScorer.apply_scorers(scorers, ytrain, train_pred)
+      train_score_dict = MyScorer.apply_scorers(scorers, ytrain, train_pred, enable_warning=False)
+      if SCR_AUC in scorers:
+        train_score_dict[SCR_AUC] = MyScorer.calc_auc_roc(ytrain, clf, Xtrain)
       train_perf_df = append_perf_row_generic(
         train_perf_df, train_score_dict, {**get_class_count(ytrain),
                                           **{'Xtype': 'train', 'Cohort': cohort, 'Model': md_name,
                                              'Count': Xtrain.shape[0], 'Trial': trial_i, 'Year': year_label}})
-      test_score_dict = MyScorer.apply_scorers(scorers, ytest, test_pred)
+      test_score_dict = MyScorer.apply_scorers(scorers, ytest, test_pred, enable_warning=False)
+      if SCR_AUC in scorers:
+        test_score_dict[SCR_AUC] = MyScorer.calc_auc_roc(ytest, clf, Xtest)
       test_perf_df = append_perf_row_generic(
         test_perf_df, test_score_dict, {**get_class_count(ytest),
                                         **{'Xtype': 'test', 'Cohort': cohort, 'Model': md_name,
