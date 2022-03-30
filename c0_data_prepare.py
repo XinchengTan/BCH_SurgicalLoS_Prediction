@@ -5,19 +5,19 @@ import pandas as pd
 import numpy as np
 from pathlib import PosixPath
 
-import globals
+from globals import *
 
 
 pd.set_option('display.max_columns', 50)
 
 
-def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=None,
+def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=None, chews_fp=None,
                  exclude2021=False, force_weight=False):
   """
   Prepares the patient LoS dataset, combining datetime and CPT related info
   """
   # Load dashboard dataset
-  date_cols = [globals.ADMIT_DTM, globals.DISCHARGE_DTM, globals.SURG_START_DTM, globals.SURG_END_DTM]
+  date_cols = [ADMIT_DTM, DISCHARGE_DTM, SURG_START_DTM, SURG_END_DTM]
   if type(data_fp) == str or type(data_fp) == PosixPath:
     dashb_df = pd.read_csv(data_fp)
     available_date_cols = np.array(date_cols)[np.in1d(date_cols, dashb_df.columns)]
@@ -31,7 +31,7 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=N
 
   # Drop rows with NaN in weight z-score
   if force_weight:
-    dashb_df = dashb_df[globals.DASHDATA_COLS].dropna(subset=['WEIGHT_ZSCORE'])
+    dashb_df = dashb_df[DASHDATA_COLS].dropna(subset=['WEIGHT_ZSCORE'])
   print_df_info(dashb_df, dfname='Processed Dashboard (weight)')
 
   # Medication data -- join by surg case key
@@ -45,23 +45,24 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=N
     dtime_df = pd.read_csv(dtime_fp, parse_dates=date_cols)
     print_df_info(dtime_df, dfname='Datetime DF')
     # Drop rows that are NaN in selected columns
-    dtime_df = dtime_df[globals.DATETIME_COLS].dropna(subset=globals.DATETIME_COLS)
+    dtime_df = dtime_df[DATETIME_COLS].dropna(subset=DATETIME_COLS)
     print_df_info(dtime_df, dfname='Processed Datetime DF')
     dashb_df = dashb_df.join(dtime_df.set_index('SURG_CASE_KEY'), on='SURG_CASE_KEY', how='inner')
     print_df_info(dashb_df, dfname="Combined dashboard df")
 
   # Compute the number of nights
-  if globals.ADMIT_DTM in dashb_df.columns and globals.DISCHARGE_DTM in dashb_df.columns:
-    admit_date, discharge_date = dashb_df[globals.ADMIT_DTM].dt.date, dashb_df[globals.DISCHARGE_DTM].dt.date
-    dashb_df[globals.NNT] = (discharge_date - admit_date) / np.timedelta64(1, 'D')
+  if ADMIT_DTM in dashb_df.columns and DISCHARGE_DTM in dashb_df.columns:
+    admit_date, discharge_date = dashb_df[ADMIT_DTM].dt.date, dashb_df[DISCHARGE_DTM].dt.date
+    dashb_df[NNT] = (discharge_date - admit_date) / np.timedelta64(1, 'D')
   else:
-    dashb_df[globals.NNT] = 1000  # Placeholder outcome when it's not available
+    dashb_df[NNT] = 1000  # Placeholder outcome when it's not available
 
   # Handle basic NaNs
-  dashb_df.fillna({os: 0.0 for os in globals.OS_CODE_LIST}, inplace=True)
-  print_df_info(dashb_df, "Dashboard DF (fill NaN OS with 0)")
-  dashb_df = dashb_df[dashb_df[globals.NNT].notna()]
-  dashb_df = dashb_df[dashb_df[globals.STATE].notna()]
+  dashb_df.fillna({os: 0.0 for os in OS_CODE_LIST}, inplace=True)
+  #dashb_df.fillna({chews_3plus: False for chews_3plus in PHYSIO_DECLINE_SET})
+  print_df_info(dashb_df, "Dashboard DF (filled NaN OS with 0, CHEWS decline with False)")
+  dashb_df = dashb_df[dashb_df[NNT].notna()]
+  dashb_df = dashb_df[dashb_df[STATE].notna()]
   print_df_info(dashb_df, "Dashboard DF (dropped rows with NaN)")
 
   # Load CPTs for each case and combine with the existing hierarchy
@@ -107,6 +108,11 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=N
   # dashb_df['ICD10S'] = dashb_df['ICD10S'].apply(lambda x: x if isinstance(x, list) else [])
   print_df_info(dashb_df, 'Dashboard DF with chronic conditions')
 
+  # Join dashboard df with CHEWS df
+  if chews_fp is not None:
+    chews_df = pd.read_csv(chews_fp)
+    dashb_df = add_chews_decline_outcomes(dashb_df=dashb_df, chews_df=chews_df, fillna_val=False)
+
   # Exclude 2021 data by request
   if exclude2021:
     dashb_df = dashb_df[dashb_df['DISCHARGE_DATE'].dt.year < 2021]
@@ -148,6 +154,38 @@ def join_med_df_list_rep(med_df, dashb_df, levels=(1,)):
       .apply(lambda x: x if isinstance(x, list) else [])
   # TODO: if levels starts at 2, and some are Nan at this level & are not DME, then what?
   return dashb_df, med_df
+
+
+# Process CHEWS df to 1. obtain CHEWS decline flags for respiratory, cardiovascular and neurologic
+def add_chews_decline_outcomes(dashb_df: pd.DataFrame, chews_df: pd.DataFrame, fillna_val=None):
+  assert CHEWS_TYPE in chews_df.columns, f'{CHEWS_TYPE} is required in CHEWS_df!'
+  # groupby surg_case_key and chews_type, get max chews score
+  case_chews_df = chews_df.groupby(by=['SURG_CASE_KEY', CHEWS_TYPE])\
+    .agg({'SCORE': 'max'})\
+    .reset_index(level=[CHEWS_TYPE])
+  # convert to bool columns with criterion: score > 2
+  for decline_type in PHYSIO_DECLINE_SET:
+    dashb_df = add_chews_decline_outcome(decline_type, dashb_df, case_chews_df, fillna_val=fillna_val)
+    print_df_info(dashb_df, f'Dashboard DF with CHEWS outcome {decline_type}')
+  return dashb_df
+
+
+# Add a single CHEWS decline outcome boolean column to dashb_df
+def add_chews_decline_outcome(chews_decline_type: str, dashb_df: pd.DataFrame, case_chews_agg_df: pd.DataFrame, fillna_val=None):
+  assert chews_decline_type in PHYSIO_DECLINE_SET, f'CHEWS decline type must be one of {PHYSIO_DECLINE_SET}!'
+  assert case_chews_agg_df.index.name == 'SURG_CASE_KEY', 'Index column of case_chews_agg_df must be "SURG_CASE_KEY"!'
+  if chews_decline_type in dashb_df.columns:
+    dashb_df.drop(columns=chews_decline_type, inplace=True)
+  declineType2chewsLabel = {CARDIO_DECLINE: 'CHEWS-  Cardiovascular',
+                            RESPIR_DECLINE: 'CHEWS-  Respiratory',
+                            NEURO_DECLINE: 'CHEWS-  Behavior/Neuro'}
+
+  case_chewsX_df = case_chews_agg_df[case_chews_agg_df[CHEWS_TYPE] == declineType2chewsLabel[chews_decline_type]]
+  case_chewsX_df[chews_decline_type] = case_chewsX_df['SCORE'] > 2
+  dashb_df = dashb_df.join(case_chewsX_df[[chews_decline_type]], on='SURG_CASE_KEY', how='left')
+  if fillna_val is not None:
+    dashb_df.fillna({chews_decline_type: fillna_val}, inplace=True)
+  return dashb_df
 
 
 def gen_sps_data(df):

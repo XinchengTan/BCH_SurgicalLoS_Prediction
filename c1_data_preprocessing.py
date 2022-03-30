@@ -535,7 +535,7 @@ def preprocess_outcome_col(df: pd.DataFrame, outcome, preprocess_surg_pred=False
     if preprocess_surg_pred and SPS_PRED in df.columns:
       df = preprocess_y(df, outcome, surg_y=True)
   else:
-    df = preprocess_y(df, outcome, surg_y=False)
+    df = preprocess_y(df, outcome, surg_y=False)  # CHEWS outcome has no surgeon prediction
   return df
 
 
@@ -557,8 +557,7 @@ def preprocess_y(df: pd.DataFrame, outcome, surg_y=False):
     y = df[NNT].to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
     cutoff = int(outcome[-1])
     y = gen_y_nnt_binary(y, cutoff)
-  elif outcome in {RESPIR_DECLINE, CARDIO_DECLINE}:
-    # TODO: Find out meanings of NAs @Gabor, @Anna K
+  elif outcome in PHYSIO_DECLINE_SET:
     df = df[df[outcome].notnull()]  # discard cases with NAs in CHEWS outcome
     y = df[outcome].to_numpy().astype(int)
   else:
