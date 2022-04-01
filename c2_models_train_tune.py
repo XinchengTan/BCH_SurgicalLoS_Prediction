@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.utils import class_weight
+from sklearn.model_selection import KFold
 
 from globals import *
 from c1_data_preprocessing import Dataset
@@ -91,22 +92,28 @@ def tune_model_optuna(md, X, y, kfold, scorers, refit=True):
 def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, calibrate=False):
   binary_cls = len(set(y)) < 3
   clf, param_space = gen_model_param_space(md, X, y, scorers=scorers, kfold=kfold)
-  candidate_count = count_total_candidates(param_space)
-  if candidate_count < n_iters:
-    n_iters = candidate_count + 1  # lower n_iters if param_space is not large
-  rand_search = RandomizedSearchCV(estimator=clf, param_distributions=param_space, n_iter=n_iters, cv=kfold, n_jobs=-1,
+  if count_total_candidates(param_space) < n_iters:
+    print('Default to GridSearchCV, given #candidates < n_iters')
+    search_cv = GridSearchCV(estimator=clf, param_grid=param_space, cv=KFold(n_splits=kfold, random_state=SEED),
+                             refit=refit, scoring=MyScorer.get_scorer_dict(scorers, binary_cls=binary_cls), n_jobs=-1,
+                             return_train_score=True, verbose=2)
+  else:
+    search_cv = RandomizedSearchCV(estimator=clf, param_distributions=param_space, n_iter=n_iters, n_jobs=-1,
+                                   cv=KFold(n_splits=kfold, random_state=SEED), random_state=SEED,
                                    refit=refit, scoring=MyScorer.get_scorer_dict(scorers, binary_cls=binary_cls),
-                                   return_train_score=True, verbose=2, random_state=SEED)
-  rand_search.fit(X, y)
-  return rand_search
+                                   return_train_score=True, verbose=2)
+  search_cv.fit(X, y)
+  return search_cv
 
 
 # ------------------------------------- Hyperparameter Tuning with GridSearchCV -------------------------------------
 def tune_model_gridSearch(md, X, y, scorers, kfold=5, refit=False):
+  binary_cls = len(set(y)) < 3
   clf, param_space = gen_model_param_space(md, X, y, scorers, kfold)
   # Use GridSearchCV for hyperparameter tuning
-  grid_search = GridSearchCV(estimator=clf, param_grid=param_space, scoring=scorers, cv=kfold, n_jobs=-1,
-                             refit=refit, return_train_score=True, verbose=2)
+  grid_search = GridSearchCV(estimator=clf, param_grid=param_space, cv=KFold(n_splits=kfold, random_state=SEED),
+                             refit=refit, scoring=MyScorer.get_scorer_dict(scorers, binary_cls=binary_cls), n_jobs=-1,
+                             return_train_score=True, verbose=2)
   grid_search.fit(X, y)
   return
 
@@ -197,7 +204,7 @@ def gen_model_param_space(md, X, y, scorers, kfold=5):
     clf = CatBoostClassifier()
     param_space = {
       'learning_rate': [0.003, 0.01, 0.03, 0.1, 0.3, 1],
-      'depth': [2,3,4,5,6,7,8]
+      'depth': np.arange(2, 9)
     }
   elif md == GBCLF:
     # TODO: what's validation fraction?
