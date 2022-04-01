@@ -56,7 +56,8 @@ if __name__ == '__main__':
   decile_config = get_decileFtr_config()
   scorers = [SCR_ACC, SCR_ACC_ERR1, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_RMSE]
   time_id = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
-  md_list = [XGBCLF, LGR, KNN, RMFCLF]
+  #md_list = [XGBCLF, LGR, KNN, RMFCLF]
+  md_list = [RMFCLF]
   result_dir = init_result_dir(AGGREGATIVE_RESULTS_DIR, time_id)
 
   # 1. Generate training set dataframe with all sources of information combined
@@ -85,6 +86,12 @@ if __name__ == '__main__':
         f'hist_dataset.Xtrain shape: {hist_dataset.Xtrain.shape}, '
         f'hist_dataset.ytrain shape: {hist_dataset.ytrain.shape}\n')
 
+  nan_rows, nan_cols = np.where(np.isnan(hist_dataset.Xtrain))
+  if len(nan_cols) > 0:
+    print('[tune_main] Column with nan: ', hist_dataset.feature_names[np.unique(nan_cols)])
+  else:
+    print('[tune_main] All columns do not contain NA!')
+
   # 3. Tune models
   for md in tqdm(md_list):
     # 3.1 Tune each classifier
@@ -98,9 +105,9 @@ if __name__ == '__main__':
     pd.DataFrame(search.cv_results_).to_csv(result_dir / f'{md}_CV_results.csv', index=False)
 
   # 4. Save config & feature list
-  hist_dataset.FeatureEngMod.save_to_pickle(result_dir / 'FtrEngMod_tune.pkl')
-  print(f'\n[tune_main] Saved FeatureEngineeringModifier to FtrEngMod_tune.pkl!')
-
+  # hist_dataset.FeatureEngMod.save_to_pickle(result_dir / 'FtrEngMod_tune.pkl')
+  # print(f'\n[tune_main] Saved FeatureEngineeringModifier to FtrEngMod_tune.pkl!')
+  #
 
 
   # # 2. Leave 20% data for testing
