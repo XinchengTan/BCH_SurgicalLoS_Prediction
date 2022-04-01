@@ -26,6 +26,7 @@ def get_args():
 
   # model tuning
   parser.add_argument('--cls_weight', default='none', type=str)  # None, 'balanced'
+  parser.add_argument('--n_iter', default=20, type=int)
 
   args = parser.parse_args()
   return args
@@ -133,7 +134,7 @@ if __name__ == '__main__':
                                      class_weight=class_weight,
                                      kfold=5,
                                      scorers=scorers,
-                                     n_iters=3,
+                                     n_iters=args.n_iter,
                                      refit=False)
     # 3.2 Save CV results
     pd.DataFrame(search.cv_results_).to_csv(result_dir / f'{md}_CV_results.csv', index=False)
