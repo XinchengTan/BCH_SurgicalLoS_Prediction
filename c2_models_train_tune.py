@@ -89,9 +89,9 @@ def tune_model_optuna(md, X, y, kfold, scorers, refit=True):
 
 
 # ------------------------------------- Hyperparameter Tuning with RandomSearchCV -------------------------------------
-def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, calibrate=False):
+def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, class_weight=None, calibrate=False):
   binary_cls = len(set(y)) < 3
-  clf, param_space = gen_model_param_space(md, X, y, scorers=scorers, kfold=kfold)
+  clf, param_space = gen_model_param_space(md, X, y, scorers=scorers, class_weight=class_weight, kfold=kfold)
   if count_total_candidates(param_space) < n_iters:
     print('Default to GridSearchCV, given #candidates < n_iters')
     search_cv = GridSearchCV(estimator=clf, param_grid=param_space, n_jobs=-1,
@@ -108,9 +108,9 @@ def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, c
 
 
 # ------------------------------------- Hyperparameter Tuning with GridSearchCV -------------------------------------
-def tune_model_gridSearch(md, X, y, scorers, kfold=5, refit=False):
+def tune_model_gridSearch(md, X, y, scorers, kfold=5, class_weight=None, refit=False):
   binary_cls = len(set(y)) < 3
-  clf, param_space = gen_model_param_space(md, X, y, scorers, kfold)
+  clf, param_space = gen_model_param_space(md, X, y, scorers, class_weight=class_weight, kfold=kfold)
   # Use GridSearchCV for hyperparameter tuning
   grid_search = GridSearchCV(estimator=clf, param_grid=param_space, n_jobs=-1,
                              cv=KFold(n_splits=kfold, shuffle=True, random_state=SEED),
@@ -121,7 +121,8 @@ def tune_model_gridSearch(md, X, y, scorers, kfold=5, refit=False):
 
 
 # TODO: add arg for outcome
-def gen_model_param_space(md, X, y, scorers, kfold=5):
+def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5):
+  assert class_weight in {None, 'balanced'}, 'class_weight must be one of {None, "balanced"}!'
   n_frts = X.shape[1]
   minority_size = min(Counter(y).values())
   print("Minority-class size: ", minority_size)
@@ -129,30 +130,30 @@ def gen_model_param_space(md, X, y, scorers, kfold=5):
   min_samples_split_max = int(minority_size * (1 - 1 / kfold))
   if md == LGR:
     param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100],
-                   'class_weight': [None, 'balanced']}
+                   'class_weight': [class_weight]}
     clf = LogisticRegression(random_state=SEED, max_iter=500)
   elif md == LGR_L1:
     param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100],
-                   'class_weight': [None, 'balanced']}
+                   'class_weight': [class_weight]}
     clf = LogisticRegression(random_state=SEED, penalty='l1', solver='saga', max_iter=500)
   elif md == LGR_L12:
     param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30],
                    'l1_ratio': [0, 0.01, 0.03, 0.1, 0.3, 0.5, 0.8, 0.9, 0.95, 0.99, 1],
-                   'class_weight': [None, 'balanced']}
+                   'class_weight': [class_weight]}
     clf = LogisticRegression(random_state=SEED, penalty='elasticnet', solver='saga', max_iter=500)
   elif md == SVCLF:
     clf = SVC(random_state=SEED, probability=False)
     param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'gamma': sorted(list({1 / n_frts, 1, 0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001})),
                    'kernel': ['rbf'],
-                   'class_weight': [None, 'balanced']
+                   'class_weight': [class_weight]
                    }
   elif md == SVC_POLY:
     clf = SVC(random_state=SEED)
     param_space = {'C': [0.001, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'kernel': ['poly'],
                    'degree': [2, 3, 4, 5],
-                   'class_weight': [None, 'balanced']
+                   'class_weight': [class_weight]
                    }
   elif md == KNN:
     clf = KNeighborsClassifier(metric='minkowski')
@@ -166,7 +167,7 @@ def gen_model_param_space(md, X, y, scorers, kfold=5):
   elif md == RMFCLF:
     clf = RandomForestClassifier(random_state=SEED)
     param_space = {
-      'class_weight': [None, 'balanced'],
+      'class_weight': [class_weight],
       'max_depth': [None] + list(range(2, 21, 2)),
       'max_features': sorted(set(list(range(2, n_frts // 2 + 1, n_frts // 20 + 1)) + [int(np.sqrt(n_frts))])),
       'max_leaf_nodes': [None] + list(range(5, 101, 5)),
@@ -212,7 +213,7 @@ def gen_model_param_space(md, X, y, scorers, kfold=5):
     # TODO: what's validation fraction?
     clf = GradientBoostingClassifier(random_state=SEED, validation_fraction=0.15, n_iter_no_change=3)
     param_space = {
-      'class_weight': [None, 'balanced'],
+      'class_weight': [class_weight],
       'learning_rate': [0.001, 0.03, 0.01, 0.3, 0.1, 0.3],
       'loss': 'deviance',
       'max_depth': [None] + list(range(2, 21, 2)),
@@ -227,7 +228,7 @@ def gen_model_param_space(md, X, y, scorers, kfold=5):
   elif md == DTCLF:
     clf = DecisionTreeClassifier(random_state=SEED)
     param_space = {
-      'class_weight': [None, 'balanced'],
+      'class_weight': [class_weight],
       'max_depth': [None] + list(range(2, 21, 2)),
       'max_features': list(range(2, 1 + n_frts // 2, 10)) + [n_frts],
       'max_leaf_nodes': [None] + list(range(5, 101, 5)),

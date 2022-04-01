@@ -1,9 +1,10 @@
 # Deployment script for training model on historical dataset
+import argparse
+import datetime
 import numpy as np
 import pandas as pd
-import datetime
+import pytz
 from copy import deepcopy
-from pathlib import Path
 from sklearn.metrics import accuracy_score
 from tqdm import tqdm
 from typing import Dict, Iterable
@@ -14,6 +15,34 @@ from c2_models_train_tune import tune_model_gridSearch, tune_model_optuna, tune_
 from c4_model_perf import eval_model_all_ktrials
 from globals import *
 from globals_fs import *
+
+
+def get_args():
+  parser = argparse.ArgumentParser(description='Hyperparam Tuning Script')
+  parser.add_argument('--outcome', default=NNT, type=str)
+  parser.add_argument('--weight', default='none', choices=['disc', 'cont', 'none'], type=str)
+  parser.add_argument('--oh_cols', nargs='+')
+  parser.add_argument('--scaler', default='robust', type=str)
+
+  # model tuning
+  parser.add_argument('--cls_weight', default='none', type=str)  # None, 'balanced'
+
+  args = parser.parse_args()
+  return args
+
+
+def get_onehot_cols(args):
+  oh_cols = []
+  for oh in args['oh_cols']:
+    if oh == 'cpt':
+      oh_cols.append(CPTS)
+    elif oh == 'ccsr':
+      oh_cols.append(CCSRS)
+    elif oh == 'pproc':
+      oh_cols.append(PRIMARY_PROC)
+    elif oh == 'cptgrp':
+      oh_cols.append(CPT_GROUPS)
+  return oh_cols
 
 
 def init_result_dir(parent_dir, dir_name):
@@ -51,13 +80,17 @@ def init_md_to_clf(md_list: Iterable) -> Dict:
 
 
 if __name__ == '__main__':
-  outcome = NNT
-  force_weight = False
+  args = get_args()
+  outcome = args['outcome']
+  force_weight = args['weight'] != 'none'
+  onehot_cols = get_onehot_cols(args)
   decile_config = get_decileFtr_config()
+
+  md_list = [XGBCLF, LGR, KNN, RMFCLF]
+  class_weight = args['cls_weight'] if args['cls_weight'] != 'none' else None
   scorers = [SCR_ACC, SCR_ACC_ERR1, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_RMSE]
-  time_id = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
-  #md_list = [XGBCLF, LGR, KNN, RMFCLF]
-  md_list = [RMFCLF]
+
+  time_id = datetime.datetime.now(tz=pytz.timezone('US/Eastern')).strftime('%Y-%m-%d_%H:%M:%S')
   result_dir = init_result_dir(AGGREGATIVE_RESULTS_DIR, time_id)
 
   # 1. Generate training set dataframe with all sources of information combined
@@ -97,6 +130,7 @@ if __name__ == '__main__':
     # 3.1 Tune each classifier
     print(f'[tune_main] Start to tune {md}')
     search = tune_model_randomSearch(md, hist_dataset.Xtrain, hist_dataset.ytrain,
+                                     class_weight=class_weight,
                                      kfold=5,
                                      scorers=scorers,
                                      n_iters=3,
@@ -105,9 +139,9 @@ if __name__ == '__main__':
     pd.DataFrame(search.cv_results_).to_csv(result_dir / f'{md}_CV_results.csv', index=False)
 
   # 4. Save config & feature list
-  # hist_dataset.FeatureEngMod.save_to_pickle(result_dir / 'FtrEngMod_tune.pkl')
-  # print(f'\n[tune_main] Saved FeatureEngineeringModifier to FtrEngMod_tune.pkl!')
-  #
+  hist_dataset.FeatureEngMod.save_to_pickle(result_dir / 'FtrEngMod_tune.pkl')
+  print(f'\n[tune_main] Saved FeatureEngineeringModifier to FtrEngMod_tune.pkl!')
+
 
 
   # # 2. Leave 20% data for testing
