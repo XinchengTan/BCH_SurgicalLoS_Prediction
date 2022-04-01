@@ -325,7 +325,7 @@ class Dataset(object):
       Xdf.drop(columns=NON_NUMERIC_COLS + ftrEng_dep_cols_to_drop, inplace=True, errors='ignore')
     print("\nAfter droppping nonnumeric cols: Xdf - ", Xdf.shape)
     # Convert dataframe to numerical numpy matrix and save the corresponding features' names
-    X = Xdf.reset_index().to_numpy(dtype=np.float64)
+    X = Xdf.to_numpy(dtype=np.float64)
     target_features = Xdf.columns.to_list()
 
     # Remove cases that have multiple possible outcomes
@@ -395,7 +395,7 @@ class Dataset(object):
     Xdf = Xdf[target_features]
 
     # Convert feature-engineered data matrix to numerical numpy array
-    X = Xdf.reset_index().to_numpy(dtype=np.float64)
+    X = Xdfto_numpy(dtype=np.float64)
 
     # Remove cases identical to any in skip_cases, update X_case_keys correspondingly
     if (skip_cases_df is not None) and (not skip_cases_df.empty):
