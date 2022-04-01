@@ -8,7 +8,7 @@ from typing import Dict, Iterable
 
 from c0_data_prepare import prepare_data
 from c1_data_preprocessing import Dataset
-from c2_models import get_model
+from c2_models_nnt import get_model
 from globals import *
 from globals_fs import *
 
