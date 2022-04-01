@@ -120,8 +120,16 @@ def gen_model_param_space(md, X, y, scorers, kfold=5):
   if md == LGR:
     param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100],
                    'class_weight': [None, 'balanced']}
-    # 'l1_ratio': [0, 0.01, 0.03, 0.1, 0.3, 0.5, 0.8, 0.9, 0.95, 0.99, 1],  penalty='elasticnet', solver='saga',
     clf = LogisticRegression(random_state=SEED, max_iter=500)
+  elif md == LGR_L1:
+    param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100],
+                   'class_weight': [None, 'balanced']}
+    clf = LogisticRegression(random_state=SEED, penalty='l1', solver='saga', max_iter=500)
+  elif md == LGR_L12:
+    param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30],
+                   'l1_ratio': [0, 0.01, 0.03, 0.1, 0.3, 0.5, 0.8, 0.9, 0.95, 0.99, 1],
+                   'class_weight': [None, 'balanced']}
+    clf = LogisticRegression(random_state=SEED, penalty='elasticnet', solver='saga', max_iter=500)
   elif md == SVCLF:
     clf = SVC(random_state=SEED, probability=False)
     param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10],

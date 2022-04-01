@@ -266,7 +266,9 @@ reg2name = {LR: "Linear Regression",
             GB: "Gradient Boosting",
             }
 
-LGR = 'lgr'
+LGR = 'lgr'  # L2 reg
+LGR_L1 = 'lgr-l1'
+LGR_L12 = 'lgr-l12'
 LGRCV = 'lgr-cv'
 SVCLF = 'svc'
 SVC_POLY = 'svc-poly'
