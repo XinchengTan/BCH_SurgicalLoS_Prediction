@@ -33,7 +33,7 @@ def get_args():
 
 def get_onehot_cols(args):
   oh_cols = []
-  for oh in args['oh_cols']:
+  for oh in args.oh_cols:
     if oh == 'cpt':
       oh_cols.append(CPTS)
     elif oh == 'ccsr':
@@ -81,13 +81,13 @@ def init_md_to_clf(md_list: Iterable) -> Dict:
 
 if __name__ == '__main__':
   args = get_args()
-  outcome = args['outcome']
-  force_weight = args['weight'] != 'none'
+  outcome = args.outcome
+  force_weight = args.weight != 'none'
   onehot_cols = get_onehot_cols(args)
   decile_config = get_decileFtr_config()
 
   md_list = [XGBCLF, LGR, KNN, RMFCLF]
-  class_weight = args['cls_weight'] if args['cls_weight'] != 'none' else None
+  class_weight = args.cls_weight if args.cls_weight != 'none' else None
   scorers = [SCR_ACC, SCR_ACC_ERR1, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_RMSE]
 
   time_id = datetime.datetime.now(tz=pytz.timezone('US/Eastern')).strftime('%Y-%m-%d_%H:%M:%S')
