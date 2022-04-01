@@ -91,7 +91,9 @@ def tune_model_optuna(md, X, y, kfold, scorers, refit=True):
 def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, calibrate=False):
   binary_cls = len(set(y)) < 3
   clf, param_space = gen_model_param_space(md, X, y, scorers=scorers, kfold=kfold)
-  refit = get_refit_val(scorers, refit)
+  candidate_count = count_total_candidates(param_space)
+  if candidate_count < n_iters:
+    n_iters = candidate_count + 1  # lower n_iters if param_space is not large
   rand_search = RandomizedSearchCV(estimator=clf, param_distributions=param_space, n_iter=n_iters, cv=kfold, n_jobs=-1,
                                    refit=refit, scoring=MyScorer.get_scorer_dict(scorers, binary_cls=binary_cls),
                                    return_train_score=True, verbose=2, random_state=SEED)
@@ -102,7 +104,6 @@ def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, c
 # ------------------------------------- Hyperparameter Tuning with GridSearchCV -------------------------------------
 def tune_model_gridSearch(md, X, y, scorers, kfold=5, refit=False):
   clf, param_space = gen_model_param_space(md, X, y, scorers, kfold)
-
   # Use GridSearchCV for hyperparameter tuning
   grid_search = GridSearchCV(estimator=clf, param_grid=param_space, scoring=scorers, cv=kfold, n_jobs=-1,
                              refit=refit, return_train_score=True, verbose=2)
@@ -231,6 +232,14 @@ def gen_model_param_space(md, X, y, scorers, kfold=5):
 
   return clf, param_space
 
+
+def count_total_candidates(param_space: Dict):
+  if len(param_space) == 0:
+    return 0
+  count = 1
+  for k, v in param_space.items():
+    count *= len(v)
+  return count
 
 ## XGB other params:
 # 'reg_alpha': None,  # L1 reg - faster under high dimensionality
