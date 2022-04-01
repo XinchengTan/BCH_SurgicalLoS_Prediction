@@ -1,4 +1,5 @@
 import numpy as np
+from sklearn.utils import class_weight
 
 from globals import *
 from c1_data_preprocessing import Dataset
@@ -87,29 +88,28 @@ def tune_model_optuna(md, X, y, kfold, scorers, refit=True):
 
 
 # ------------------------------------- Hyperparameter Tuning with RandomSearchCV -------------------------------------
-def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=10, refit=True, calibrate=False):
+def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, calibrate=False):
   binary_cls = len(set(y)) < 3
   clf, param_space = gen_model_param_space(md, X, y, scorers=scorers, kfold=kfold)
-
   refit = get_refit_val(scorers, refit)
-  rand_search = RandomizedSearchCV(clf, param_space, n_jobs=-1, refit=refit, cv=kfold, n_iter=n_iters,
-                                   scoring=MyScorer.get_scorer_dict(scorers, binary_cls=binary_cls))
+  rand_search = RandomizedSearchCV(estimator=clf, param_distributions=param_space, n_iter=n_iters, cv=kfold, n_jobs=-1,
+                                   refit=refit, scoring=MyScorer.get_scorer_dict(scorers, binary_cls=binary_cls),
+                                   return_train_score=True, verbose=2, random_state=SEED)
   rand_search.fit(X, y)
   return rand_search
 
 
-
-def tune_model_gridSearch(md, X, y, scorers, kfold=5, refit=True):
+# ------------------------------------- Hyperparameter Tuning with GridSearchCV -------------------------------------
+def tune_model_gridSearch(md, X, y, scorers, kfold=5, refit=False):
   clf, param_space = gen_model_param_space(md, X, y, scorers, kfold)
 
   # Use GridSearchCV for hyperparameter tuning
   grid_search = GridSearchCV(estimator=clf, param_grid=param_space, scoring=scorers, cv=kfold, n_jobs=-1,
-                             refit=refit, return_train_score=True, verbose=0)
+                             refit=refit, return_train_score=True, verbose=2)
   grid_search.fit(X, y)
   return
 
 
-# ------------------------------------- Hyperparameter Tuning with GridSearchCV -------------------------------------
 # TODO: add arg for outcome
 def gen_model_param_space(md, X, y, scorers, kfold=5):
   n_frts = X.shape[1]
@@ -118,10 +118,10 @@ def gen_model_param_space(md, X, y, scorers, kfold=5):
 
   min_samples_split_max = int(minority_size * (1 - 1 / kfold))
   if md == LGR:
-    param_space = {'Cs': [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100],
-                   'l1_ratio': [0, 0.01, 0.03, 0.1, 0.3, 0.5, 0.8, 0.9, 0.95, 0.99, 1],
+    param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100],
                    'class_weight': [None, 'balanced']}
-    clf = LogisticRegression(random_state=SEED, penalty='elasticnet', solver='saga', max_iter=500)
+    # 'l1_ratio': [0, 0.01, 0.03, 0.1, 0.3, 0.5, 0.8, 0.9, 0.95, 0.99, 1],  penalty='elasticnet', solver='saga',
+    clf = LogisticRegression(random_state=SEED, max_iter=500)
   elif md == SVCLF:
     clf = SVC(random_state=SEED, probability=False)
     param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10],
@@ -137,11 +137,10 @@ def gen_model_param_space(md, X, y, scorers, kfold=5):
                    'class_weight': [None, 'balanced']
                    }
   elif md == KNN:
-    clf = KNeighborsClassifier()
+    clf = KNeighborsClassifier(metric='minkowski')
     param_space = {
       'algorithm': ['ball_tree', 'kd_tree', 'brute'],
       'leaf_size': list(range(20, minority_size, 10)),
-      'metric': ['minkowski'],
       'n_neighbors': list(range(5, minority_size + 1, minority_size // 10 + 1)),
       'p': [1, 2, 3],
       'weights': ['uniform', 'distance']
@@ -161,24 +160,35 @@ def gen_model_param_space(md, X, y, scorers, kfold=5):
     if not param_space['min_samples_split']:
       raise ValueError("min_samples_split cannot < 2!")
   elif md == XGBCLF:
-    # TODO: update eval_metric to 'auc' for binary clf, and 'rmse' for multi-class clf?
-    clf = XGBClassifier(random_state=SEED)
+    # TODO: use different eval_metric, such as 'auc' for binary clf, and 'rmse' for multi-class clf?
+    # tree_method='hist'
+    clf = XGBClassifier(random_state=SEED, n_estimators=150, eval_metric='mlogloss', use_label_encoder=False)
     if n_frts > 500:
       colsample_bytree_range = np.arange(0.3, 1.01, 0.1)
     else:
       colsample_bytree_range = np.arange(0.8, 1.01, 0.05)
-    scale_pos_weight_list = None
-    # TODO: update scale_pos_weight param space, depending on outcome
     param_space = {
-      'n_estimators': np.arange(50, 301, 50),
-      'learning_rate': [0.01, 0.03, 0.1, 0.2, 0.3, 1],
+      #'n_estimators': [30, 80, 130, 200, 300],
+      'learning_rate': [0.003, 0.01, 0.03, 0.1, 0.3, 1],
       'subsample': np.arange(0.8, 1.01, 0.05),
       'colsample_bytree': colsample_bytree_range,
       'max_depth': [3, 4, 5, 6, 7],
       'gamma': [0, 0.1, 0.3, 1, 3, 5],
       'min_child_weight': [0.1, 0.3, 0.6, 1, 2],
-      'scale_pos_weight': scale_pos_weight_list,
-      'eval_metric': 'mlogloss',
+    }
+    # Tune unbalanced binary class weight parameter
+    if len(set(y)) == 2:
+      unbalanced_ratio = int((len(y) - minority_size) / minority_size)
+      step = np.round(np.sqrt(unbalanced_ratio))
+      param_space['scale_pos_weight'] = np.arange(1, unbalanced_ratio + 1, step)
+      if unbalanced_ratio not in param_space['scale_pos_weight']:
+        param_space['scale_pos_weight'] = np.append(param_space['scale_pos_weight'], unbalanced_ratio)
+  elif md == CATBOOST:
+    # TODO: finish this
+    clf = CatBoostClassifier()
+    param_space = {
+      'learning_rate': [0.003, 0.01, 0.03, 0.1, 0.3, 1],
+      'depth': [2,3,4,5,6,7,8]
     }
   elif md == GBCLF:
     # TODO: what's validation fraction?

@@ -324,7 +324,6 @@ class FeatureEngineeringModifier(object):
       onehot_dtypes = self.onehot_dtypes
     if onehot_cols is None or onehot_dtypes is None:
       return Xdf
-
     for oh_col, dtype in zip(onehot_cols, onehot_dtypes):
       oh_prefix = oh_col + '_OHE_' if oh_col not in DRUG_COLS else 'MED%s_OHE_' % ''.join(filter(str.isdigit, oh_col))
       if dtype == str:
