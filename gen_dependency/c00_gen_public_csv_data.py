@@ -1,5 +1,7 @@
 import pandas as pd
 from pathlib import Path
+from globals import *
+from globals_fs import *
 
 
 def gen_surg_ckey_mapping_df(main_data_df: pd.DataFrame):
@@ -27,7 +29,7 @@ def remove_mrn(data_df: pd.DataFrame, dfname=''):
 
 
 # TODO: distinguish hist and out-of-sample from save_dir!!
-def deidentify_model_input_data(dashb_fp, cpt_fp, ccsr_fp, med_fp, dtime_fp=None, save_dir=None):
+def deidentify_model_input_data(dashb_fp, cpt_fp, ccsr_fp, med_fp, dtime_fp=None, chews_fp=None, save_dir=None):
   # Use new indexing as pseudo surg_case_key, replacing the original ones
   dashb_df = pd.read_csv(dashb_fp)
   surg_ckeys_mapping_df = gen_surg_ckey_mapping_df(dashb_df)
@@ -37,7 +39,9 @@ def deidentify_model_input_data(dashb_fp, cpt_fp, ccsr_fp, med_fp, dtime_fp=None
   ccsr_df = pd.read_csv(ccsr_fp)
   med_df = pd.read_csv(med_fp)
   dtime_df = pd.read_csv(dtime_fp) if dtime_fp is not None else None
-  all_dfs = {'Dashboard': dashb_df, 'CPT': cpt_df, 'CCSR': ccsr_df, 'Medication': med_df, 'DateTime': dtime_df}
+  chews_df = pd.read_csv(chews_fp) if chews_fp is not None else None
+  all_dfs = {'Dashboard': dashb_df, 'CPT': cpt_df, 'CCSR': ccsr_df, 'Medication': med_df, 'DateTime': dtime_df,
+             'Chews': chews_df}
 
   # Remove MRN column
   new_dfs = {}
