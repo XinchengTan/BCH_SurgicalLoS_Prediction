@@ -24,7 +24,7 @@ class MyScorer:
     return
 
   @staticmethod
-  def get_scorer_dict(scorer_names):
+  def get_scorer_dict(scorer_names, binary_cls=True):
     scr_dict = {}
     for scorer in scorer_names:
       if scorer == SCR_ACC:
@@ -32,7 +32,7 @@ class MyScorer:
       elif scorer == SCR_ACC_BAL:
         scr_dict[scorer] = 'balanced_accuracy'
       elif scorer == SCR_AUC:
-        scr_dict[scorer] = 'roc_auc'
+        scr_dict[scorer] = 'roc_auc' if binary_cls else 'roc_auc_ovr'
       elif scorer == SCR_RECALL_BINCLF:
         scr_dict[scorer] = 'recall'
       elif scorer == SCR_PREC_BINCLF:
