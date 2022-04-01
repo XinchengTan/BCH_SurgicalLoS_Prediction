@@ -1,8 +1,7 @@
 # Deployment script for training model on historical dataset
-import joblib
 import numpy as np
 import pandas as pd
-import time
+import datetime
 from copy import deepcopy
 from pathlib import Path
 from sklearn.metrics import accuracy_score
@@ -54,9 +53,10 @@ def init_md_to_clf(md_list: Iterable) -> Dict:
 if __name__ == '__main__':
   outcome = NNT
   force_weight = False
+  decile_config = get_decileFtr_config()
   scorers = [SCR_ACC, SCR_ACC_ERR1, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_RMSE]
-  time_id = time.ctime()
-  md_list = [XGBCLF]  # LGR, KNN, RMFCLF,
+  time_id = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
+  md_list = [XGBCLF, LGR, KNN, RMFCLF]
   result_dir = init_result_dir(AGGREGATIVE_RESULTS_DIR, time_id)
 
   # 1. Generate training set dataframe with all sources of information combined
@@ -75,7 +75,7 @@ if __name__ == '__main__':
   # 2. Preprocess & Engineer Features on training data -> Dataset() object
   hist_dataset = Dataset(df=hist_data_df, outcome=outcome,
                          ftr_cols=FEATURE_COLS_NO_WEIGHT_ALLMEDS,
-                         col2decile_ftrs2aggf=get_decileFtr_config(),
+                         col2decile_ftrs2aggf=decile_config,
                          onehot_cols=[CCSRS],
                          discretize_cols=['AGE_AT_PROC_YRS'],
                          scaler='robust', scale_numeric_only=True,
@@ -85,7 +85,6 @@ if __name__ == '__main__':
         f'hist_dataset.Xtrain shape: {hist_dataset.Xtrain.shape}, '
         f'hist_dataset.ytrain shape: {hist_dataset.ytrain.shape}\n')
 
-  # TODO: 2. understand refit
   # 3. Tune models
   for md in tqdm(md_list):
     # 3.1 Tune each classifier
@@ -98,10 +97,9 @@ if __name__ == '__main__':
     # 3.2 Save CV results
     pd.DataFrame(search.cv_results_).to_csv(result_dir / f'{md}_CV_results.csv', index=False)
 
-  # 4. Save feature list
-  with open(result_dir / f'feature_list.txt', 'wb') as ftrs_file:
-    joblib.dump(hist_dataset.feature_names, ftrs_file)
-  print(f'[tune_main] Saved feature list!')
+  # 4. Save config & feature list
+  hist_dataset.FeatureEngMod.save_to_pickle(result_dir / 'FtrEngMod_tune.pkl')
+  print(f'\n[tune_main] Saved FeatureEngineeringModifier to FtrEngMod_tune.pkl!')
 
 
 
