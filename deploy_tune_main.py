@@ -119,8 +119,9 @@ if __name__ == '__main__':
                          test_pct=0)
   print(f'\n[tune_main] Finished data preprocessing and feature engineering! '
         f'hist_dataset.Xtrain shape: {hist_dataset.Xtrain.shape}, '
-        f'hist_dataset.ytrain shape: {hist_dataset.ytrain.shape}\n')
-
+        f'hist_dataset.ytrain shape: {hist_dataset.ytrain.shape}\n'
+        f'[tune_main] Onehot Encoded Columns: {onehot_cols}')
+  
   # Sanity check if any column contain NA
   nan_rows, nan_cols = np.where(np.isnan(hist_dataset.Xtrain))
   if len(nan_cols) > 0:
