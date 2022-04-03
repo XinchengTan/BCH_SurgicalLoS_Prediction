@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from sklearn.utils import class_weight
 from sklearn.model_selection import KFold
 
@@ -89,9 +90,11 @@ def tune_model_optuna(md, X, y, kfold, scorers, refit=True):
 
 
 # ------------------------------------- Hyperparameter Tuning with RandomSearchCV -------------------------------------
-def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, class_weight=None, calibrate=False):
+def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, class_weight=None, calibrate=False,
+                            use_gpu=False):
   binary_cls = len(set(y)) < 3
-  clf, param_space = gen_model_param_space(md, X, y, scorers=scorers, class_weight=class_weight, kfold=kfold)
+  clf, param_space = gen_model_param_space(md, X, y, scorers=scorers, class_weight=class_weight, kfold=kfold,
+                                           use_gpu=use_gpu)
   if count_total_candidates(param_space) < n_iters:
     print('Default to GridSearchCV, given #candidates < n_iters')
     search_cv = GridSearchCV(estimator=clf, param_grid=param_space, n_jobs=-1,
@@ -108,9 +111,10 @@ def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, c
 
 
 # ------------------------------------- Hyperparameter Tuning with GridSearchCV -------------------------------------
-def tune_model_gridSearch(md, X, y, scorers, kfold=5, class_weight=None, refit=False):
+def tune_model_gridSearch(md, X, y, scorers, kfold=5, class_weight=None, refit=False, use_gpu=False):
   binary_cls = len(set(y)) < 3
-  clf, param_space = gen_model_param_space(md, X, y, scorers, class_weight=class_weight, kfold=kfold)
+  clf, param_space = gen_model_param_space(md, X, y, scorers, class_weight=class_weight, kfold=kfold,
+                                           use_gpu=use_gpu)
   # Use GridSearchCV for hyperparameter tuning
   grid_search = GridSearchCV(estimator=clf, param_grid=param_space, n_jobs=-1,
                              cv=KFold(n_splits=kfold, shuffle=True, random_state=SEED),
@@ -121,7 +125,7 @@ def tune_model_gridSearch(md, X, y, scorers, kfold=5, class_weight=None, refit=F
 
 
 # TODO: add arg for outcome
-def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5):
+def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5, use_gpu=False):
   assert class_weight in {None, 'balanced'}, 'class_weight must be one of {None, "balanced"}!'
   n_frts = X.shape[1]
   minority_size = min(Counter(y).values())
@@ -180,14 +184,18 @@ def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5):
       raise ValueError("min_samples_split cannot < 2!")
   elif md == XGBCLF:
     # TODO: use different eval_metric, such as 'auc' for binary clf, and 'rmse' for multi-class clf?
-    # tree_method='hist', 'gpu_hist'
-    clf = XGBClassifier(random_state=SEED, n_estimators=150, eval_metric='mlogloss', use_label_encoder=False)
+    objective = 'multi:softmax' if len(y) > 2 else 'binary:logistic'
+    if use_gpu and torch.cuda.is_available():
+      clf = XGBClassifier(random_state=SEED, eval_metric='mlogloss', use_label_encoder=False, objective=objective,
+                          tree_method='gpu_hist', gpu_id=0)
+    else:
+      clf = XGBClassifier(random_state=SEED, eval_metric='mlogloss', use_label_encoder=False, objective=objective)
     if n_frts > 500:
       colsample_bytree_range = np.arange(0.3, 1.01, 0.1)
     else:
       colsample_bytree_range = np.arange(0.8, 1.01, 0.05)
     param_space = {
-      #'n_estimators': [30, 80, 130, 200, 300],
+      'n_estimators': [30, 80, 130, 200, 300],  # 150
       'learning_rate': [0.003, 0.01, 0.03, 0.1, 0.3, 1],
       'subsample': np.arange(0.8, 1.01, 0.05),
       'colsample_bytree': colsample_bytree_range,

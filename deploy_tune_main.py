@@ -19,6 +19,7 @@ from globals_fs import *
 
 def get_args():
   parser = argparse.ArgumentParser(description='Hyperparam Tuning Script')
+  parser.add_argument('--gpu', default=False, action='store_true')
   parser.add_argument('--outcome', default=NNT, type=str)
   parser.add_argument('--weight', default='none', choices=['disc', 'cont', 'none'], type=str)
   parser.add_argument('--oh_cols', nargs='+')
@@ -120,6 +121,7 @@ if __name__ == '__main__':
         f'hist_dataset.Xtrain shape: {hist_dataset.Xtrain.shape}, '
         f'hist_dataset.ytrain shape: {hist_dataset.ytrain.shape}\n')
 
+  # Sanity check if any column contain NA
   nan_rows, nan_cols = np.where(np.isnan(hist_dataset.Xtrain))
   if len(nan_cols) > 0:
     print('[tune_main] Column with nan: ', hist_dataset.feature_names[np.unique(nan_cols)])
@@ -135,7 +137,8 @@ if __name__ == '__main__':
                                      kfold=5,
                                      scorers=scorers,
                                      n_iters=args.n_iter,
-                                     refit=False)
+                                     refit=False,
+                                     use_gpu=args.gpu)
     # 3.2 Save CV results
     pd.DataFrame(search.cv_results_).to_csv(result_dir / f'{md}_CV_results.csv', index=False)
 
