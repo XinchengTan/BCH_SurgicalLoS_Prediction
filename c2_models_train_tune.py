@@ -133,28 +133,28 @@ def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5, use_gpu=Fals
 
   min_samples_split_max = int(minority_size * (1 - 1 / kfold))
   if md == LGR:
-    param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100],
+    param_space = {'C': [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'class_weight': [class_weight]}
-    clf = LogisticRegression(random_state=SEED, max_iter=500)
+    clf = LogisticRegression(random_state=SEED, max_iter=1000)
   elif md == LGR_L1:
-    param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100],
+    param_space = {'C': [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'class_weight': [class_weight]}
-    clf = LogisticRegression(random_state=SEED, penalty='l1', solver='saga', max_iter=500)
+    clf = LogisticRegression(random_state=SEED, penalty='l1', solver='saga', max_iter=1000)
   elif md == LGR_L12:
-    param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30],
+    param_space = {'C': [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'l1_ratio': [0, 0.01, 0.03, 0.1, 0.3, 0.5, 0.8, 0.9, 0.95, 0.99, 1],
                    'class_weight': [class_weight]}
-    clf = LogisticRegression(random_state=SEED, penalty='elasticnet', solver='saga', max_iter=500)
+    clf = LogisticRegression(random_state=SEED, penalty='elasticnet', solver='saga', max_iter=1000)
   elif md == SVCLF:
     clf = SVC(random_state=SEED, probability=False)
-    param_space = {'C': [0.01, 0.03, 0.1, 0.3, 1, 3, 10],
+    param_space = {'C': [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'gamma': sorted(list({1 / n_frts, 1, 0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001})),
                    'kernel': ['rbf'],
                    'class_weight': [class_weight]
                    }
   elif md == SVC_POLY:
     clf = SVC(random_state=SEED)
-    param_space = {'C': [0.001, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
+    param_space = {'C': [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'kernel': ['poly'],
                    'degree': [2, 3, 4, 5],
                    'class_weight': [class_weight]
@@ -164,7 +164,7 @@ def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5, use_gpu=Fals
     param_space = {
       'algorithm': ['ball_tree', 'kd_tree', 'brute'],
       'leaf_size': list(range(20, minority_size, 10)),
-      'n_neighbors': list(range(5, minority_size + 1, minority_size // 10 + 1)),
+      'n_neighbors': list(range(5, minority_size + 1, 10)),
       'p': [1, 2, 3],
       'weights': ['uniform', 'distance']
     }
@@ -183,11 +183,11 @@ def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5, use_gpu=Fals
     if not param_space['min_samples_split']:
       raise ValueError("min_samples_split cannot < 2!")
   elif md == XGBCLF:
-    # TODO: use different eval_metric, such as 'auc' for binary clf, and 'rmse' for multi-class clf?
-    objective = 'multi:softmax' if len(y) > 2 else 'binary:logistic'
+    num_classes = len(set(y))
+    objective = 'multi:softmax' if num_classes > 2 else 'binary:logistic'
     if use_gpu and torch.cuda.is_available():
       clf = XGBClassifier(random_state=SEED, eval_metric='mlogloss', use_label_encoder=False, objective=objective,
-                          tree_method='gpu_hist', gpu_id=0)
+                          num_class=num_classes, tree_method='gpu_hist', gpu_id=0)
     else:
       clf = XGBClassifier(random_state=SEED, eval_metric='mlogloss', use_label_encoder=False, objective=objective)
     if n_frts > 500:
@@ -195,16 +195,17 @@ def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5, use_gpu=Fals
     else:
       colsample_bytree_range = np.arange(0.8, 1.01, 0.05)
     param_space = {
-      'n_estimators': [30, 80, 130, 200, 300],  # 150
+      'n_estimators': [30, 80, 120, 150, 200, 300],
       'learning_rate': [0.003, 0.01, 0.03, 0.1, 0.3, 1],
       'subsample': np.arange(0.8, 1.01, 0.05),
       'colsample_bytree': colsample_bytree_range,
       'max_depth': [3, 4, 5, 6, 7],
       'gamma': [0, 0.1, 0.3, 1, 3, 5],
       'min_child_weight': [0.1, 0.3, 0.6, 1, 2],
+      'lambda': [0.01, 0.1, 1],
     }
     # Tune unbalanced binary class weight parameter
-    if len(set(y)) == 2:
+    if num_classes == 2:
       unbalanced_ratio = int((len(y) - minority_size) / minority_size)
       step = np.round(np.sqrt(unbalanced_ratio))
       param_space['scale_pos_weight'] = np.arange(1, unbalanced_ratio + 1, step)
