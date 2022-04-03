@@ -1,0 +1,8 @@
+imbalanced_learn==0.8.1
+joblib==1.1.0
+numpy==1.19.2
+tqdm==4.59.0
+xgboost==1.5.0
+optuna
+shap
+catboost
