@@ -95,17 +95,19 @@ def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, c
   binary_cls = len(set(y)) < 3
   clf, param_space = gen_model_param_space(md, X, y, scorers=scorers, class_weight=class_weight, kfold=kfold,
                                            use_gpu=use_gpu)
+  # TODO: adjust gpu n_jobs accordingly
+  n_jobs = 1 if use_gpu and (torch.cuda.is_available()) else -1  # avoid mem out when tuning on gpu
   if count_total_candidates(param_space) < n_iters:
     print('Default to GridSearchCV, given #candidates < n_iters')
-    search_cv = GridSearchCV(estimator=clf, param_grid=param_space, n_jobs=-1,
+    search_cv = GridSearchCV(estimator=clf, param_grid=param_space, n_jobs=n_jobs,
                              cv=KFold(n_splits=kfold, shuffle=True, random_state=SEED),
                              refit=refit, scoring=MyScorer.get_scorer_dict(scorers, binary_cls=binary_cls),
-                             return_train_score=True, verbose=2)
+                             return_train_score=True, verbose=4)
   else:
-    search_cv = RandomizedSearchCV(estimator=clf, param_distributions=param_space, n_iter=n_iters, n_jobs=-1,
+    search_cv = RandomizedSearchCV(estimator=clf, param_distributions=param_space, n_iter=n_iters, n_jobs=n_jobs,
                                    cv=KFold(n_splits=kfold, shuffle=True, random_state=SEED), random_state=SEED,
                                    refit=refit, scoring=MyScorer.get_scorer_dict(scorers, binary_cls=binary_cls),
-                                   return_train_score=True, verbose=2)
+                                   return_train_score=True, verbose=4)
   search_cv.fit(X, y)
   return search_cv
 
@@ -189,7 +191,8 @@ def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5, use_gpu=Fals
       clf = XGBClassifier(random_state=SEED, eval_metric='mlogloss', use_label_encoder=False, objective=objective,
                           num_class=num_classes, tree_method='gpu_hist', gpu_id=0)
     else:
-      clf = XGBClassifier(random_state=SEED, eval_metric='mlogloss', use_label_encoder=False, objective=objective)
+      clf = XGBClassifier(random_state=SEED, eval_metric='mlogloss', use_label_encoder=False, objective=objective,
+                          num_class=num_classes)
     if n_frts > 500:
       colsample_bytree_range = np.arange(0.3, 1.01, 0.1)
     else:

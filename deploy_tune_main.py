@@ -22,7 +22,7 @@ def get_args():
   parser.add_argument('--gpu', default=False, action='store_true')
   parser.add_argument('--outcome', default=NNT, type=str)
   parser.add_argument('--weight', default='none', choices=['disc', 'cont', 'none'], type=str)
-  parser.add_argument('--oh_cols', nargs='+')
+  parser.add_argument('--oh_cols', default=[], nargs='+')
   parser.add_argument('--scaler', default='robust', type=str)
 
   # model tuning
@@ -88,9 +88,9 @@ if __name__ == '__main__':
   onehot_cols = get_onehot_cols(args)
   decile_config = get_decileFtr_config()
 
-  md_list = [XGBCLF, LGR, KNN, RMFCLF]
+  md_list = [XGBCLF]  # , LGR, KNN, RMFCLF
   class_weight = args.cls_weight if args.cls_weight != 'none' else None
-  scorers = [SCR_ACC, SCR_ACC_ERR1, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_RMSE]
+  scorers = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_BAL, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_OVERPRED2, SCR_UNDERPRED2, SCR_RMSE]
 
   time_id = datetime.datetime.now(tz=pytz.timezone('US/Eastern')).strftime('%Y-%m-%d_%H:%M:%S')
   result_dir = init_result_dir(AGGREGATIVE_RESULTS_DIR, time_id)
