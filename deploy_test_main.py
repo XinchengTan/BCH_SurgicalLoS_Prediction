@@ -45,6 +45,7 @@ if __name__ == '__main__':
                             cpt_grp_fp=CPT_TO_CPTGROUP_FILE,
                             ccsr_fp=DATA_DIR / "ccsr_os3.csv",
                             medication_fp=DATA_DIR / "medication_os3.csv",
+                            chews_fp=DATA_HOME / "chews_raw/chews_os.csv",
                             exclude2021=False,
                             force_weight=False)
   print(f'[test_main] Loaded os_data_df! Shape: {os_data_df.shape}')

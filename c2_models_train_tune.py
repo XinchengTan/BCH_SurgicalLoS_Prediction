@@ -180,7 +180,7 @@ def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5):
       raise ValueError("min_samples_split cannot < 2!")
   elif md == XGBCLF:
     # TODO: use different eval_metric, such as 'auc' for binary clf, and 'rmse' for multi-class clf?
-    # tree_method='hist'
+    # tree_method='hist', 'gpu_hist'
     clf = XGBClassifier(random_state=SEED, n_estimators=150, eval_metric='mlogloss', use_label_encoder=False)
     if n_frts > 500:
       colsample_bytree_range = np.arange(0.3, 1.01, 0.1)
