@@ -93,7 +93,7 @@ if __name__ == '__main__':
   scorers = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_BAL, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_OVERPRED2, SCR_UNDERPRED2, SCR_RMSE]
 
   time_id = datetime.datetime.now(tz=pytz.timezone('US/Eastern')).strftime('%Y-%m-%d_%H:%M:%S')
-  result_dir = init_result_dir(AGGREGATIVE_RESULTS_DIR, time_id)
+  result_dir = init_result_dir(AGGREGATIVE_RESULTS_DIR, f'{"+".join(args.oh_cols)}-{time_id}')
 
   # 1. Generate training set dataframe with all sources of information combined
   hist_data_df = prepare_data(data_fp=DATA_DIR / "historic3.csv",
@@ -121,7 +121,7 @@ if __name__ == '__main__':
         f'hist_dataset.Xtrain shape: {hist_dataset.Xtrain.shape}, '
         f'hist_dataset.ytrain shape: {hist_dataset.ytrain.shape}\n'
         f'[tune_main] Onehot Encoded Columns: {onehot_cols}')
-  
+
   # Sanity check if any column contain NA
   nan_rows, nan_cols = np.where(np.isnan(hist_dataset.Xtrain))
   if len(nan_cols) > 0:
