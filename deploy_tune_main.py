@@ -112,7 +112,7 @@ if __name__ == '__main__':
   hist_dataset = Dataset(df=hist_data_df, outcome=outcome,
                          ftr_cols=FEATURE_COLS_NO_WEIGHT_ALLMEDS,
                          col2decile_ftrs2aggf=decile_config,
-                         onehot_cols=[CCSRS],
+                         onehot_cols=onehot_cols,
                          discretize_cols=['AGE_AT_PROC_YRS'],
                          scaler='robust', scale_numeric_only=True,
                          remove_o2m=(True, True),
