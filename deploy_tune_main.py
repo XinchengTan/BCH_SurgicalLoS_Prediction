@@ -20,6 +20,7 @@ from globals_fs import *
 def get_args():
   parser = argparse.ArgumentParser(description='Hyperparam Tuning Script')
   parser.add_argument('--gpu', default=False, action='store_true')
+  parser.add_argument('--n_jobs', default=-1, type=int)
   parser.add_argument('--outcome', default=NNT, type=str)
   parser.add_argument('--weight', default='none', choices=['disc', 'cont', 'none'], type=str)
   parser.add_argument('--oh_cols', default=[], nargs='+')
@@ -159,6 +160,7 @@ if __name__ == '__main__':
     # 3.1 Tune each classifier
     print(f'[tune_main] Start to tune {md}')
     search = tune_model_randomSearch(md, hist_dataset.Xtrain, hist_dataset.ytrain,
+                                     args=args,
                                      cls_weight=cls_weight,
                                      kfold=5,
                                      scorers=scorers,

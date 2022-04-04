@@ -90,13 +90,13 @@ def tune_model_optuna(md, X, y, kfold, scorers, refit=True):
 
 
 # ------------------------------------- Hyperparameter Tuning with RandomSearchCV -------------------------------------
-def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, cls_weight=None, calibrate=False,
+def tune_model_randomSearch(md, X, y, kfold, scorers, args, n_iters=20, refit=False, cls_weight=None, calibrate=False,
                             use_gpu=False):
   binary_cls = len(set(y)) < 3
   clf, param_space = gen_model_param_space(md, X, y, scorers=scorers, kfold=kfold, use_gpu=use_gpu)
 
   # Adjust gpu n_jobs accordingly
-  n_jobs = 5 if use_gpu and (torch.cuda.is_available()) else -1  # avoid mem out when tuning on gpu
+  n_jobs = int(args.n_jobs) if use_gpu and (torch.cuda.is_available()) else -1  # avoid mem out when tuning on gpu
 
   if count_total_candidates(param_space) < n_iters:
     print('Default to GridSearchCV, given #candidates < n_iters')
@@ -117,11 +117,14 @@ def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, c
 
 
 # ------------------------------------- Hyperparameter Tuning with GridSearchCV -------------------------------------
-def tune_model_gridSearch(md, X, y, scorers, kfold=5, cls_weight=None, refit=False, use_gpu=False):
+def tune_model_gridSearch(md, X, y, scorers, args, kfold=5, cls_weight=None, refit=False, use_gpu=False):
   binary_cls = len(set(y)) < 3
   clf, param_space = gen_model_param_space(md, X, y, scorers, kfold=kfold, use_gpu=use_gpu)
+  # Adjust gpu n_jobs accordingly
+  n_jobs = int(args.n_jobs) if use_gpu and (torch.cuda.is_available()) else -1  # avoid mem out when tuning on gpu
+
   # Use GridSearchCV for hyperparameter tuning
-  grid_search = GridSearchCV(estimator=clf, param_grid=param_space, n_jobs=-1,
+  grid_search = GridSearchCV(estimator=clf, param_grid=param_space, n_jobs=n_jobs,
                              cv=KFold(n_splits=kfold, shuffle=True, random_state=SEED),
                              refit=refit, scoring=MyScorer.get_scorer_dict(scorers, binary_cls=binary_cls),
                              return_train_score=True, verbose=2)
