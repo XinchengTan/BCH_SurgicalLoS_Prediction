@@ -25,9 +25,12 @@ def get_args():
   parser.add_argument('--oh_cols', default=[], nargs='+')
   parser.add_argument('--scaler', default='robust', type=str)
 
-  # model tuning
-  parser.add_argument('--cls_weight', default='none', type=str)  # None, 'balanced'
+  # Model tuning
+  parser.add_argument('--cls_weight', default='none', type=str)  # None, 'balanced', or a float
   parser.add_argument('--n_iter', default=20, type=int)
+
+  # Save results
+  parser.add_argument('--res_prefix', default='', type=str)  # prefix of result dir
 
   args = parser.parse_args()
   return args
@@ -47,6 +50,17 @@ def get_onehot_cols(args):
   return oh_cols
 
 
+def get_cls_weight(args):
+  if args.cls_weight == 'none':
+    return None
+  elif args.cls_weight == 'balanced':
+    return 'balanced'
+  elif str(args.cls_weight).replace('.', '', 1).isdigit():
+    return float(args.cls_weight)
+  else:
+    raise NotImplementedError('cls_weight must be "none", "balanced" or a float!')
+
+
 def init_result_dir(parent_dir, dir_name):
   path = Path(parent_dir) / str(dir_name)
   try:
@@ -56,6 +70,15 @@ def init_result_dir(parent_dir, dir_name):
   else:
     print("Result folder was created")
   return path
+
+
+def get_result_dir_name(args):
+  time_id = datetime.datetime.now(tz=pytz.timezone('US/Eastern')).strftime('%m-%d_%H:%M:%S')
+  dir_name = f'{args.res_prefix + "-"}' \
+             f'{"+".join(args.oh_cols)}' \
+             f'-cw{args.cls_weight.replace(".", "p", 1)}' \
+             f'-{time_id}'
+  return dir_name
 
 
 # Returns a dict for decile feature aggregation function mapping
@@ -83,17 +106,19 @@ def init_md_to_clf(md_list: Iterable) -> Dict:
 
 if __name__ == '__main__':
   args = get_args()
+  # Data
   outcome = args.outcome
   force_weight = args.weight != 'none'
   onehot_cols = get_onehot_cols(args)
   decile_config = get_decileFtr_config()
 
+  # Modeling
   md_list = [XGBCLF]  # , LGR, KNN, RMFCLF
-  class_weight = args.cls_weight if args.cls_weight != 'none' else None
+  cls_weight = get_cls_weight(args)
   scorers = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_BAL, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_OVERPRED2, SCR_UNDERPRED2, SCR_RMSE]
 
-  time_id = datetime.datetime.now(tz=pytz.timezone('US/Eastern')).strftime('%Y-%m-%d_%H:%M:%S')
-  result_dir = init_result_dir(AGGREGATIVE_RESULTS_DIR, f'{"+".join(args.oh_cols)}-{time_id}')
+  # Result
+  result_dir = init_result_dir(AGGREGATIVE_RESULTS_DIR, get_result_dir_name(args))
 
   # 1. Generate training set dataframe with all sources of information combined
   hist_data_df = prepare_data(data_fp=DATA_DIR / "historic3.csv",
@@ -120,7 +145,7 @@ if __name__ == '__main__':
   print(f'\n[tune_main] Finished data preprocessing and feature engineering! '
         f'hist_dataset.Xtrain shape: {hist_dataset.Xtrain.shape}, '
         f'hist_dataset.ytrain shape: {hist_dataset.ytrain.shape}\n'
-        f'[tune_main] Onehot Encoded Columns: {onehot_cols}')
+        f'[tune_main] **Onehot Encoded Columns: {onehot_cols}')
 
   # Sanity check if any column contain NA
   nan_rows, nan_cols = np.where(np.isnan(hist_dataset.Xtrain))
@@ -134,7 +159,7 @@ if __name__ == '__main__':
     # 3.1 Tune each classifier
     print(f'[tune_main] Start to tune {md}')
     search = tune_model_randomSearch(md, hist_dataset.Xtrain, hist_dataset.ytrain,
-                                     class_weight=class_weight,
+                                     cls_weight=cls_weight,
                                      kfold=5,
                                      scorers=scorers,
                                      n_iters=args.n_iter,
