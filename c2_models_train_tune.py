@@ -90,13 +90,14 @@ def tune_model_optuna(md, X, y, kfold, scorers, refit=True):
 
 
 # ------------------------------------- Hyperparameter Tuning with RandomSearchCV -------------------------------------
-def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, class_weight=None, calibrate=False,
+def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, cls_weight=None, calibrate=False,
                             use_gpu=False):
   binary_cls = len(set(y)) < 3
-  clf, param_space = gen_model_param_space(md, X, y, scorers=scorers, class_weight=class_weight, kfold=kfold,
-                                           use_gpu=use_gpu)
-  # TODO: adjust gpu n_jobs accordingly
-  n_jobs = 1 if use_gpu and (torch.cuda.is_available()) else -1  # avoid mem out when tuning on gpu
+  clf, param_space = gen_model_param_space(md, X, y, scorers=scorers, kfold=kfold, use_gpu=use_gpu)
+
+  # Adjust gpu n_jobs accordingly
+  n_jobs = 5 if use_gpu and (torch.cuda.is_available()) else -1  # avoid mem out when tuning on gpu
+
   if count_total_candidates(param_space) < n_iters:
     print('Default to GridSearchCV, given #candidates < n_iters')
     search_cv = GridSearchCV(estimator=clf, param_grid=param_space, n_jobs=n_jobs,
@@ -108,27 +109,30 @@ def tune_model_randomSearch(md, X, y, kfold, scorers, n_iters=20, refit=False, c
                                    cv=KFold(n_splits=kfold, shuffle=True, random_state=SEED), random_state=SEED,
                                    refit=refit, scoring=MyScorer.get_scorer_dict(scorers, binary_cls=binary_cls),
                                    return_train_score=True, verbose=4)
-  search_cv.fit(X, y)
+
+  # define sample weights, based on class_weight scheme
+  sample_weights = gen_sample_weights(y, cls_weight=cls_weight)
+  search_cv.fit(X, y, sample_weight=sample_weights)
   return search_cv
 
 
 # ------------------------------------- Hyperparameter Tuning with GridSearchCV -------------------------------------
-def tune_model_gridSearch(md, X, y, scorers, kfold=5, class_weight=None, refit=False, use_gpu=False):
+def tune_model_gridSearch(md, X, y, scorers, kfold=5, cls_weight=None, refit=False, use_gpu=False):
   binary_cls = len(set(y)) < 3
-  clf, param_space = gen_model_param_space(md, X, y, scorers, class_weight=class_weight, kfold=kfold,
-                                           use_gpu=use_gpu)
+  clf, param_space = gen_model_param_space(md, X, y, scorers, kfold=kfold, use_gpu=use_gpu)
   # Use GridSearchCV for hyperparameter tuning
   grid_search = GridSearchCV(estimator=clf, param_grid=param_space, n_jobs=-1,
                              cv=KFold(n_splits=kfold, shuffle=True, random_state=SEED),
                              refit=refit, scoring=MyScorer.get_scorer_dict(scorers, binary_cls=binary_cls),
                              return_train_score=True, verbose=2)
-  grid_search.fit(X, y)
+  # define sample weights, based on class_weight scheme
+  sample_weights = gen_sample_weights(y, cls_weight=cls_weight)
+  grid_search.fit(X, y, sample_weight=sample_weights)
   return grid_search
 
 
 # TODO: add arg for outcome
-def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5, use_gpu=False):
-  assert class_weight in {None, 'balanced'}, 'class_weight must be one of {None, "balanced"}!'
+def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
   n_frts = X.shape[1]
   minority_size = min(Counter(y).values())
   print("Minority-class size: ", minority_size)
@@ -136,30 +140,28 @@ def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5, use_gpu=Fals
   min_samples_split_max = int(minority_size * (1 - 1 / kfold))
   if md == LGR:
     param_space = {'C': [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
-                   'class_weight': [class_weight]}
+                   }
     clf = LogisticRegression(random_state=SEED, max_iter=1000)
   elif md == LGR_L1:
     param_space = {'C': [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
-                   'class_weight': [class_weight]}
+                   }
     clf = LogisticRegression(random_state=SEED, penalty='l1', solver='saga', max_iter=1000)
   elif md == LGR_L12:
     param_space = {'C': [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'l1_ratio': [0, 0.01, 0.03, 0.1, 0.3, 0.5, 0.8, 0.9, 0.95, 0.99, 1],
-                   'class_weight': [class_weight]}
+                   }
     clf = LogisticRegression(random_state=SEED, penalty='elasticnet', solver='saga', max_iter=1000)
   elif md == SVCLF:
     clf = SVC(random_state=SEED, probability=False)
     param_space = {'C': [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'gamma': sorted(list({1 / n_frts, 1, 0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001})),
                    'kernel': ['rbf'],
-                   'class_weight': [class_weight]
                    }
   elif md == SVC_POLY:
     clf = SVC(random_state=SEED)
     param_space = {'C': [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'kernel': ['poly'],
                    'degree': [2, 3, 4, 5],
-                   'class_weight': [class_weight]
                    }
   elif md == KNN:
     clf = KNeighborsClassifier(metric='minkowski')
@@ -173,7 +175,6 @@ def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5, use_gpu=Fals
   elif md == RMFCLF:
     clf = RandomForestClassifier(random_state=SEED)
     param_space = {
-      'class_weight': [class_weight],
       'max_depth': [None] + list(range(2, 21, 2)),
       'max_features': sorted(set(list(range(2, n_frts // 2 + 1, n_frts // 20 + 1)) + [int(np.sqrt(n_frts))])),
       'max_leaf_nodes': [None] + list(range(5, 101, 5)),
@@ -225,7 +226,6 @@ def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5, use_gpu=Fals
     # TODO: what's validation fraction?
     clf = GradientBoostingClassifier(random_state=SEED, validation_fraction=0.15, n_iter_no_change=3)
     param_space = {
-      'class_weight': [class_weight],
       'learning_rate': [0.001, 0.03, 0.01, 0.3, 0.1, 0.3],
       'loss': 'deviance',
       'max_depth': [None] + list(range(2, 21, 2)),
@@ -240,7 +240,6 @@ def gen_model_param_space(md, X, y, scorers, class_weight, kfold=5, use_gpu=Fals
   elif md == DTCLF:
     clf = DecisionTreeClassifier(random_state=SEED)
     param_space = {
-      'class_weight': [class_weight],
       'max_depth': [None] + list(range(2, 21, 2)),
       'max_features': list(range(2, 1 + n_frts // 2, 10)) + [n_frts],
       'max_leaf_nodes': [None] + list(range(5, 101, 5)),
@@ -263,17 +262,45 @@ def count_total_candidates(param_space: Dict):
     count *= len(v)
   return count
 
+
+# Generate sample weights to use in model.fit(sample_weight=...)
+def gen_sample_weights(y, cls_weight=None):
+  if cls_weight is None:
+    return np.ones_like(y)
+
+  if type(cls_weight) == float:
+    cls_weight = flex_log_class_weight(y, mu=cls_weight)
+  elif cls_weight != 'balanced':
+    raise NotImplementedError(f'Got an invalid cls_weight: {cls_weight}!')
+  # if 'balanced', class_weight = n_samples / (n_classes * np.bincount(y))
+  print('[c2_models_train_tune] class_weight: ', cls_weight)
+
+  sample_weights = class_weight.compute_sample_weight(class_weight=cls_weight, y=y)
+  return sample_weights
+
+
+# Log-based smooth class weight for imbalanced class
+def flex_log_class_weight(y, mu=0.15):
+  label2count = Counter(y)
+  total = np.sum(list(label2count.values()))
+  class_weight = dict()
+
+  for cls, cls_cnt in label2count.items():
+    score = np.log(mu * total / float(cls_cnt))
+    class_weight[cls] = max(1.0, score)  # todo: why 1.0 instead of a smaller number?
+
+  return class_weight
+
+
 ## XGB other params:
 # 'reg_alpha': None,  # L1 reg - faster under high dimensionality
 # 'reg_lambda': None,  # L2 regularization - reduce overfitting
 # 'scale_pos_weight': None,  # val > 0 to enable faster convergence under imbalanced class
 # 'tree_method': None
-# 'use_label_encoder': True,
 # 'base_score': None,
 # 'booster': None,
 # 'colsample_bylevel': None,
 # 'colsample_bynode': None,
-# 'gpu_id': None,
 # 'importance_type': 'gain',
 # 'interaction_constraints': None,
 # 'max_delta_step': None,
