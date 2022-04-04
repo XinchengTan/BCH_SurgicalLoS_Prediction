@@ -37,7 +37,8 @@ def get_model(model, cls_weight='balanced'):
     clf = GradientBoostingClassifier(random_state=0, max_depth=3)
   elif model == XGBCLF:
     clf = XGBClassifier(max_depth=4, learning_rate=0.1, n_estimators=150, random_state=0, use_label_encoder=False,
-                        eval_metric='mlogloss')
+                        eval_metric='mlogloss', objective='multi:softmax', num_class=MAX_NNT+2,
+                        subsample=0.95, min_child_weight=0.1, gamma=0.1, colsample_bytree=0.9)
   elif model == ORDCLF_LOGIT:
     clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True)
   elif model == ORDCLF_PROBIT:

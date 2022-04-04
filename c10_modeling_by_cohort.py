@@ -7,7 +7,7 @@ from typing import Dict, Hashable, List, Iterable
 from globals import *
 from c1_data_preprocessing import Dataset
 from c4_model_perf import MyScorer, append_perf_row_generic, format_perf_df
-from c2_models import get_model_by_cohort, SafeOneClassWrapper
+from c2_models_nnt import get_model_by_cohort, SafeOneClassWrapper
 from c9_cohort_modeling_perf import eval_cohort_clf
 
 

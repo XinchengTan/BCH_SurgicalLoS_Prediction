@@ -395,7 +395,7 @@ class Dataset(object):
     Xdf = Xdf[target_features]
 
     # Convert feature-engineered data matrix to numerical numpy array
-    X = Xdfto_numpy(dtype=np.float64)
+    X = Xdf.to_numpy(dtype=np.float64)
 
     # Remove cases identical to any in skip_cases, update X_case_keys correspondingly
     if (skip_cases_df is not None) and (not skip_cases_df.empty):
