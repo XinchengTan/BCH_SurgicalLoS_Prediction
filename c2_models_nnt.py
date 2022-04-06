@@ -17,7 +17,8 @@ from c4_model_perf import MyScorer
 # Returns a model wrapped in SafeOneClassWrapper based on the requested type; model is not fitted
 def get_model(model, cls_weight='balanced'):
   if model == LGR:
-    clf = LogisticRegression(C=0.01, class_weight=cls_weight, max_iter=500, random_state=0)
+    #     clf = LogisticRegression(C=0.01, class_weight=cls_weight, max_iter=500, random_state=0)
+    clf = LogisticRegression(random_state=SEED, C=0.03, class_weight=cls_weight, max_iter=500)
   elif model == LGRCV:
     clf = LogisticRegressionCV(Cs=[0.003, 0.01, 0.03, 0.1, 0.3, 1, 3], class_weight=cls_weight, max_iter=500,
                                random_state=0, cv=5)
@@ -26,19 +27,23 @@ def get_model(model, cls_weight='balanced'):
   elif model == SVCLF:
     clf = SVC(gamma='auto', class_weight=cls_weight, probability=False)
   elif model == KNN:
-    clf = KNeighborsClassifier(n_neighbors=45)
+    # clf = KNeighborsClassifier(n_neighbors=45)
+    clf = KNeighborsClassifier(weights='uniform', p=1, n_neighbors=62, leaf_size=440, algorithm='ball_tree')
   elif model == KNNCV:
     clf = KNeighborsClassifierCV({'n_neighbors': np.arange(5, 51, 5)})
   elif model == DTCLF:
     clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight=cls_weight)
   elif model == RMFCLF:
-    clf = RandomForestClassifier(random_state=0, max_depth=20, class_weight=cls_weight)
+    #clf = RandomForestClassifier(random_state=0, max_depth=20, class_weight=cls_weight)
+    clf = RandomForestClassifier(random_state=SEED, n_estimators=100, min_samples_split=2, min_samples_leaf=6,
+                                 max_samples=0.6, max_leaf_nodes=50, max_features=362, max_depth=12,
+                                 class_weight=cls_weight)
   elif model == GBCLF:
     clf = GradientBoostingClassifier(random_state=0, max_depth=3)
   elif model == XGBCLF:
-    clf = XGBClassifier(max_depth=4, learning_rate=0.1, n_estimators=150, random_state=0, use_label_encoder=False,
+    clf = XGBClassifier(max_depth=6, learning_rate=0.03, n_estimators=200, random_state=SEED, use_label_encoder=False,
                         eval_metric='mlogloss', objective='multi:softmax', num_class=MAX_NNT+2,
-                        subsample=0.95, min_child_weight=0.1, gamma=0.1, colsample_bytree=0.9)
+                        subsample=1, min_child_weight=2, reg_lambda=1, gamma=0.1, colsample_bytree=0.9)
   elif model == ORDCLF_LOGIT:
     clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True)
   elif model == ORDCLF_PROBIT:

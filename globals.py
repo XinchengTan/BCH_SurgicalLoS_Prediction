@@ -218,7 +218,7 @@ MAX_NNT = 5
 NNT_CUTOFFS = list(range(MAX_NNT+1))
 NNT_CLASS_CNT = len(NNT_CUTOFFS) + 1
 NNT_CLASSES = list(range(MAX_NNT+2))
-NNT_CLASS_LABELS = [str(i) for i in range(MAX_NNT + 1)] + ["%d+" % MAX_NNT]
+NNT_CLASS_LABELS = [str(i) for i in range(MAX_NNT + 1)] + [f'{MAX_NNT + 1}+']
 
 # Dataset type
 XTRAIN = 'train'
