@@ -10,6 +10,7 @@ import pandas as pd
 import seaborn as sns
 
 from globals import diaglabels, DELTA
+from globals import *
 import globals
 from c1_data_preprocessing import preprocess_y
 import utils_plot
@@ -21,51 +22,88 @@ def los_histogram(y, dataType='Training', ax=None):
   if ax is None:
     fig, ax = plt.subplots(1, 1, figsize=(8, 10))
   outcome_cnter = Counter(y)
-  ax.barh(range(globals.MAX_NNT + 2), [outcome_cnter[i] for i in range(globals.MAX_NNT + 2)], align='center')
+  ax.barh(range(MAX_NNT + 2), [outcome_cnter[i] for i in range(MAX_NNT + 2)], align='center')
   ax.set_xlabel("Number of surgical cases")
   ax.invert_yaxis()
-  ax.set_yticks(range(globals.MAX_NNT + 2))
-  ax.set_yticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
+  ax.set_yticks(range(MAX_NNT + 2))
+  ax.set_yticklabels(NNT_CLASS_LABELS, fontsize=13)
   ax.set_title("LoS Histogram (%s)" % dataType)
   rects = ax.patches
   total_cnt = len(y)
-  labels = ["{:.1%}".format(outcome_cnter[i] / total_cnt) for i in range(globals.MAX_NNT + 2)]
+  labels = ["{:.1%}".format(outcome_cnter[i] / total_cnt) for i in range(MAX_NNT + 2)]
   for rect, label in zip(rects, labels):
     ht, wd = rect.get_height(), rect.get_width()
     ax.text(wd + 2.5, rect.get_y() + ht / 2, label,
                 ha='left', va='center', fontsize=15)
 
 
+def los_histogram_vert(y, ax=None, outcome=LOS, clip_y=False, by_year=False):
+  if ax is None:
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+  if clip_y:
+    y = np.array(y)
+    y[y > MAX_NNT] = MAX_NNT + 1
+  outcome_cnter = Counter(y)
+  ax.bar(range(MAX_NNT + 2), [outcome_cnter[i] for i in range(MAX_NNT + 2)], align='center', alpha=0.85)
+  ax.set_xlabel(outcome.replace('_', ' '), fontsize=14)
+  ax.set_ylabel("Number of surgical cases", fontsize=14)
+  ax.set_xticks(range(MAX_NNT + 2))
+  ax.set_xticklabels(NNT_CLASS_LABELS, fontsize=13)
+  ax.set_title(f"{outcome.replace('_', ' ')} Histogram", fontsize=16, y=1.01)
+  rects = ax.patches
+  total_cnt = len(y)
+  labels = ["{:.1%}".format(outcome_cnter[i] / total_cnt) for i in range(MAX_NNT + 2)]
+  for rect, label in zip(rects, labels):
+    ht, wd = rect.get_height(), rect.get_width()
+    ax.text(rect.get_x() + wd / 2, ht + 2.5, label,
+            ha='center', va='bottom', fontsize=13)
+
+
+
 # ---------------------------------------- Gender & LOS ----------------------------------------
-def gender_eda(dashboard_df):
+def gender_eda(dashboard_df, outcome=LOS, clip_y=False):
   labels = ["Male", "Female"]
-  gender_cnts = [dashboard_df[dashboard_df.SEX_CODE == "M"].shape[0],
-                 dashboard_df[dashboard_df.SEX_CODE == "F"].shape[0]]
+  df = dashboard_df[[GENDER, outcome]]
+  gender_cnts = [df.loc[df.SEX_CODE == "M"].shape[0],
+                 df.loc[df.SEX_CODE == "F"].shape[0]]
 
   figs, axs = plt.subplots(1, 2, figsize=(18, 6))
-  axs[0].pie(gender_cnts, labels=labels, autopct='%.2f%%', startangle=90)
-  axs[0].set_title("Gender distribution", fontsize=15)
+  axs[0].pie(gender_cnts, labels=labels, autopct='%.2f%%', startangle=90, textprops={'fontsize': 17})
+  axs[0].set_title("Case Count(%) by Gender", fontsize=18)
   axs[0].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
 
-  bins = np.linspace(0, 21, 40)
-  axs[1].set_xlim([bins[0], bins[-1]])
-  axs[1].hist([dashboard_df[dashboard_df.SEX_CODE == "M"].LENGTH_OF_STAY,
-               dashboard_df[dashboard_df.SEX_CODE == "F"].LENGTH_OF_STAY],
-              bins, alpha=0.7, edgecolor='black', linewidth=0.5, label=["Male", "Female"])
-  axs[1].set_title("LoS Distribution (Male vs Female)", fontsize=15)
-  axs[1].set_xlabel("Length of Stay (day)")
-  axs[1].set_ylabel("Number of patients")
+  if outcome == NNT and clip_y:
+    df.loc[:, outcome] = df[outcome].apply(lambda x: MAX_NNT + 1 if x > MAX_NNT else x)
+    counter_male = Counter(df.loc[df.SEX_CODE == "M", outcome])
+    counter_female = Counter(df.loc[df.SEX_CODE == "F", outcome])
+    axs[1].bar(np.arange(MAX_NNT + 2)-0.2,
+               [counter_male[i] for i in range(MAX_NNT + 2)],
+               width=0.4, alpha=0.78, label='Male')
+    axs[1].bar(np.arange(MAX_NNT + 2)+0.2,
+               [counter_female[i] for i in range(MAX_NNT + 2)],
+               width=0.4,alpha=0.78, label='Female')
+    axs[1].set_xticks(np.arange(MAX_NNT + 2))
+    axs[1].set_xticklabels(NNT_CLASS_LABELS, fontsize=13)
+  else:
+    bins = np.linspace(0, 21, 40)
+    axs[1].set_xlim([bins[0], bins[-1]])
+    axs[1].hist([df.loc[df.SEX_CODE == "M", outcome],
+                 df.loc[df.SEX_CODE == "F", outcome]],
+                bins, alpha=0.7, edgecolor='grey', linewidth=0.5, label=["Male", "Female"])
+  axs[1].set_title(f"{outcome.replace('_', ' ')} Distribution by Gender", fontsize=18, y=1.01)
+  axs[1].set_xlabel("Length of Stay (day)", fontsize=15)
+  axs[1].set_ylabel("Number of patients", fontsize=15)
 
   plt.legend()
   plt.show()
 
 
 # ---------------------------------------- Language-Interpreter & NNT ----------------------------------------
-def language_interpreter_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, freq_range='all', interpreter_cat=False):
+def language_interpreter_eda(dashb_df, outcome=NNT, preprocess_y=True, freq_range='all', interpreter_cat=False):
   df = dashb_df.copy()
   if interpreter_cat == True:
-    df.loc[df[globals.INTERPRETER] == 'Y', globals.LANGUAGE] = 'Foreign & Need Interpreter'
-    print('Interpreter Need value count: ', df.groupby(globals.INTERPRETER).size().to_dict())
+    df.loc[df[INTERPRETER] == 'Y', LANGUAGE] = 'Foreign & Need Interpreter'
+    print('Interpreter Need value count: ', df.groupby(INTERPRETER).size().to_dict())
 
   if interpreter_cat != 'bipart':
     language_interpreter_eda_violinplot(df, outcome, preprocess_y, freq_range)
@@ -77,35 +115,35 @@ def language_interpreter_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, f
 
 # Helper function for plotting
 def language_interpreter_eda_violinplot(df, outcome, preprocess_y, freq_range, title=None, bipart=False):
-  lang2cnt = df.groupby(globals.LANGUAGE).size().to_dict()
-  # print('Interpreter Need value count: ', df.groupby(globals.INTERPRETER).size().to_dict())
+  lang2cnt = df.groupby(LANGUAGE).size().to_dict()
+  # print('Interpreter Need value count: ', df.groupby(INTERPRETER).size().to_dict())
   print('Language set (#languages = %d): ' % len(lang2cnt), lang2cnt.keys())
   lang_cnt_sorted = sorted(lang2cnt.items(), key=lambda x: x[1], reverse=True)
   x_order = np.array([x[0] for x in lang_cnt_sorted])
   if freq_range != 'all':
     x_order = x_order[freq_range[0]:freq_range[1]]
-    df = df[df[globals.LANGUAGE].isin(x_order)]
+    df = df[df[LANGUAGE].isin(x_order)]
   y = df[outcome]
   if preprocess_y:
-    y[y > globals.MAX_NNT] = globals.MAX_NNT + 1
+    y[y > MAX_NNT] = MAX_NNT + 1
     df[outcome] = y
   hue, hue_order, split, palette, xticklabels = None, None, False, None, [f'{x} ({lang2cnt[x]})' for x in x_order]
   if bipart:
-    df = df[df[globals.INTERPRETER].isin(['N', 'Y'])]
-    df.loc[(df[globals.INTERPRETER] == 'N'), globals.INTERPRETER] = False
-    df.loc[(df[globals.INTERPRETER] == 'Y'), globals.INTERPRETER] = True
-    hue, hue_order, split, palette = globals.INTERPRETER, [True, False], True, {True: 'cornflowerblue', False: 'salmon'}
+    df = df[df[INTERPRETER].isin(['N', 'Y'])]
+    df.loc[(df[INTERPRETER] == 'N'), INTERPRETER] = False
+    df.loc[(df[INTERPRETER] == 'Y'), INTERPRETER] = True
+    hue, hue_order, split, palette = INTERPRETER, [True, False], True, {True: 'cornflowerblue', False: 'salmon'}
     lang_cnt_sorted_interTrue = defaultdict(int)
-    lang_cnt_sorted_interTrue.update(df[df[globals.INTERPRETER]].groupby(globals.LANGUAGE).size().to_dict())
+    lang_cnt_sorted_interTrue.update(df[df[INTERPRETER]].groupby(LANGUAGE).size().to_dict())
     xticklabels = [f'{x} {lang_cnt_sorted_interTrue[x], lang2cnt[x]-lang_cnt_sorted_interTrue[x]}'
                    for x in x_order]
 
   fig, ax = plt.subplots(1, 1, figsize=(16, 9))
-  sns.violinplot(x=globals.LANGUAGE, data=df, y=outcome, hue=hue, hue_order=hue_order, split=split, ax=ax,
+  sns.violinplot(x=LANGUAGE, data=df, y=outcome, hue=hue, hue_order=hue_order, split=split, ax=ax,
                  order=x_order, palette=palette)
   ax.set_xlabel('Language (with count)', fontsize=16)
   ax.set_ylabel('Number of Nights', fontsize=16)
-  title = f'Language vs {globals.NNT} -- frequency ranking between {freq_range}' if title is None else title
+  title = f'Language vs {NNT} -- frequency ranking between {freq_range}' if title is None else title
   ax.set_title(title, fontsize=18, y=1.01)
   ax.set_xticklabels(xticklabels, fontsize=13)
   ax.yaxis.set_tick_params(labelsize=13)
@@ -113,15 +151,15 @@ def language_interpreter_eda_violinplot(df, outcome, preprocess_y, freq_range, t
   plt.show()
 
 
-def interpreter_eda(dashb_df, outcome=globals.NNT):
-  interp2cnt = dashb_df.groupby(globals.INTERPRETER).size.to_dict()
+def interpreter_eda(dashb_df, outcome=NNT):
+  interp2cnt = dashb_df.groupby(INTERPRETER).size.to_dict()
   print('Interpreter_need type count: ', interp2cnt)
 
   fig, ax = plt.subplots(1, 1, figsize=(12, 9))
-  sns.violinplot(data=dashb_df, x=globals.INTERPRETER, y=outcome, ax=ax)
+  sns.violinplot(data=dashb_df, x=INTERPRETER, y=outcome, ax=ax)
   ax.set_xlabel('Interpreter Flag (with count)', fontsize=16)
   ax.set_ylabel('Number of Nights', fontsize=16)
-  ax.set_title(f'Interpreter Flag vs {globals.NNT}', fontsize=18, y=1.01)
+  ax.set_title(f'Interpreter Flag vs {NNT}', fontsize=18, y=1.01)
   ax.set_ylim([-1, 7])
   ax.yaxis.set_tick_params(labelsize=13)
   ax.set_xticklabels([f'{k} (n={v})' for k, v in interp2cnt.items()], fontsize=13)
@@ -130,16 +168,16 @@ def interpreter_eda(dashb_df, outcome=globals.NNT):
 
 # ---------------------------------------- Major Region & NNT ----------------------------------------
 # Major region VS NNT boxplot
-def major_region_eda(dashb_df, outcome=globals.NNT, preprocess_y=True):
+def major_region_eda(dashb_df, outcome=NNT, preprocess_y=True):
   y = dashb_df[outcome].to_numpy()
   if preprocess_y:
-    y[y > globals.MAX_NNT] = globals.MAX_NNT + 1
+    y[y > MAX_NNT] = MAX_NNT + 1
 
-  region2cnt = dashb_df[[globals.REGION]].groupby(globals.REGION).size().to_dict()
-  region_type = [k for k in region2cnt.keys()]
+  region2cnt = dashb_df[[REGION]].groupby(REGION).size().to_dict()
+  region_type = ['Local', 'Regional', 'National', 'International', 'Unknown']
 
   fig, ax = plt.subplots(1, 1, figsize=(12, 8))
-  sns.violinplot(x=dashb_df[globals.REGION], y=y, order=region_type)  # , scale='width'
+  sns.violinplot(x=dashb_df[REGION], y=y, order=region_type)  # , scale='width'
   ax.set_xlabel('Major Region', fontsize=16)
   ax.set_ylabel('Number of Nights', fontsize=16)
   ax.set_title('NNT vs. Major Region', fontsize=18, y=1.01)
@@ -149,26 +187,26 @@ def major_region_eda(dashb_df, outcome=globals.NNT, preprocess_y=True):
 
 
 # ---------------------------------------- State Code & NNT ----------------------------------------
-def state_code_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, freq_range='all'):
-  # print('State code count: ', dashb_df.groupby(globals.STATE).size().to_dict())
-  df = dashb_df.copy()  # df = dashb_df[dashb_df[globals.STATE] != '0']
-  state2cnt = df.groupby(globals.STATE).size().to_dict()
+def state_code_eda(dashb_df, outcome=NNT, preprocess_y=True, freq_range='all'):
+  # print('State code count: ', dashb_df.groupby(STATE).size().to_dict())
+  df = dashb_df.copy()  # df = dashb_df[dashb_df[STATE] != '0']
+  state2cnt = df.groupby(STATE).size().to_dict()
   state_cnt_sorted = sorted(state2cnt.items(), key=lambda x: x[1], reverse=True)
   x_order = np.array([x[0] for x in state_cnt_sorted])
   # print('State code set (#codes = %d): ' % len(state2cnt), state2cnt.keys())
   if freq_range != 'all':
     x_order = x_order[freq_range[0]:freq_range[1]]
-    df = df.loc[df[globals.STATE].isin([x for x in x_order])]
+    df = df.loc[df[STATE].isin([x for x in x_order])]
   y = df[outcome].to_numpy()
   if preprocess_y:
-    y[y > globals.MAX_NNT] = globals.MAX_NNT + 1
+    y[y > MAX_NNT] = MAX_NNT + 1
     df[outcome] = y
 
   fig, ax = plt.subplots(1, 1, figsize=(18, 9))
-  sns.violinplot(data=df, x=globals.STATE, y=outcome, order=x_order)
+  sns.violinplot(data=df, x=STATE, y=outcome, order=x_order)
   ax.set_xlabel('State Code (with count)', fontsize=16)
   ax.set_ylabel('Number of Nights', fontsize=16)
-  ax.set_title(f'State Code vs {globals.NNT} -- frequency ranking between {freq_range}', fontsize=18, y=1.01)
+  ax.set_title(f'State Code vs {NNT} -- frequency ranking between {freq_range}', fontsize=18, y=1.01)
   ax.set_ylim([-1, 7])
   ax.set_xticklabels([f'{k} ({state2cnt[k]})' for k in x_order], fontsize=13)
   ax.yaxis.set_tick_params(labelsize=13)
@@ -177,26 +215,26 @@ def state_code_eda(dashb_df, outcome=globals.NNT, preprocess_y=True, freq_range=
 
 
 # ---------------------------------------- Miles Traveled & NNT ----------------------------------------
-def miles_traveled_eda(dashb_df, q=15, outcome=globals.NNT, preprocess_y=True, violin=True):
+def miles_traveled_eda(dashb_df, q=15, outcome=NNT, preprocess_y=True, violin=True):
   fig, ax = plt.subplots(1, 1, figsize=(20, 9))
-  Xdf = dashb_df[[globals.MILES, outcome]]
-  Xdf = Xdf[Xdf[globals.MILES].notnull()]
-  qs = pd.qcut(Xdf[globals.MILES], q=q)
+  Xdf = dashb_df[[MILES, outcome]]
+  Xdf = Xdf[Xdf[MILES].notnull()]
+  qs = pd.qcut(Xdf[MILES], q=q)
   qs = [round(qval.right, 1) for qval in qs.values]
-  Xdf[globals.MILES] = qs
+  Xdf[MILES] = qs
   #ax.set_xlim([0, 1000])
   ax.set_ylim([-1, 40])
   outy = Xdf[outcome].to_numpy()
   if preprocess_y:
-    outy[outy > globals.MAX_NNT] = globals.MAX_NNT + 1
+    outy[outy > MAX_NNT] = MAX_NNT + 1
     Xdf[outcome] = outy
     ax.set_ylim([-1, 8])
 
   if violin:
-    sns.violinplot(data=Xdf, x=globals.MILES, y=outcome)
+    sns.violinplot(data=Xdf, x=MILES, y=outcome)
     #ax.set_xlim([-20, 500])
   else:
-    ax.scatter(dashb_df[globals.MILES], outy)
+    ax.scatter(dashb_df[MILES], outy)
   ax.set_xlabel(f'Miles traveled ({q}-quantile upperbound)', fontsize=16)
   ax.set_ylabel('Number of Bed Nights', fontsize=16)
   ax.set_title('NNT vs. Miles traveled', fontsize=18, y=1.01)
@@ -267,9 +305,9 @@ def organ_system_los_boxplot(dashboard_df, exclude_outliers=0, xlim=None):
 
 
 # ---------------------------------------- Age & LOS ----------------------------------------
-def age_los_eda(dashboard_df):
+def age_los_eda(dashboard_df, age_bins=None):
   max_age, min_age = np.ceil(max(dashboard_df.AGE_AT_PROC_YRS) + DELTA), np.floor(min(dashboard_df.AGE_AT_PROC_YRS))
-  age_bins = np.linspace(int(min_age), int(max_age), int(np.ceil(max_age - min_age)))
+  age_bins = np.linspace(int(min_age), int(max_age), int(np.ceil(max_age - min_age))) if age_bins is None else age_bins
 
   figs, axs = plt.subplots(3, 1, figsize=(9, 16))
   axs[0].hist(dashboard_df.AGE_AT_PROC_YRS, bins=age_bins, alpha=0.7, edgecolor="black", linewidth=0.5)
@@ -301,24 +339,36 @@ def age_los_eda(dashboard_df):
         np.corrcoef(dashboard_df.AGE_AT_PROC_YRS, dashboard_df.LENGTH_OF_STAY)[0, 1])
 
 
-def age_los_boxplot(df, max_age=30, bin_width=1, ylim=None):
+def age_los_boxplot(df, age_bins=None, max_age=30, bin_width=1, ylim=None, ytype=LOS, clip_y=False, violin=False):
+  assert ytype in {LOS, NNT}
+  if clip_y:
+    df = pd.DataFrame(df)
+    df[ytype] = df[ytype].apply(lambda x: x if x <= MAX_NNT else MAX_NNT + 1)
+
   age2los = defaultdict()
-  last_i = 0
-  for i in range(bin_width, max_age + 1, bin_width):
-    age2los[i] = df[(i - bin_width <= df.AGE_AT_PROC_YRS) & (df.AGE_AT_PROC_YRS < i)].LENGTH_OF_STAY.tolist()
-    last_i = i
-  age2los[last_i] = df[last_i <= df.AGE_AT_PROC_YRS].LENGTH_OF_STAY.tolist()
+  for i in range(len(age_bins) - 1):
+    l, h = age_bins[i:i + 2]
+    age2los[i] = df[(l <= df[AGE]) & (df[AGE] < h)][ytype].tolist()
+  if not np.isinf(age_bins[-1]):
+    age2los[len(age_bins) - 1] = df[df[AGE] >= age_bins[-1]][ytype].tolist()
 
   fig, ax = plt.subplots(figsize=(15, 10))
-  bplot = ax.boxplot([age2los[i] for i in age2los.keys()], widths=0.7, notch=True, patch_artist=True)
-  ax.set_title("LoS Distribution by Age Group", fontsize=19, y=1.01)
-  ax.set_xlabel("Age (yr)", fontsize=16)
-  ax.set_ylabel("LoS (day)", fontsize=16)
-  labels = [str(k) for k in age2los.keys()]
-  labels[-1] = str(last_i) + "+"
+  if violin:
+    sns.violinplot(data=[age2los[k] for k in sorted(age2los.keys())], ax=ax)
+  else:
+    bplot = ax.boxplot([age2los[i] for i in sorted(age2los.keys())], widths=0.7, notch=True, patch_artist=True)
+  ax.set_title(f"{ytype} Distribution by Age Group", fontsize=19, y=1.01)
+  ax.set_xlabel("Age (year)", fontsize=16)
+  ax.set_ylabel("LoS (day)", fontsize=16) if ytype == LOS else ax.set_ylabel("Number of Nights", fontsize=16)
+  if np.isinf(age_bins[-1]):
+    labels = [f'{age_bins[i]}-{age_bins[i+1]}\n$n$={len(age2los[i])}' for i in range(len(age_bins)-2)]
+    labels.append(f'{age_bins[-2]}+\n$n$={len(age2los[max(age2los.keys())])}')
+    print(len(labels), len(age2los))
+  else:
+    labels = [f'{age_bins[i]}-{age_bins[i + 1]}' for i in range(len(age_bins) - 1)]
   ax.set_xticklabels(labels)
   if ylim:
-    ax.set_ylim([0, ylim])
+    ax.set_ylim([-1, ylim])
 
   plt.show()
 
