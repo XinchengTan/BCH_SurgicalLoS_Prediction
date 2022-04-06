@@ -61,26 +61,42 @@ def los_histogram_vert(y, ax=None, outcome=LOS, clip_y=False):
 
 
 # TODO: add os_data_df for 2021
-def los_histogram_by_year(df, outcome=NNT, clip_y=False, ax=None):
-  y_df = df[[outcome, ADMIT_DTM]]
+def los_histogram_by_year(df, outcome=NNT, clip_y=False, show_pct=False, os_df=None, os_aside=False, ax=None):
+  if os_df is not None:
+    df = pd.concat([df, os_df], axis=0)
+
+  y_df = df[['SURG_CASE_KEY', outcome, ADMIT_DTM]]
   if clip_y:
     y_df.loc[:, outcome] = y_df[outcome].apply(lambda x: MAX_NNT + 1 if x > MAX_NNT else x)
   y_df.loc[:, ADMIT_YEAR] = y_df[ADMIT_DTM].dt.year
+  if os_df is not None and os_aside:
+    y_df.loc[y_df['SURG_CASE_KEY'].isin(os_df['SURG_CASE_KEY']), ADMIT_YEAR] = 3000  # placeholder
+
   yr_nnt_cnt_df = y_df.groupby(by=[ADMIT_YEAR, outcome]).size().to_frame(name='count').reset_index(drop=False)
+  yr_nnt_cnt_df.loc[:, 'annual_total'] = yr_nnt_cnt_df.groupby(ADMIT_YEAR)['count'].transform('sum')
+  yr_nnt_cnt_df.loc[:, 'count_pct'] = 100 * yr_nnt_cnt_df['count'] / yr_nnt_cnt_df['annual_total']
+  if show_pct:
+    display_col = 'count_pct'
+    ylabel = 'Annual Surgical Case Count Percentage (%)'
+  else:
+    display_col = 'count'
+    ylabel = 'Number of Surgical Cases'
 
   if ax is None:
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
   year_set = sorted(yr_nnt_cnt_df[ADMIT_YEAR].unique())
+  year_label = ['Out-of-sample' if yr == 3000 else yr for yr in year_set]
   width = 0.8 / len(year_set)
   for yr_idx in range(len(year_set)):
     cur_nnt_cnt = yr_nnt_cnt_df.loc[yr_nnt_cnt_df[ADMIT_YEAR] == year_set[yr_idx]]
     xs = cur_nnt_cnt[outcome].to_numpy() + (2 * yr_idx - 3) * width / 2
-    ax.bar(xs, cur_nnt_cnt['count'], width=width, label=year_set[yr_idx], alpha=0.78)
-  ax.set_xlabel(outcome.replace('_', ' '), fontsize=14)
-  ax.set_ylabel("Number of surgical cases", fontsize=14)
+    ax.bar(xs, cur_nnt_cnt[display_col], width=width, label=year_label[yr_idx], alpha=0.78)
+  ax.set_ylabel(ylabel, fontsize=15, x=-0.1)
+  ax.set_xlabel(outcome.replace('_', ' '), fontsize=15)
+  ax.yaxis.set_tick_params(labelsize=13)
   ax.set_xticks(np.arange(MAX_NNT + 2))
   ax.set_xticklabels(NNT_CLASS_LABELS, fontsize=13)
-  ax.set_title(f"{outcome.replace('_', ' ')} Histogram by year", fontsize=16, y=1.01)
+  ax.set_title(f"{outcome.replace('_', ' ')} Histogram by Year", fontsize=16, y=1.01)
   ax.legend(prop={'size': 13})
 
 
