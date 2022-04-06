@@ -37,12 +37,13 @@ def los_histogram(y, dataType='Training', ax=None):
                 ha='left', va='center', fontsize=15)
 
 
-def los_histogram_vert(y, ax=None, outcome=LOS, clip_y=False, by_year=False):
+def los_histogram_vert(y, ax=None, outcome=LOS, clip_y=False):
   if ax is None:
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+  y = np.array(y)
   if clip_y:
-    y = np.array(y)
     y[y > MAX_NNT] = MAX_NNT + 1
+
   outcome_cnter = Counter(y)
   ax.bar(range(MAX_NNT + 2), [outcome_cnter[i] for i in range(MAX_NNT + 2)], align='center', alpha=0.85)
   ax.set_xlabel(outcome.replace('_', ' '), fontsize=14)
@@ -58,6 +59,29 @@ def los_histogram_vert(y, ax=None, outcome=LOS, clip_y=False, by_year=False):
     ax.text(rect.get_x() + wd / 2, ht + 2.5, label,
             ha='center', va='bottom', fontsize=13)
 
+
+# TODO: add os_data_df for 2021
+def los_histogram_by_year(df, outcome=NNT, clip_y=False, ax=None):
+  y_df = df[[outcome, ADMIT_DTM]]
+  if clip_y:
+    y_df.loc[:, outcome] = y_df[outcome].apply(lambda x: MAX_NNT + 1 if x > MAX_NNT else x)
+  y_df.loc[:, ADMIT_YEAR] = y_df[ADMIT_DTM].dt.year
+  yr_nnt_cnt_df = y_df.groupby(by=[ADMIT_YEAR, outcome]).size().to_frame(name='count').reset_index(drop=False)
+
+  if ax is None:
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+  year_set = sorted(yr_nnt_cnt_df[ADMIT_YEAR].unique())
+  width = 0.8 / len(year_set)
+  for yr_idx in range(len(year_set)):
+    cur_nnt_cnt = yr_nnt_cnt_df.loc[yr_nnt_cnt_df[ADMIT_YEAR] == year_set[yr_idx]]
+    xs = cur_nnt_cnt[outcome].to_numpy() + (2 * yr_idx - 3) * width / 2
+    ax.bar(xs, cur_nnt_cnt['count'], width=width, label=year_set[yr_idx], alpha=0.78)
+  ax.set_xlabel(outcome.replace('_', ' '), fontsize=14)
+  ax.set_ylabel("Number of surgical cases", fontsize=14)
+  ax.set_xticks(np.arange(MAX_NNT + 2))
+  ax.set_xticklabels(NNT_CLASS_LABELS, fontsize=13)
+  ax.set_title(f"{outcome.replace('_', ' ')} Histogram by year", fontsize=16, y=1.01)
+  ax.legend(prop={'size': 13})
 
 
 # ---------------------------------------- Gender & LOS ----------------------------------------
