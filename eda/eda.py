@@ -1,7 +1,6 @@
 """
-EDA on non-diagnosis features
+EDA on demographics features
 """
-
 from collections import defaultdict, Counter
 
 import matplotlib.pyplot as plt
@@ -9,9 +8,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from globals import diaglabels, DELTA
 from globals import *
-import globals
 from c1_data_preprocessing import preprocess_y
 import utils_plot
 import utils
@@ -60,7 +57,6 @@ def los_histogram_vert(y, ax=None, outcome=LOS, clip_y=False):
             ha='center', va='bottom', fontsize=13)
 
 
-# TODO: add os_data_df for 2021
 def los_histogram_by_year(df, outcome=NNT, clip_y=False, show_pct=False, os_df=None, os_aside=False, ax=None):
   if os_df is not None:
     df = pd.concat([df, os_df], axis=0)
@@ -75,12 +71,8 @@ def los_histogram_by_year(df, outcome=NNT, clip_y=False, show_pct=False, os_df=N
   yr_nnt_cnt_df = y_df.groupby(by=[ADMIT_YEAR, outcome]).size().to_frame(name='count').reset_index(drop=False)
   yr_nnt_cnt_df.loc[:, 'annual_total'] = yr_nnt_cnt_df.groupby(ADMIT_YEAR)['count'].transform('sum')
   yr_nnt_cnt_df.loc[:, 'count_pct'] = 100 * yr_nnt_cnt_df['count'] / yr_nnt_cnt_df['annual_total']
-  if show_pct:
-    display_col = 'count_pct'
-    ylabel = 'Annual Surgical Case Count Percentage (%)'
-  else:
-    display_col = 'count'
-    ylabel = 'Number of Surgical Cases'
+  display_col = 'count_pct' if show_pct else 'count'
+  ylabel = 'Annual Surgical Case Count Percentage (%)' if show_pct else 'Number of Surgical Cases'
 
   if ax is None:
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
@@ -98,6 +90,62 @@ def los_histogram_by_year(df, outcome=NNT, clip_y=False, show_pct=False, os_df=N
   ax.set_xticklabels(NNT_CLASS_LABELS, fontsize=13)
   ax.set_title(f"{outcome.replace('_', ' ')} Histogram by Year", fontsize=16, y=1.01)
   ax.legend(prop={'size': 13})
+
+
+def los_histogram_by_care_class(df, outcome=NNT, clip_y=False, pct=False, ax=None):
+  y_df = df[[outcome, 'CARE_CLASS']]
+  if clip_y:
+    y_df.loc[:, outcome] = y_df[outcome].apply(lambda x: MAX_NNT + 1 if x > MAX_NNT else x)
+  if ax is None:
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+  if pct == 'global':
+    ylabel = 'Global Frequency (%)'
+    normalizer = df.shape[0]
+  elif pct == 'group':
+    ylabel = 'Group-wise Frequency (%)'
+    normalizer = np.nan
+  else:
+    ylabel = 'Count'
+    normalizer = 1
+
+  groupby = y_df.groupby(by='CARE_CLASS')
+  width = 0.8 / len(groupby)
+  idx = 1
+  care_cls_to_counter_graph = {}
+  for care_cls, c_df in groupby:
+    print(care_cls, c_df.shape[0])
+    xs = np.sort(c_df[outcome].unique()) + (2 * idx - 3) * width / 2
+    outcome_counter = defaultdict(int)
+    outcome_counter.update(Counter(c_df[outcome].to_numpy()))
+    normalizer = c_df.shape[0] if pct == 'group' else normalizer
+    graph = ax.bar(xs, [outcome_counter[c] / normalizer for c in sorted(c_df[outcome].unique())],
+                   width=width, label=care_cls, alpha=0.8)
+    care_cls_to_counter_graph[care_cls] = (outcome_counter, graph)
+    idx += 1
+  ax.set_ylabel(ylabel, fontsize=15, x=-0.1)
+  ax.set_xlabel(outcome.replace('_', ' '), fontsize=15)
+  ax.yaxis.set_tick_params(labelsize=13)
+  ax.set_xticks(np.arange(MAX_NNT + 2))
+  ax.set_xticklabels(NNT_CLASS_LABELS, fontsize=13)
+  ax.set_title(f'{NNT.replace("_", " ")} Distribution Over Care Class', fontsize=16, y=1.01)
+  ax.legend(prop={'size': 13})
+
+  if pct:
+    for care_cls, (counter, graph) in care_cls_to_counter_graph.items():
+      i = 0
+      keys = sorted(counter.keys())
+      total = sum(counter.values()) if pct == 'group' else df.shape[0]
+      for p in graph:
+        cnt = counter[keys[i]]
+        if cnt > 0:
+          width = p.get_width()
+          height = p.get_height()
+          x, y = p.get_xy()
+          plt.text(x + width / 2,
+                   y + height + 0.006,
+                   "{:.2%}".format(cnt / total),
+                   ha='center', fontsize=9)
+        i += 1
 
 
 # ---------------------------------------- Gender & LOS ----------------------------------------
@@ -135,6 +183,148 @@ def gender_eda(dashboard_df, outcome=LOS, clip_y=False):
   axs[1].set_ylabel("Number of patients", fontsize=15)
 
   plt.legend()
+  plt.show()
+
+
+# ---------------------------------------- Age & LOS ----------------------------------------
+def age_los_eda(dashboard_df, age_bins=None):
+  max_age, min_age = np.ceil(max(dashboard_df.AGE_AT_PROC_YRS) + DELTA), np.floor(min(dashboard_df.AGE_AT_PROC_YRS))
+  age_bins = np.linspace(int(min_age), int(max_age), int(np.ceil(max_age - min_age))) if age_bins is None else age_bins
+
+  figs, axs = plt.subplots(3, 1, figsize=(9, 16))
+  axs[0].hist(dashboard_df.AGE_AT_PROC_YRS, bins=age_bins, alpha=0.7, edgecolor="black", linewidth=0.5)
+  axs[0].set_title("Age distribution")
+  axs[0].set_xlabel("Age (yr)")
+  axs[0].set_ylabel("Number of patients")
+
+  # Average and median LoS of each age group
+  avglos_age = [0] * (len(age_bins) - 1)
+  medlos_age = [0] * (len(age_bins) - 1)
+  for i in range(len(age_bins) - 1):
+    l, h = age_bins[i:i + 2]
+    los = dashboard_df[(l <= dashboard_df.AGE_AT_PROC_YRS) & (dashboard_df.AGE_AT_PROC_YRS < h)].LENGTH_OF_STAY
+    avglos_age[i] = np.mean(los)
+    medlos_age[i] = np.median(los)
+
+  axs[1].bar(age_bins[:-1] + 0.5, avglos_age, alpha=0.5, color="red", edgecolor="black", linewidth=0.5)
+  axs[1].set_title("Average LoS in each Age Group")
+  axs[1].set_xlabel("Age (yr)")
+  axs[1].set_ylabel("LoS")
+
+  axs[2].bar(age_bins[:-1] + 0.5, medlos_age, alpha=0.7, color="orange", edgecolor="black", linewidth=0.5)
+  axs[2].set_title("Median LoS in each Age Group")
+  axs[2].set_xlabel("Age (yr)")
+  axs[2].set_ylabel("LoS")
+  figs.tight_layout(pad=3.0)
+
+  print("Correlation between age and LoS: ",
+        np.corrcoef(dashboard_df.AGE_AT_PROC_YRS, dashboard_df.LENGTH_OF_STAY)[0, 1])
+
+
+def age_los_boxplot(df, age_bins=None, ylim=None, outcome=LOS, clip_y=False, violin=False):
+  assert outcome in {LOS, NNT}
+  if clip_y:
+    df = df[[outcome, AGE]]
+    df[outcome] = df[outcome].apply(lambda x: x if x <= MAX_NNT else MAX_NNT + 1)
+
+  if not np.isinf(age_bins[-1]):
+    age_bins.append(float('-inf'))
+
+  age2los = defaultdict()
+  for i in range(len(age_bins) - 1):
+    l, h = age_bins[i:i + 2]
+    age2los[i] = df[(l <= df[AGE]) & (df[AGE] < h)][outcome].tolist()
+
+  fig, ax = plt.subplots(figsize=(15, 10))
+  if violin:
+    sns.violinplot(data=[age2los[k] for k in sorted(age2los.keys())], ax=ax)
+  else:
+    ax.boxplot([age2los[i] for i in sorted(age2los.keys())], widths=0.7, notch=True, patch_artist=True)
+  ax.set_title(f"{outcome} Distribution by Age Group", fontsize=19, y=1.01)
+  ax.set_xlabel("Age (year)", fontsize=16)
+  ax.set_ylabel("LoS (day)", fontsize=16) if outcome == LOS else ax.set_ylabel("Number of Nights", fontsize=16)
+  if np.isinf(age_bins[-1]):
+    labels = [f'{age_bins[i]}-{age_bins[i+1]}\n$n$={len(age2los[i])}' for i in range(len(age_bins)-2)]
+    labels.append(f'{age_bins[-2]}+\n$n$={len(age2los[max(age2los.keys())])}')
+  else:
+    labels = [f'{age_bins[i]}-{age_bins[i + 1]}' for i in range(len(age_bins) - 1)]
+  ax.set_xticklabels(labels, fontsize=13)
+  ax.yaxis.set_tick_params(labelsize=14)
+  if ylim:
+    ax.set_ylim([-0.6, ylim])
+
+  plt.show()
+
+
+# ---------------------------------------- Weight z-score & LOS ----------------------------------------
+def weightz_los_eda(dashboard_df):
+  max_wt, min_wt = int(np.ceil(max(dashboard_df.WEIGHT_ZSCORE) + DELTA)), int(np.floor(min(dashboard_df.WEIGHT_ZSCORE)))
+  wt_bins = np.linspace(min_wt, max_wt, int(np.ceil(max_wt - min_wt)) * 2)
+
+  figs, axs = plt.subplots(3, 1, figsize=(9, 16))
+  axs[0].hist(dashboard_df.WEIGHT_ZSCORE, bins=wt_bins, alpha=0.7, edgecolor="black", linewidth=0.5)
+  axs[0].set_title("Weight z-score distribution")
+  axs[0].set_xlabel("Weight z-score")
+  axs[0].set_ylabel("Number of patients")
+
+  # Average and median LoS of each weight z-score group
+  avglos_wt = [0] * (len(wt_bins) - 1)
+  medlos_wt = [0] * (len(wt_bins) - 1)
+  for i in range(len(wt_bins) - 1):
+    l, h = wt_bins[i:i + 2]
+    los = dashboard_df[(l <= dashboard_df.WEIGHT_ZSCORE) & (dashboard_df.WEIGHT_ZSCORE < h)].LENGTH_OF_STAY
+    if len(los) > 0:
+      avglos_wt[i] = np.mean(los)
+      medlos_wt[i] = np.median(los)
+
+  axs[1].bar(wt_bins[:-1], avglos_wt, alpha=0.5, width=0.49, color="red", edgecolor="black", linewidth=0.5)
+  axs[1].set_title("Average LoS in each Weight z-score Group")
+  axs[1].set_xlabel("Weight z-score")
+  axs[1].set_ylabel("LoS")
+
+  axs[2].bar(wt_bins[:-1], medlos_wt, alpha=0.7, width=0.49, color="orange", edgecolor="black", linewidth=0.5)
+  axs[2].set_title("Median LoS in each Weight z-score Group")
+  axs[2].set_xlabel("Weight z-score")
+  axs[2].set_ylabel("LoS")
+  figs.tight_layout(pad=3.0)
+
+  print("Correlation between age and LoS: ", np.corrcoef(dashboard_df.WEIGHT_ZSCORE, dashboard_df.LENGTH_OF_STAY)[0, 1])
+
+
+def weightz_los_boxplot(df, weightz_bins, bin_width=1, ylim=None, outcome=LOS, clip_y=False, violin=False):
+  assert outcome in {LOS, NNT}
+  if clip_y:
+    df = df[[outcome, WEIGHT_ZS]]
+    df[outcome] = df[outcome].apply(lambda x: x if x <= MAX_NNT else MAX_NNT + 1)
+
+  wz2los = defaultdict()
+
+  if not np.isinf(weightz_bins[0]):
+    weightz_bins.insert(0,  float('-inf'))
+  if not np.isinf(weightz_bins[-1]):
+    weightz_bins.insert(-1, float('inf'))
+
+  for i in range(len(weightz_bins)-1):
+    l, h = weightz_bins[i], weightz_bins[i+1]
+    wz2los[i] = df.loc[(l <= df[WEIGHT_ZS]) & (df[WEIGHT_ZS] < h), outcome].tolist()
+
+  fig, ax = plt.subplots(figsize=(15, 10))
+  if violin:
+    pass
+  else:
+    ax.boxplot([wz2los[i] for i in wz2los.keys()], widths=0.7, notch=True, patch_artist=True)
+  ax.set_title(f"{outcome.replace('_', ' ')} Distribution by Weight z-score Group", fontsize=19, y=1.01)
+  ax.set_xlabel("Weight z-score", fontsize=16)
+  ax.set_ylabel(f"{outcome.replace('_', ' ')}", fontsize=16)
+  labels = [f'{weightz_bins[i]}-{weightz_bins[i + 1]}\n$n$={len(wz2los[i])}' for i in range(len(weightz_bins) - 2)]
+  #labels.append(f'{age_bins[-2]}+\n$n$={len(age2los[max(age2los.keys())])}')
+  labels = [str(k) for k in wz2los.keys()]
+  labels[0] = f'<{weightz_bins[1]}'
+  labels[-1] = f'{weightz_bins[-2]}+'
+  ax.set_xticklabels(labels, fontsize=13)
+  if ylim:
+    ax.set_ylim([0, ylim])
+
   plt.show()
 
 
@@ -187,6 +377,8 @@ def language_interpreter_eda_violinplot(df, outcome, preprocess_y, freq_range, t
   ax.set_title(title, fontsize=18, y=1.01)
   ax.set_xticklabels(xticklabels, fontsize=13)
   ax.yaxis.set_tick_params(labelsize=13)
+  ax.set_ylim([-0.9, 6.9])
+  ax.set_xlim([-0.9, 16.4])
   fig.autofmt_xdate(rotation=45)
   plt.show()
 
@@ -221,7 +413,7 @@ def major_region_eda(dashb_df, outcome=NNT, preprocess_y=True):
   ax.set_xlabel('Major Region', fontsize=16)
   ax.set_ylabel('Number of Nights', fontsize=16)
   ax.set_title('NNT vs. Major Region', fontsize=18, y=1.01)
-  ax.set_ylim([-1, 7])
+  ax.set_ylim([-0.5, 6.5])
   ax.set_xticklabels([f'{k}\n$n$={region2cnt[k]}' for k in region_type], fontsize=13)
   plt.show()
 
@@ -268,7 +460,7 @@ def miles_traveled_eda(dashb_df, q=15, outcome=NNT, preprocess_y=True, violin=Tr
   if preprocess_y:
     outy[outy > MAX_NNT] = MAX_NNT + 1
     Xdf[outcome] = outy
-    ax.set_ylim([-1, 8])
+    ax.set_ylim([-0.6, 6.6])
 
   if violin:
     sns.violinplot(data=Xdf, x=MILES, y=outcome)
@@ -343,134 +535,6 @@ def organ_system_los_boxplot(dashboard_df, exclude_outliers=0, xlim=None):
   for patch, color in zip(bplot['boxes'], colors):
     patch.set_facecolor(color)
 
-
-# ---------------------------------------- Age & LOS ----------------------------------------
-def age_los_eda(dashboard_df, age_bins=None):
-  max_age, min_age = np.ceil(max(dashboard_df.AGE_AT_PROC_YRS) + DELTA), np.floor(min(dashboard_df.AGE_AT_PROC_YRS))
-  age_bins = np.linspace(int(min_age), int(max_age), int(np.ceil(max_age - min_age))) if age_bins is None else age_bins
-
-  figs, axs = plt.subplots(3, 1, figsize=(9, 16))
-  axs[0].hist(dashboard_df.AGE_AT_PROC_YRS, bins=age_bins, alpha=0.7, edgecolor="black", linewidth=0.5)
-  axs[0].set_title("Age distribution")
-  axs[0].set_xlabel("Age (yr)")
-  axs[0].set_ylabel("Number of patients")
-
-  # Average and median LoS of each age group
-  avglos_age = [0] * (len(age_bins) - 1)
-  medlos_age = [0] * (len(age_bins) - 1)
-  for i in range(len(age_bins) - 1):
-    l, h = age_bins[i:i + 2]
-    los = dashboard_df[(l <= dashboard_df.AGE_AT_PROC_YRS) & (dashboard_df.AGE_AT_PROC_YRS < h)].LENGTH_OF_STAY
-    avglos_age[i] = np.mean(los)
-    medlos_age[i] = np.median(los)
-
-  axs[1].bar(age_bins[:-1] + 0.5, avglos_age, alpha=0.5, color="red", edgecolor="black", linewidth=0.5)
-  axs[1].set_title("Average LoS in each Age Group")
-  axs[1].set_xlabel("Age (yr)")
-  axs[1].set_ylabel("LoS")
-
-  axs[2].bar(age_bins[:-1] + 0.5, medlos_age, alpha=0.7, color="orange", edgecolor="black", linewidth=0.5)
-  axs[2].set_title("Median LoS in each Age Group")
-  axs[2].set_xlabel("Age (yr)")
-  axs[2].set_ylabel("LoS")
-  figs.tight_layout(pad=3.0)
-
-  print("Correlation between age and LoS: ",
-        np.corrcoef(dashboard_df.AGE_AT_PROC_YRS, dashboard_df.LENGTH_OF_STAY)[0, 1])
-
-
-def age_los_boxplot(df, age_bins=None, max_age=30, bin_width=1, ylim=None, ytype=LOS, clip_y=False, violin=False):
-  assert ytype in {LOS, NNT}
-  if clip_y:
-    df = pd.DataFrame(df)
-    df[ytype] = df[ytype].apply(lambda x: x if x <= MAX_NNT else MAX_NNT + 1)
-
-  age2los = defaultdict()
-  for i in range(len(age_bins) - 1):
-    l, h = age_bins[i:i + 2]
-    age2los[i] = df[(l <= df[AGE]) & (df[AGE] < h)][ytype].tolist()
-  if not np.isinf(age_bins[-1]):
-    age2los[len(age_bins) - 1] = df[df[AGE] >= age_bins[-1]][ytype].tolist()
-
-  fig, ax = plt.subplots(figsize=(15, 10))
-  if violin:
-    sns.violinplot(data=[age2los[k] for k in sorted(age2los.keys())], ax=ax)
-  else:
-    bplot = ax.boxplot([age2los[i] for i in sorted(age2los.keys())], widths=0.7, notch=True, patch_artist=True)
-  ax.set_title(f"{ytype} Distribution by Age Group", fontsize=19, y=1.01)
-  ax.set_xlabel("Age (year)", fontsize=16)
-  ax.set_ylabel("LoS (day)", fontsize=16) if ytype == LOS else ax.set_ylabel("Number of Nights", fontsize=16)
-  if np.isinf(age_bins[-1]):
-    labels = [f'{age_bins[i]}-{age_bins[i+1]}\n$n$={len(age2los[i])}' for i in range(len(age_bins)-2)]
-    labels.append(f'{age_bins[-2]}+\n$n$={len(age2los[max(age2los.keys())])}')
-    print(len(labels), len(age2los))
-  else:
-    labels = [f'{age_bins[i]}-{age_bins[i + 1]}' for i in range(len(age_bins) - 1)]
-  ax.set_xticklabels(labels)
-  if ylim:
-    ax.set_ylim([-1, ylim])
-
-  plt.show()
-
-
-# ---------------------------------------- Weight z-score & LOS ----------------------------------------
-#
-def weightz_los_eda(dashboard_df):
-  max_wt, min_wt = int(np.ceil(max(dashboard_df.WEIGHT_ZSCORE) + DELTA)), int(np.floor(min(dashboard_df.WEIGHT_ZSCORE)))
-  wt_bins = np.linspace(min_wt, max_wt, int(np.ceil(max_wt - min_wt)) * 2)
-
-  figs, axs = plt.subplots(3, 1, figsize=(9, 16))
-  axs[0].hist(dashboard_df.WEIGHT_ZSCORE, bins=wt_bins, alpha=0.7, edgecolor="black", linewidth=0.5)
-  axs[0].set_title("Weight z-score distribution")
-  axs[0].set_xlabel("Weight z-score")
-  axs[0].set_ylabel("Number of patients")
-
-  # Average and median LoS of each weight z-score group
-  avglos_wt = [0] * (len(wt_bins) - 1)
-  medlos_wt = [0] * (len(wt_bins) - 1)
-  for i in range(len(wt_bins) - 1):
-    l, h = wt_bins[i:i + 2]
-    los = dashboard_df[(l <= dashboard_df.WEIGHT_ZSCORE) & (dashboard_df.WEIGHT_ZSCORE < h)].LENGTH_OF_STAY
-    if len(los) > 0:
-      avglos_wt[i] = np.mean(los)
-      medlos_wt[i] = np.median(los)
-
-  axs[1].bar(wt_bins[:-1], avglos_wt, alpha=0.5, width=0.49, color="red", edgecolor="black", linewidth=0.5)
-  axs[1].set_title("Average LoS in each Weight z-score Group")
-  axs[1].set_xlabel("Weight z-score")
-  axs[1].set_ylabel("LoS")
-
-  axs[2].bar(wt_bins[:-1], medlos_wt, alpha=0.7, width=0.49, color="orange", edgecolor="black", linewidth=0.5)
-  axs[2].set_title("Median LoS in each Weight z-score Group")
-  axs[2].set_xlabel("Weight z-score")
-  axs[2].set_ylabel("LoS")
-  figs.tight_layout(pad=3.0)
-
-  print("Correlation between age and LoS: ", np.corrcoef(dashboard_df.WEIGHT_ZSCORE, dashboard_df.LENGTH_OF_STAY)[0, 1])
-
-
-def weightz_los_boxplot(df, weightz_range, bin_width=1, ylim=None):
-  wz2los = defaultdict()
-  wz2los[weightz_range[0]-1] = df[df.WEIGHT_ZSCORE < weightz_range[0]].LENGTH_OF_STAY.tolist()
-  last_i = 0
-  for i in range(weightz_range[0], weightz_range[-1] + 1, bin_width):
-    wz2los[i] = df[(i - bin_width <= df.WEIGHT_ZSCORE) & (df.WEIGHT_ZSCORE < i)].LENGTH_OF_STAY.tolist()
-    last_i = i
-  wz2los[last_i] = df[last_i <= df.WEIGHT_ZSCORE].LENGTH_OF_STAY.tolist()
-
-  fig, ax = plt.subplots(figsize=(15, 10))
-  bplot = ax.boxplot([wz2los[i] for i in wz2los.keys()], widths=0.7, notch=True, patch_artist=True)
-  ax.set_title("LoS Distribution by Weight z-score Group", fontsize=19, y=1.01)
-  ax.set_xlabel("Weight z-score", fontsize=16)
-  ax.set_ylabel("LoS (day)", fontsize=16)
-  labels = [str(k) for k in wz2los.keys()]
-  labels[0] = '<' + str(weightz_range[0])
-  labels[-1] = str(last_i) + "+"
-  ax.set_xticklabels(labels)
-  if ylim:
-    ax.set_ylim([0, ylim])
-
-  plt.show()
 
 # --------------------------------------- Max total CHEWS & LOS ---------------------------------------
 # TODO: How and when is the score generated?
