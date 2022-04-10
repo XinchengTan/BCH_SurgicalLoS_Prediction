@@ -45,3 +45,13 @@ def predict_with_pproc_decile_cv(datasets: List[Dataset], decile_outcome, pred_o
 
   _ = model_eval.gen_confusion_matrix(y_true, preds, 'PPROC Decile', Xtype='Full dataset (%d-fold)' % len(datasets))
   return preds
+
+
+def predict_with_pproc_mode():
+
+  return
+
+
+def predict_with_voting_cpt_decile():
+
+  return

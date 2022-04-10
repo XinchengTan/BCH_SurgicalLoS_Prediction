@@ -109,7 +109,9 @@ def format_perf_df(perf_df: pd.DataFrame):
     if scr.startswith('Count'):
       formatter_ret[scr] = '{:.0f}'.format
     elif scr not in {'Model', 'Xtype', 'Cohort', 'Trial', 'Year'}:
-      if scr.startswith(SCR_RMSE):
+      if scr.startswith(SCR_MAE):
+        formatter_ret[scr] = SCR_FORMATTER[SCR_MAE]
+      elif scr.startswith(SCR_RMSE):
         formatter_ret[scr] = SCR_FORMATTER[SCR_RMSE]
       elif scr.startswith(SCR_AUC):
         formatter_ret[scr] = SCR_FORMATTER[SCR_AUC]
