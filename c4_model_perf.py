@@ -9,7 +9,7 @@ from tqdm import tqdm
 from typing import Any, Dict, Iterable
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, confusion_matrix, make_scorer, \
-  roc_auc_score, mean_squared_error, recall_score, precision_score, f1_score
+  roc_auc_score, mean_absolute_error, mean_squared_error, recall_score, precision_score, f1_score
 import shap
 
 import utils_plot
@@ -39,6 +39,8 @@ class MyScorer:
         scr_dict[scorer] = 'precision'
       elif scorer == SCR_F1_BINCLF:
         scr_dict[scorer] = 'f1'
+      elif scorer == SCR_MAE:
+        scr_dict[scorer] = make_scorer(MyScorer.scorer_mae, greater_is_better=False)
       elif scorer == SCR_RMSE:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_rmse, greater_is_better=False)
       elif scorer == SCR_ACC_ERR1:
@@ -56,6 +58,11 @@ class MyScorer:
       else:
         raise Warning(f"Scorer {scorer} is not supported yet!")
     return scr_dict
+
+  @staticmethod
+  def scorer_mae(ytrue, ypred):
+    mae = mean_absolute_error(ytrue, ypred)
+    return mae
 
   @staticmethod
   def scorer_rmse(ytrue, ypred):
@@ -115,6 +122,8 @@ class MyScorer:
       elif scorer_name.startswith(SCR_RECALL_PREFIX):
         cls = int(scorer_name.lstrip(SCR_RECALL_PREFIX))
         perf_row_dict[scorer_name] = MyScorer.classwise_recall(ytrue, ypred, cls)
+      elif scorer_name == SCR_MAE:
+        perf_row_dict[scorer_name] = MyScorer.scorer_mae(ytrue, ypred)
       elif scorer_name == SCR_RMSE:
         perf_row_dict[scorer_name] = MyScorer.scorer_rmse(ytrue, ypred)
       elif scorer_name == SCR_ACC_ERR1:

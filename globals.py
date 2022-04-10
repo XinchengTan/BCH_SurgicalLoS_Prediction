@@ -65,6 +65,7 @@ DASHDATA_COLS = ['SURG_CASE_KEY', 'LENGTH_OF_STAY', 'SPS_PREDICTED_LOS', 'SPS_RE
                  GENDER, AGE, WEIGHT_ZS] + OS_CODE_LIST
 
 # Datetime columns
+BOOKING_DTM = 'BOOKING_DATE'
 ADMIT_DTM = 'HAR_ADMIT_DATE'
 DISCHARGE_DTM = 'HAR_DISCHARGE_DATE'
 SURG_START_DTM = 'SURGEON_START_DT_TM'
@@ -196,6 +197,7 @@ COHORT_TO_CCSRS = {COHORT_TONSIL: CCSRS_TONSIL,
 
 # according to CDC definition: https://www.cdc.gov/ncbddd/childdevelopment/positiveparenting/infants.html
 AGE_BINS = [0, 0.25, 0.5, 1, 2, 3, 6, 9, 12, 15, 18, float('inf')]
+WEIGHT_BINS = [float('-inf'), -4, -2, -1, 0, 1, 2, 4, float('inf')]
 
 DELTA = 1e-8
 SEED = 998
@@ -348,6 +350,7 @@ SCR_AUC = 'roc_auc'
 SCR_ACC_BAL = 'balanced_accuracy'
 SCR_ACC_ERR1 = 'Accuracy (tol = 1 NNT)'
 SCR_ACC_ERR2 = 'Accuracy (tol = 2 NNT)'
+SCR_MAE = 'Mean Absolute Error'
 SCR_RMSE = 'Rooted MSE'
 SCR_UNDERPRED0 = 'Underprediction Rate'
 SCR_OVERPRED0 = 'Overprediction Rate'
@@ -367,12 +370,13 @@ SCR_RECALL5 = 'recall_class5'
 SCR_RECALL6 = 'recall_class6'  # if MAX_NNT > 5, add SCR_RECALL? accordingly
 SCR_RECALL_ALL_LIST = [SCR_RECALL0, SCR_RECALL1, SCR_RECALL2, SCR_RECALL3, SCR_RECALL4, SCR_RECALL5, SCR_RECALL6]
 DEFAULT_SCORERS = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_OVERPRED2, SCR_UNDERPRED2,
-                   SCR_RMSE] + SCR_RECALL_ALL_LIST # SCR_ACC_BAL,
+                   SCR_MAE, SCR_RMSE] + SCR_RECALL_ALL_LIST # SCR_ACC_BAL,
 DEFAULT_SCORERS_BINCLF = [SCR_ACC, SCR_RECALL_BINCLF, SCR_PREC_BINCLF, SCR_F1_BINCLF]  # SCR_AUC
 
 # Scorer formatter for pd output
 SCR_FORMATTER = defaultdict(lambda: "{:.1%}".format)
-SCR_FORMATTER.update({SCR_RMSE: "{:.2f}".format, SCR_F1_BINCLF: "{:.2f}".format, SCR_AUC: "{:.2f}".format})
+SCR_FORMATTER.update({SCR_MAE: "{:.2f}".format, SCR_RMSE: "{:.2f}".format, SCR_F1_BINCLF: "{:.2f}".format,
+                      SCR_AUC: "{:.2f}".format})
 
 # SCR_ACC: "{:.1%}".format, SCR_ACC_BAL: "{:.1%}".format, SCR_ACC_ERR1: "{:.1%}".format,
 # SCR_ACC_ERR2: "{:.1%}".format, SCR_OVERPRED: "{:.1%}".format, SCR_UNDERPRED: "{:.1%}".format,
