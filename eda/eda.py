@@ -92,8 +92,12 @@ def los_histogram_by_year(df, outcome=NNT, clip_y=False, show_pct=False, os_df=N
   ax.legend(prop={'size': 13})
 
 
-def los_histogram_by_care_class(df, outcome=NNT, clip_y=False, pct=False, ax=None):
-  y_df = df[[outcome, 'CARE_CLASS']]
+def los_histogram_by_care_class(df, outcome=NNT, clip_y=False, pct=False, stack_hist_by_year=False, os_df=None,
+                                ax=None):
+  if os_df is not None:
+    df = pd.concat([df, os_df], axis=0)
+  y_df = df[[outcome, CARE_CLASS, SPS_PRED, ADMIT_DTM]]
+  y_df[ADMIT_YEAR] = y_df[ADMIT_DTM].dt.year
   if clip_y:
     y_df.loc[:, outcome] = y_df[outcome].apply(lambda x: MAX_NNT + 1 if x > MAX_NNT else x)
   if ax is None:
@@ -108,18 +112,35 @@ def los_histogram_by_care_class(df, outcome=NNT, clip_y=False, pct=False, ax=Non
     ylabel = 'Count'
     normalizer = 1
 
-  groupby = y_df.groupby(by='CARE_CLASS')
+  years = sorted(y_df[ADMIT_YEAR].unique())
+  outs = sorted(y_df[outcome].unique())
+  groupby = y_df.groupby(by=CARE_CLASS)
   width = 0.8 / len(groupby)
   idx = 1
   care_cls_to_counter_graph = {}
   for care_cls, c_df in groupby:
     print(care_cls, c_df.shape[0])
+    print(f'{c_df[c_df[SPS_PRED].notnull()].shape[0]} '
+          f'({"{:.2%}".format(c_df[c_df[SPS_PRED].notnull()].shape[0] / c_df.shape[0])}) '
+          f'cases have surgeon prediction\n')
     xs = np.sort(c_df[outcome].unique()) + (2 * idx - 3) * width / 2
+    normalizer = c_df.shape[0] if pct == 'group' else normalizer
     outcome_counter = defaultdict(int)
     outcome_counter.update(Counter(c_df[outcome].to_numpy()))
-    normalizer = c_df.shape[0] if pct == 'group' else normalizer
-    graph = ax.bar(xs, [outcome_counter[c] / normalizer for c in sorted(c_df[outcome].unique())],
-                   width=width, label=care_cls, alpha=0.8)
+    if stack_hist_by_year:
+      prev_counter = np.zeros(len(outs))
+      graph = None
+      for yr in years:
+        yr_outcome_counter = defaultdict(int)
+        yr_outcome_counter.update(Counter(c_df.loc[c_df[ADMIT_YEAR] == yr][outcome]))
+        cur_counter = [yr_outcome_counter[c] / normalizer for c in outs]
+        g = ax.bar(xs, cur_counter, bottom=prev_counter, width=width, label=f'{care_cls}: {yr}', alpha=0.9,
+                   color=plt.get_cmap('Paired').colors[2 * years.index(yr) + idx - 1])
+        prev_counter += np.array(cur_counter)
+        graph = g
+    else:
+      graph = ax.bar(xs, [outcome_counter[c] / normalizer for c in outs],
+                     width=width, label=care_cls, alpha=0.8)
     care_cls_to_counter_graph[care_cls] = (outcome_counter, graph)
     idx += 1
   ax.set_ylabel(ylabel, fontsize=15, x=-0.1)
@@ -127,7 +148,7 @@ def los_histogram_by_care_class(df, outcome=NNT, clip_y=False, pct=False, ax=Non
   ax.yaxis.set_tick_params(labelsize=13)
   ax.set_xticks(np.arange(MAX_NNT + 2))
   ax.set_xticklabels(NNT_CLASS_LABELS, fontsize=13)
-  ax.set_title(f'{NNT.replace("_", " ")} Distribution Over Care Class', fontsize=16, y=1.01)
+  ax.set_title(f'{NNT.replace("_", " ")} Distribution over Care Class', fontsize=16, y=1.01)
   ax.legend(prop={'size': 13})
 
   if pct:
