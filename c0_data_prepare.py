@@ -12,7 +12,7 @@ pd.set_option('display.max_columns', 50)
 
 
 def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=None, chews_fp=None,
-                 exclude2021=False, force_weight=False):
+                 care_class_fp=None, exclude2021=False, force_weight=False):
   """
   Prepares the patient LoS dataset, combining datetime and CPT related info
   """
@@ -31,7 +31,7 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=N
 
   # Drop rows with NaN in weight z-score
   if force_weight:
-    dashb_df = dashb_df[DASHDATA_COLS].dropna(subset=['WEIGHT_ZSCORE'])
+    dashb_df = dashb_df.dropna(subset=['WEIGHT_ZSCORE'])
   print_df_info(dashb_df, dfname='Processed Dashboard (weight)')
 
   # Medication data -- join by surg case key
@@ -112,6 +112,14 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=N
   if chews_fp is not None:
     chews_df = pd.read_csv(chews_fp)
     dashb_df = add_chews_decline_outcomes(dashb_df=dashb_df, chews_df=chews_df, fillna_val=False)
+
+  # Join dashboard df with care_class column
+  if (CARE_CLASS not in dashb_df.columns) and (care_class_fp is not None):
+    care_class_df = pd.read_csv(care_class_fp)
+    dashb_df = dashb_df.join(care_class_df[['SURG_CASE_KEY', CARE_CLASS]].set_index('SURG_CASE_KEY'),
+                             on='SURG_CASE_KEY',
+                             how='inner')
+    print_df_info(dashb_df, 'Dashboard DF with care class')
 
   # Exclude 2021 data by request
   if exclude2021:
