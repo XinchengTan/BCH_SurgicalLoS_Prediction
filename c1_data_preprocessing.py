@@ -20,9 +20,17 @@ from globals_fs import *
 def gen_cohort_df(df: pd.DataFrame, cohort):
   if cohort == COHORT_ALL:
     return df.copy()
-  else:
-    ch_pprocs = COHORT_TO_PPROCS[cohort]
-    return df.query("PRIMARY_PROC in @ch_pprocs")
+  ch_pprocs = COHORT_TO_PPROCS[cohort]
+  return df.query("PRIMARY_PROC in @ch_pprocs")
+
+
+def gen_care_class_df(df: pd.DataFrame, care_class):
+  if care_class is None:
+    return df.copy()
+  assert CARE_CLASS in df.columns, f'{CARE_CLASS} is missing from input df!'
+  assert care_class in {INPATIENT_CARE, OBS_CARE}, f'care_class must be one of [{INPATIENT_CARE, OBS_CARE}]'
+  care_class_df = df.loc[df[CARE_CLASS] == care_class]
+  return care_class_df
 
 
 class Dataset(object):
@@ -31,15 +39,19 @@ class Dataset(object):
                onehot_cols=[], discretize_cols=None, test_pct=0.2, test_case_keys=None, cohort=COHORT_ALL,
                trimmed_ccsr=None, target_features=None, decile_gen=None, ftr_eng: FeatureEngineeringModifier=None,
                add_hybrid_pproc_cptgrp_col=False, nonrare_pprocs=None, rare_pproc_cptgrp_cohorts=None,
-               remove_o2m=(True, True), scaler=None, scale_numeric_only=True):
+               remove_o2m=(True, True), scaler=None, scale_numeric_only=True, care_class=None):
     # For record keeping
-    self.df = df.copy()
+    self.df = df.copy()  # only accessed with properly filtered surg_case_keys
     self.outcome = outcome
 
     # Filter df by primary procedure cohort
     self.cohort = cohort
     self.cohort_df = gen_cohort_df(df, cohort)
-    print('cohort df shape: ', self.cohort_df.shape)
+    print('cohort_df shape: ', self.cohort_df.shape)
+
+    # Filter by care class
+    self.care_class = care_class
+    self.cohort_df = gen_care_class_df(self.cohort_df, care_class=care_class)
 
     # 0. Save I. pure SDA case keys, II. case keys that have surgeon prediction, III. dict of year to case keys
     self.sda_case_keys = self.gen_sda_case_keys(self.cohort_df)
@@ -78,7 +90,7 @@ class Dataset(object):
         rare_pproc_cptgrp_cohorts=rare_pproc_cptgrp_cohorts,
         ftr_cols=ftr_cols,
         feature_names=None
-      )
+      )  # TODO: pass in care_class arg?
     else:
       assert ftr_eng.__class__.__name__ == 'FeatureEngineeringModifier', 'ftr_eng must be of type FeatureEngineeringModifier!'
       self.FeatureEngMod = ftr_eng  # when test_pct = 1

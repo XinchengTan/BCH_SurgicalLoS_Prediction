@@ -6,6 +6,7 @@ PROJECT_DIR = Path('/Users/caratan/Desktop/ML4Health/Dashboard-Project')
 DATA_HOME = PROJECT_DIR / 'Data_new_all'
 DATA_TRIALS_HOME = PROJECT_DIR / 'Data_ktrials'
 DATA_DIR = DATA_HOME / 'ModelInput'
+CARE_CLASS_FP = PROJECT_DIR / 'Data_new_all0/cases_2018_to_2021_10_updated.csv'
 
 # Deployment files dir
 DEPLOY_DATA_DIR = PROJECT_DIR / 'Deployment_test_data'

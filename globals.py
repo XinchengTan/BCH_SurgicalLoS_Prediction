@@ -21,6 +21,7 @@ INTERPRETER = 'INTERPRETER_NEED'
 STATE = 'STATE_CODE'
 REGION = 'MAJOR_REGION'
 MILES = 'MILES_TRAVELED'
+CARE_CLASS = 'CARE_CLASS'
 PROBLEM_CNT = 'PROBLEM_COUNT'
 PRIMARY_PROC = 'PRIMARY_PROC'
 SURG_GROUP = 'SURG_GROUP'
@@ -28,6 +29,9 @@ PRIMARY_PROC_CPTGRP = 'PRIMARY_PROC_CPTGRP'  # todo: add to feature cols??
 PR_CPTGRP_X = 'PRIMARY_PROC_MAX_CPTGRP_DECILE_'  # a prefix for each primary cpt group with multiple max cptgrp decile
 COHORT_TYPE_SET = {SURG_GROUP, PRIMARY_PROC, PRIMARY_PROC_CPTGRP}
 
+# Care class types
+INPATIENT_CARE = 'Inpatient'
+OBS_CARE = 'Observation'
 
 # Customized new column names during dataframe preprocessing
 NNT = 'NUM_OF_NIGHTS'
