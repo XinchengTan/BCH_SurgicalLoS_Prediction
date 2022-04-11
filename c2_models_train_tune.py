@@ -12,12 +12,12 @@ from c4_model_perf import MyScorer
 
 # -------------------------------------- Train models on k Datasets (Multi-class) --------------------------------------
 def train_model_all_ktrials(models, k_datasets: Dict[Any, Dataset], cls_weight,
-                            train_sda_only=False, train_surg_only=False) -> Dict:
+                            train_sda_only=False, train_surg_only=False, train_care_class=None) -> Dict:
   models = [LGR, KNN, RMFCLF, XGBCLF] if models is None else models  # GBCLF,
   k_model_dict = {}
   for k, dataset_k in tqdm(k_datasets.items()):
     # Fit models
-    Xtrain, ytrain = dataset_k.get_Xytrain_by_case_key(dataset_k.train_case_keys,
+    Xtrain, ytrain = dataset_k.get_Xytrain_by_case_key(dataset_k.train_case_keys, care_class=train_care_class,
                                                        sda_only=train_sda_only, surg_only=train_surg_only)
     model_dict = {}
     for md in models:
@@ -44,12 +44,13 @@ def train_model_all_ktrials(models, k_datasets: Dict[Any, Dataset], cls_weight,
 # ------------------------------------- Train models on k Datasets (Binary class) --------------------------------------
 # Train models for all binary outcomes across k trials/folds
 def train_model_all_ktrials_binclf(models, bin_kt_datasets: Dict[str, Dict[int, Dataset]], cls_weight,
-                                   train_sda_only=False, train_surg_only=False):
+                                   train_sda_only=False, train_surg_only=False, train_care_class=None):
   bin_k_model_dict = defaultdict(dict)
   for bin_nnt, kt_datasets in tqdm(bin_kt_datasets.items(), desc='Binary Outcomes'):
     print('Outcome: ', bin_nnt)
     bin_k_model_dict[bin_nnt] = train_model_all_ktrials(models, k_datasets=kt_datasets, cls_weight=cls_weight,
-                                                        train_sda_only=train_sda_only, train_surg_only=train_surg_only)
+                                                        train_sda_only=train_sda_only, train_surg_only=train_surg_only,
+                                                        train_care_class=train_care_class)
   return bin_k_model_dict
 
 

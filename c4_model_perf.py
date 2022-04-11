@@ -181,8 +181,8 @@ class MyScorer:
 
 # Evaluate models' performance across k trials
 def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, scorers=None,
-                           eval_sda_only=False, eval_surg_only=False, years=None, md_to_show_confmat=None,
-                           train_perf_df=None, test_perf_df=None, models=None):
+                           eval_sda_only=False, eval_surg_only=False, years=None, care_class=None,
+                           md_to_show_confmat=None, models=None, train_perf_df=None, test_perf_df=None):
   model_to_k_confmats_test = defaultdict(dict)  # only for modeling-all, do not support cohort perf yet
   for kt, dataset_k in tqdm(k_datasets.items()):
     # Model performance
@@ -194,13 +194,13 @@ def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, 
         print('Cohort-wise eval: ', md)
         train_perf_df, test_perf_df = eval_model_by_cohort(
           dataset_k, clf, scorers, eval_by_cohort, trial_i=kt, sda_only=eval_sda_only, surg_only=eval_surg_only,
-          years=years, train_perf_df=train_perf_df, test_perf_df=test_perf_df
+          years=years, care_class=care_class, train_perf_df=train_perf_df, test_perf_df=test_perf_df
         )
       else:
         print('Aggergative eval: ', md)
         train_perf_df, test_perf_df, confmat_test, surg_confmat_test = eval_model(
           dataset_k, clf, scorers, trial_i=kt, sda_only=eval_sda_only, surg_only=eval_surg_only, years=years,
-          show_confmat=md_to_show_confmat, train_perf_df=train_perf_df, test_perf_df=test_perf_df
+          care_class=care_class, show_confmat=md_to_show_confmat, train_perf_df=train_perf_df, test_perf_df=test_perf_df
         )
         model_to_k_confmats_test[md][kt] = confmat_test
         model_to_k_confmats_test[SURGEON][kt] = surg_confmat_test
@@ -214,15 +214,15 @@ def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, 
 
 
 # Helper function to evaluate surgeon's performance
-def eval_surgeon_perf(dataset: Dataset, scorers: Iterable, show_confmat, years=None):
+def eval_surgeon_perf(dataset: Dataset, scorers: Iterable, show_confmat, years=None, care_class=None):
   train_scores_row_dict, test_scores_row_dict = {}, {}
   if dataset.Xtrain is not None and len(dataset.Xtrain) > 0:
-    train_true_preds = dataset.get_surgeon_pred_df_by_case_key(dataset.train_case_keys, years=years)
+    train_true_preds = dataset.get_surgeon_pred_df_by_case_key(dataset.train_case_keys, years=years, care_class=care_class)
     train_scores_row_dict = MyScorer.apply_scorers(scorers, train_true_preds[dataset.outcome],
                                                    train_true_preds[SPS_PRED], enable_warning=False)
   confmat_test = None
   if dataset.Xtest is not None and len(dataset.Xtest) > 0:
-    test_true_preds = dataset.get_surgeon_pred_df_by_case_key(dataset.test_case_keys, years=years)
+    test_true_preds = dataset.get_surgeon_pred_df_by_case_key(dataset.test_case_keys, years=years, care_class=care_class)
     test_scores_row_dict = MyScorer.apply_scorers(scorers, test_true_preds[dataset.outcome], test_true_preds[SPS_PRED],
                                                   enable_warning=False)
     if show_confmat:
@@ -232,7 +232,7 @@ def eval_surgeon_perf(dataset: Dataset, scorers: Iterable, show_confmat, years=N
 
 # Helper function for eval_model_by_cohort()
 def eval_model_by_cohort_Xydata(trial_i, dataset: Dataset, clf, cohort_to_XyKeys, Xtype,
-                                scorers, perf_df, surg_only, years):
+                                scorers, perf_df, surg_only, years, care_class):
   # Get classifier name
   md_name = get_clf_name(clf)
 
@@ -254,7 +254,7 @@ def eval_model_by_cohort_Xydata(trial_i, dataset: Dataset, clf, cohort_to_XyKeys
                              'Trial': trial_i, 'Year': year_label}
                           })
       if surg_only:
-        true_surg_preds = dataset.get_surgeon_pred_df_by_case_key(cohort_case_keys, years=years)
+        true_surg_preds = dataset.get_surgeon_pred_df_by_case_key(cohort_case_keys, years=years, care_class=care_class)
         scores_surg = MyScorer.apply_scorers(scorers, true_surg_preds[dataset.outcome], true_surg_preds[SPS_PRED],
                                              enable_warning=False)
         perf_df = append_perf_row_generic(
@@ -267,7 +267,7 @@ def eval_model_by_cohort_Xydata(trial_i, dataset: Dataset, clf, cohort_to_XyKeys
 
 # Evaluates the model performance on each cohort
 def eval_model_by_cohort(dataset: Dataset, clf, scorers=None, cohort_type=SURG_GROUP, trial_i=None,
-                         sda_only=False, surg_only=False, years=None,
+                         sda_only=False, surg_only=False, years=None, care_class=None,
                          train_perf_df=None, test_perf_df=None):
   assert cohort_type in COHORT_TYPE_SET, f'cohort_type must be ont of {COHORT_TYPE_SET}'
 
@@ -282,12 +282,12 @@ def eval_model_by_cohort(dataset: Dataset, clf, scorers=None, cohort_type=SURG_G
   # Evaluate on Training set for each cohort
   cohort_to_XyKeys_train = dataset.get_cohort_to_Xytrains(cohort_type, sda_only=sda_only, surg_only=surg_only, years=years)
   train_perf_df = eval_model_by_cohort_Xydata(trial_i, dataset, clf, cohort_to_XyKeys_train, 'train', scorers=scorers,
-                                              perf_df=train_perf_df, surg_only=surg_only, years=years)
+                                              perf_df=train_perf_df, surg_only=surg_only, years=years, care_class=care_class)
 
   # Evaluate on Test set for each cohort
   cohort_to_XyKeys_test = dataset.get_cohort_to_Xytests(cohort_type, sda_only=sda_only, surg_only=surg_only, years=years)
   test_perf_df = eval_model_by_cohort_Xydata(trial_i, dataset, clf, cohort_to_XyKeys_test, 'test', scorers=scorers,
-                                             perf_df=test_perf_df, surg_only=surg_only, years=years)
+                                             perf_df=test_perf_df, surg_only=surg_only, years=years, care_class=care_class)
 
   train_perf_df.sort_values(by=['Count', 'Cohort', 'Model'], ascending=False, inplace=True)  # 'accuracy'
   test_perf_df.sort_values(by=['Count', 'Cohort', 'Model'], ascending=False, inplace=True)  # 'accuracy'
@@ -296,7 +296,7 @@ def eval_model_by_cohort(dataset: Dataset, clf, scorers=None, cohort_type=SURG_G
 
 # Evaluate model on various groups of cases (e.g. pure SDA cases, cases with surgeon prediction, all cases etc.)
 def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False, surg_only=False, years=None,
-               cohort='All', show_confmat=False, train_perf_df=None, test_perf_df=None):
+               cohort='All', care_class=None, show_confmat=False, train_perf_df=None, test_perf_df=None):
   if scorers is None:
     scorers = deepcopy(DEFAULT_SCORERS)
   if train_perf_df is None:
@@ -311,9 +311,9 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
   year_label = get_year_label(years, dataset)
 
   # Get train & test X, y under sda, surg, years filters
-  Xtrain, ytrain = dataset.get_Xytrain_by_case_key(dataset.train_case_keys,
+  Xtrain, ytrain = dataset.get_Xytrain_by_case_key(dataset.train_case_keys, care_class=care_class,
                                                    sda_only=sda_only, surg_only=surg_only, years=years)
-  Xtest, ytest = dataset.get_Xytest_by_case_key(dataset.test_case_keys,
+  Xtest, ytest = dataset.get_Xytest_by_case_key(dataset.test_case_keys, care_class=care_class,
                                                 sda_only=sda_only, surg_only=surg_only, years=years)
 
   # Apply trained clf and evaluate
@@ -342,7 +342,8 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
   # Surgeon performance
   surg_confmat_test = None
   if surg_only:
-    surg_train, surg_test, surg_confmat_test = eval_surgeon_perf(dataset, scorers, show_confmat, years=years)
+    surg_train, surg_test, surg_confmat_test = eval_surgeon_perf(dataset, scorers, show_confmat,
+                                                                 years=years, care_class=care_class)
     if len(surg_train) > 0:
       train_perf_df = append_perf_row_generic(
         train_perf_df, surg_train, {**get_class_count(ytrain, outcome=dataset.outcome),

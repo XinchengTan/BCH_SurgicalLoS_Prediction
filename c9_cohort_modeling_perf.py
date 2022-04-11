@@ -12,7 +12,7 @@ from utils_eval import *
 
 # TODO: update show_best_xxxx: 1. change function name, 2. exclude surgeon perf from model perf
 
-def add_surgeon_cohort_perf(cohort, clf, dataset: Dataset, Xtype, scorers, trial_i, years, perf_df):
+def add_surgeon_cohort_perf(cohort, clf, dataset: Dataset, Xtype, scorers, trial_i, years, care_class, perf_df):
   year_label = get_year_label(years)
   md_name = get_clf_name(clf)
 
@@ -22,7 +22,7 @@ def add_surgeon_cohort_perf(cohort, clf, dataset: Dataset, Xtype, scorers, trial
     X, y, data_case_keys = dataset.Xtest, dataset.ytest, dataset.test_case_keys
 
   # Fetch surg_pred and true outcome
-  surg_pred_true = dataset.get_surgeon_pred_df_by_case_key(data_case_keys, years=years)
+  surg_pred_true = dataset.get_surgeon_pred_df_by_case_key(data_case_keys, years=years, care_class=care_class)
   if surg_pred_true.empty:
     scores_dict = get_placeholder_perf_scores_dict(scorers)
   else:
@@ -38,7 +38,8 @@ def add_surgeon_cohort_perf(cohort, clf, dataset: Dataset, Xtype, scorers, trial
 
 
 def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[str, Any], scorers: Iterable[str] = None,
-                    trial_i=None, sda_only=False, surg_only=False, years=None, train_perf_df=None, test_perf_df=None):
+                    trial_i=None, sda_only=False, surg_only=False, years=None, care_class=None,
+                    train_perf_df=None, test_perf_df=None):
   if scorers is None:
     scorers = deepcopy(DEFAULT_SCORERS)
   outcome_type = list(cohort_to_dataset.values())[0].outcome
@@ -51,9 +52,9 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
 
   # For each cohort dataset, evaluate the performance of the model trained specifically from its Xtrain
   for cohort, dataset in cohort_to_dataset.items():
-    Xtrain, ytrain = dataset.get_Xytrain_by_case_key(dataset.train_case_keys,
+    Xtrain, ytrain = dataset.get_Xytrain_by_case_key(dataset.train_case_keys, care_class=care_class,
                                                      sda_only=sda_only, surg_only=surg_only, years=years)
-    Xtest, ytest = dataset.get_Xytest_by_case_key(dataset.test_case_keys,
+    Xtest, ytest = dataset.get_Xytest_by_case_key(dataset.test_case_keys, care_class=care_class,
                                                   sda_only=sda_only, surg_only=surg_only, years=years)
     clf = cohort_to_clf.get(cohort)
     if (clf is not None) and (Xtrain.shape[0] > 0 and Xtest.shape[0] > 0):
@@ -87,8 +88,10 @@ def eval_cohort_clf(cohort_to_dataset: Dict[str, Dataset], cohort_to_clf: Dict[s
                                         **{'Xtype': 'test', 'Cohort': cohort, 'Model': md_name,
                                            'Count': Xtest.shape[0], 'Trial': trial_i, 'Year': year_label}})
       if surg_only:
-        train_perf_df = add_surgeon_cohort_perf(cohort, clf, dataset, 'train', scorers, trial_i, years, train_perf_df)
-        test_perf_df = add_surgeon_cohort_perf(cohort, clf, dataset, 'test', scorers, trial_i, years, test_perf_df)
+        train_perf_df = add_surgeon_cohort_perf(cohort, clf, dataset, 'train', scorers, trial_i, years, care_class,
+                                                train_perf_df)
+        test_perf_df = add_surgeon_cohort_perf(cohort, clf, dataset, 'test', scorers, trial_i, years, care_class,
+                                               test_perf_df)
 
   train_perf_df = to_numeric_count_cols(train_perf_df)
   test_perf_df = to_numeric_count_cols(test_perf_df)
