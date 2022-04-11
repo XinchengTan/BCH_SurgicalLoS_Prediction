@@ -182,11 +182,13 @@ class MyScorer:
 # Evaluate models' performance across k trials
 def eval_model_all_ktrials(k_datasets, k_model_dict, eval_by_cohort=SURG_GROUP, scorers=None,
                            eval_sda_only=False, eval_surg_only=False, years=None, md_to_show_confmat=None,
-                           train_perf_df=None, test_perf_df=None):
+                           train_perf_df=None, test_perf_df=None, models=None):
   model_to_k_confmats_test = defaultdict(dict)  # only for modeling-all, do not support cohort perf yet
   for kt, dataset_k in tqdm(k_datasets.items()):
     # Model performance
     model_dict = k_model_dict[kt]
+    if models is not None:
+      model_dict = {md: model_dict[md] for md in models}
     for md, clf in model_dict.items():
       if eval_by_cohort is not None:
         print('Cohort-wise eval: ', md)

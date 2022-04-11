@@ -14,6 +14,16 @@ from globals import *
 from c1_data_preprocessing import Dataset
 
 
+def X_contains_nan(X, feature_names, task):
+  # Sanity check if any column contain NA
+  nan_rows, nan_cols = np.where(np.isnan(X))
+  if len(nan_cols) > 0:
+    print(f'**[{task}_main] Column with nan: ', np.array(feature_names)[np.unique(nan_cols)], '\n')
+    return True
+  print(f'**[{task}_main] All feature columns non-NA :)\n')
+  return False
+
+
 # TODO: remove this!!
 # Generate ktrials of shuffled data_df and a set of randomly selected test indices
 def gen_ktrials_test_idxs(dashb_df: pd.DataFrame, ktrials=10, test_pct=0.2):
