@@ -1,5 +1,6 @@
 # Deployment script for training model on historical dataset
 import joblib
+import numpy as np
 import pandas as pd
 from copy import deepcopy
 from sklearn.metrics import accuracy_score
@@ -38,7 +39,7 @@ def init_md_to_clf(md_list: Iterable) -> Dict:
 
 if __name__ == '__main__':
   # 1. Generate training set dataframe with all sources of information combined
-  hist_data_df = prepare_data(data_fp=DATA_DIR / "historic3.csv",
+  hist_data_df = prepare_data(data_fp=DATA_DIR / "historic4.csv",
                          cpt_fp=DATA_DIR / "cpt_hist.csv",
                          cpt_grp_fp=CPT_TO_CPTGROUP_FILE,
                          ccsr_fp=DATA_DIR / "ccsr_hist.csv",
@@ -54,13 +55,14 @@ if __name__ == '__main__':
                          ftr_cols=FEATURE_COLS_NO_WEIGHT_ALLMEDS,
                          col2decile_ftrs2aggf=get_decileFtr_config(),
                          onehot_cols=[CCSRS],
-                         discretize_cols=['AGE_AT_PROC_YRS'],
+                         discretize_cols=[AGE],
                          scaler='robust', scale_numeric_only=True,
                          remove_o2m=(True, True),
                          test_pct=0)
   print(f'\n[train_main] Finished data preprocessing and feature engineering! '
-        f'hist_dataset.Xtest shape: {hist_dataset.Xtrain.shape}, '
-        f'hist_dataset.ytest shape: {hist_dataset.ytrain.shape}\n')
+        f'hist_dataset.Xtrain shape: {hist_dataset.Xtrain.shape}, '
+        f'hist_dataset.ytrain shape: {hist_dataset.ytrain.shape}\n')
+  print('[train_main] Class labels: ', np.unique(hist_dataset.ytrain))
 
   # 4. Train models -- Modify the 'md_list' to add or remove models
   # Supported models can be found in c2_models.get_model()
@@ -78,9 +80,10 @@ if __name__ == '__main__':
     print(f'[train_main] Saved "{md}" to "{md}clf.joblib"')
 
     # 4.3 Evaluate training performance
-    hist_predicted_nnt = clf.predict(hist_dataset.Xtrain)
-    print(f'[train_main] Training Accuracy of {md}: '
-          f'{"{:.1%}".format(accuracy_score(hist_dataset.ytrain, hist_predicted_nnt))}')
+    if md != KNN:
+      hist_predicted_nnt = clf.predict(hist_dataset.Xtrain)
+      print(f'\n[train_main] Training Accuracy of {md}: '
+            f'{"{:.1%}".format(accuracy_score(hist_dataset.ytrain, hist_predicted_nnt))}')
 
   # 5. Save the pipeline meta data for separate testing
   hist_dataset.FeatureEngMod.save_to_pickle(FTR_ENG_MOD_FILE)

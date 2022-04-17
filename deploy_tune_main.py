@@ -116,13 +116,13 @@ if __name__ == '__main__':
   # Modeling
   md_list = [XGBCLF]  # , LGR, KNN, RMFCLF
   cls_weight = get_cls_weight(args)
-  scorers = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_BAL, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_OVERPRED2, SCR_UNDERPRED2, SCR_RMSE]
+  scorers = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_BAL, SCR_RMSE, SCR_MAE, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_OVERPRED2, SCR_UNDERPRED2]
 
   # Result
   result_dir = init_result_dir(AGGREGATIVE_RESULTS_DIR, get_result_dir_name(args))
 
   # 1. Generate training set dataframe with all sources of information combined
-  hist_data_df = prepare_data(data_fp=DATA_DIR / "historic3.csv",
+  hist_data_df = prepare_data(data_fp=DATA_DIR / "historic4.csv",
                               cpt_fp=DATA_DIR / "cpt_hist.csv",
                               cpt_grp_fp=CPT_TO_CPTGROUP_FILE,
                               ccsr_fp=DATA_DIR / "ccsr_hist.csv",
@@ -139,7 +139,7 @@ if __name__ == '__main__':
                          ftr_cols=FEATURE_COLS_NO_WEIGHT_ALLMEDS,
                          col2decile_ftrs2aggf=decile_config,
                          onehot_cols=onehot_cols,
-                         discretize_cols=['AGE_AT_PROC_YRS'],
+                         discretize_cols=[AGE],
                          scaler='robust', scale_numeric_only=True,
                          remove_o2m=(True, True),
                          test_pct=0)
@@ -147,6 +147,7 @@ if __name__ == '__main__':
         f'hist_dataset.Xtrain shape: {hist_dataset.Xtrain.shape}, '
         f'hist_dataset.ytrain shape: {hist_dataset.ytrain.shape}\n'
         f'[tune_main] **Onehot Encoded Columns: {onehot_cols}')
+  print('[tune_main] Class labels: ', np.unique(hist_dataset.ytrain))
 
   # Sanity check if any column contain NA
   nan_rows, nan_cols = np.where(np.isnan(hist_dataset.Xtrain))

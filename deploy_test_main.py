@@ -1,5 +1,6 @@
 # Deployment script for applying pre-trained models
 import joblib
+import numpy as np
 import pickle
 import pandas as pd
 from sklearn.metrics import accuracy_score
@@ -40,11 +41,11 @@ if __name__ == '__main__':
   # ---------------------------------------------------------------------------------------------------------
 
   # 1. Generate test set dataframe with all sources of information combined
-  os_data_df = prepare_data(data_fp=DATA_DIR / "outsample3.csv",
-                            cpt_fp=DATA_DIR / "cpt_os3.csv",
+  os_data_df = prepare_data(data_fp=DATA_DIR / "outsample4.csv",
+                            cpt_fp=DATA_DIR / "cpt_os4.csv",
                             cpt_grp_fp=CPT_TO_CPTGROUP_FILE,
-                            ccsr_fp=DATA_DIR / "ccsr_os3.csv",
-                            medication_fp=DATA_DIR / "medication_os3.csv",
+                            ccsr_fp=DATA_DIR / "ccsr_os4.csv",
+                            medication_fp=DATA_DIR / "medication_os4.csv",
                             chews_fp=DATA_HOME / "chews_raw/chews_os.csv",
                             exclude2021=False,
                             force_weight=False)
@@ -64,6 +65,7 @@ if __name__ == '__main__':
                        ftr_eng=FtrEngMod)
   print(f'[test_main] Finished data preprocessing and feature engineering! '
         f'os_dataset.Xtest shape: {os_dataset.Xtest.shape}, os_dataset.ytest shape: {os_dataset.ytest.shape}')
+  print('[test_main] Class labels: ', np.unique(os_dataset.ytest))
 
   # 4. Load pretrained model
   Clf = load_pretrained_model(PRETRAINED_CLFS_DIR / 'xgbclf.joblib')
