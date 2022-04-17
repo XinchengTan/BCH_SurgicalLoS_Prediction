@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from sklearn.utils import class_weight
 from sklearn.model_selection import KFold
+from sklearn.naive_bayes import ComplementNB, MultinomialNB, CategoricalNB
 
 from globals import *
 from c1_data_preprocessing import Dataset
@@ -97,7 +98,10 @@ def tune_model_randomSearch(md, X, y, kfold, scorers, args, n_iters=20, refit=Fa
   clf, param_space = gen_model_param_space(md, X, y, scorers=scorers, kfold=kfold, use_gpu=use_gpu)
 
   # Adjust gpu n_jobs accordingly
-  n_jobs = int(args.n_jobs) if use_gpu and (torch.cuda.is_available()) else -1  # avoid mem out when tuning on gpu
+  if args is None:
+    n_jobs = -1
+  else:
+    n_jobs = int(args.n_jobs) if use_gpu and (torch.cuda.is_available()) else -1  # avoid mem out when tuning on gpu
 
   if count_total_candidates(param_space) < n_iters:
     print('Default to GridSearchCV, given #candidates < n_iters')
@@ -155,6 +159,16 @@ def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
                    'l1_ratio': [0, 0.01, 0.03, 0.1, 0.3, 0.5, 0.8, 0.9, 0.95, 0.99, 1],
                    }
     clf = LogisticRegression(random_state=SEED, penalty='elasticnet', solver='saga', max_iter=1000)
+  elif md == CATNB:
+    param_space = {'alpha': [0.001, 0.003, 0.01, 0.03, 0.06, 0.1, 0.3, 0.6, 1, 2, 3, 4, 6, 8, 10, 12, 15]}
+    clf = CategoricalNB()
+  elif md == CNB:
+    param_space = {'alpha': [0.001, 0.003, 0.01, 0.03, 0.06, 0.1, 0.3, 0.6, 1, 2, 3, 4, 6, 8, 10, 12, 15],
+                   'norm': [False, True]}
+    clf = ComplementNB()
+  elif md == MNB:
+    param_space = {'alpha': [0.001, 0.003, 0.01, 0.03, 0.06, 0.1, 0.3, 0.6, 1, 2, 3, 4, 6, 8, 10, 12, 15]}
+    clf = MultinomialNB()
   elif md == SVCLF:
     clf = SVC(random_state=SEED, probability=False)
     param_space = {'C': [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],

@@ -240,7 +240,7 @@ class FeatureEngineeringModifier(object):
       .dropna(subset=['CPTS'])  # drop cases with empty CPT list
     Xdf_w_decile = Xdf_w_decile.rename(columns={'CPTS': 'CPT'})\
       .join(cpt_decile.set_index('CPT')[decile_col2aggf.keys()], on='CPT', how='inner')\
-      .groupby('SURG_CASE_KEY')\
+      .groupby('SURG_CASE_KEY') \
       .agg(decile_col2aggf)
     # Drop any placeholder column added by match_Xdf_cols_to_target_ftrs()
     Xdf.drop(columns=decile_col2aggf.keys(), inplace=True, errors='ignore')

@@ -206,6 +206,7 @@ COHORT_TO_CCSRS = {COHORT_TONSIL: CCSRS_TONSIL,
 # according to CDC definition: https://www.cdc.gov/ncbddd/childdevelopment/positiveparenting/infants.html
 AGE_BINS = [0, 0.25, 0.5, 1, 2, 3, 6, 9, 12, 15, 18, float('inf')]
 WEIGHT_BINS = [float('-inf'), -4, -2, -1, 0, 1, 2, 4, float('inf')]
+MILES_BINS = [0, ]
 
 DELTA = 1e-8
 SEED = 998
@@ -232,7 +233,7 @@ if not COMBINE_01:
 else:
   NNT_CUTOFFS = list(range(1, MAX_NNT+1))
   NNT_CLASSES = list(range(MAX_NNT + 1))
-  NNT_CLASS_LABELS = [str(i) for i in range(1, MAX_NNT + 1)] + [f'{MAX_NNT + 1}+']
+  NNT_CLASS_LABELS = [r'$\leq$1'] + [str(i) for i in range(2, MAX_NNT + 1)] + [r'$\geq$' + str(MAX_NNT + 1)]
 NNT_CLASS_CNT = len(NNT_CLASSES)
 
 # Dataset type
@@ -285,6 +286,9 @@ LGR = 'lgr'  # L2 reg
 LGR_L1 = 'lgr-l1'
 LGR_L12 = 'lgr-l12'
 LGRCV = 'lgr-cv'
+CATNB = 'categorical-nb'
+CNB = 'complement-nb'
+MNB = 'multinomial-nb'
 SVCLF = 'svc'
 SVC_POLY = 'svc-poly'
 SVC_POLY3 = 'svc-poly3'
