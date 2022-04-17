@@ -78,6 +78,7 @@ def get_result_dir_name(args):
   time_id = datetime.datetime.now(tz=pytz.timezone('US/Eastern')).strftime('%m-%d_%H:%M:%S')
   dir_name = f'{args.res_prefix}' \
              f'{"+".join(args.oh_cols)}' \
+             f'-{args.scaler}Scaler' \
              f'-cw{args.cls_weight.replace(".", "p", 1)}' \
              f'-{time_id}'
   return dir_name
