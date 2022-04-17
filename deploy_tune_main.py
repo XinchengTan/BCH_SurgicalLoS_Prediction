@@ -29,6 +29,7 @@ def get_args():
   # Model tuning
   parser.add_argument('--cls_weight', default='none', type=str)  # None, 'balanced', or a float
   parser.add_argument('--n_iter', default=20, type=int)
+  parser.add_argument('--models', default=[], nargs='+')
 
   # Save results
   parser.add_argument('--res_prefix', default='', type=str)  # prefix of result dir
@@ -110,13 +111,15 @@ if __name__ == '__main__':
   # Data
   outcome = args.outcome
   force_weight = args.weight != 'none'
+  scaler = None if args.scaler == 'none' else args.scaler
   onehot_cols = get_onehot_cols(args)
   decile_config = get_decileFtr_config()
 
   # Modeling
-  md_list = [XGBCLF]  # , LGR, KNN, RMFCLF
+  md_list = [XGBCLF]  if len(args.models) == 0 else args.models  # , LGR, KNN, RMFCLF
   cls_weight = get_cls_weight(args)
-  scorers = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_BAL, SCR_RMSE, SCR_MAE, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_OVERPRED2, SCR_UNDERPRED2]
+  scorers = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_BAL, SCR_RMSE, SCR_MAE,
+             SCR_OVERPRED0, SCR_UNDERPRED0, SCR_OVERPRED2, SCR_UNDERPRED2]
 
   # Result
   result_dir = init_result_dir(AGGREGATIVE_RESULTS_DIR, get_result_dir_name(args))
@@ -140,7 +143,7 @@ if __name__ == '__main__':
                          col2decile_ftrs2aggf=decile_config,
                          onehot_cols=onehot_cols,
                          discretize_cols=[AGE],
-                         scaler='robust', scale_numeric_only=True,
+                         scaler=scaler, scale_numeric_only=True,
                          remove_o2m=(True, True),
                          test_pct=0)
   print(f'\n[tune_main] Finished data preprocessing and feature engineering! '
