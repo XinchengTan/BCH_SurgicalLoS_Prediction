@@ -211,7 +211,7 @@ class Dataset(object):
       filtered_case_keys = np.intersect1d(filtered_case_keys, years_case_keys)
     if care_class is not None:
       care_case_keys = self.care_to_case_keys.get(care_class, [])
-      filtered_case_keys = np.intersect1d([filtered_case_keys, care_case_keys])
+      filtered_case_keys = np.intersect1d(filtered_case_keys, care_case_keys)
     return filtered_case_keys.astype(int)
 
   def get_cohort_to_Xydata_(self, by_cohort, isTrain=True, sda_only=False, surg_only=False, years=None, care_class=None):
@@ -607,7 +607,12 @@ def gen_y_nnt(y):
   elif not isinstance(y, np.ndarray):
     y = np.array(y)
   y = np.round(y)
-  y[y > MAX_NNT] = MAX_NNT + 1
+  if COMBINE_01:
+    y[y == 0] = 1  # 0: los = 0 or 1
+    y -= 1  # shift each class label to 'los-1'
+    y[y >= MAX_NNT] = MAX_NNT  # max_nnt: los > max_nnt
+  else:
+    y[y > MAX_NNT] = MAX_NNT + 1
   return y
 
 
