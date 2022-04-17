@@ -81,8 +81,8 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=N
 
   cpt_df = cpt_df.groupby('SURG_CASE_KEY')\
     .agg({
-    'CPT_CODE': lambda x: list(x),
-    'CPT_GROUP': lambda x: list(x)
+    'CPT_CODE': lambda x: list(set(x)),
+    'CPT_GROUP': lambda x: list(set(x))
   })\
     .reset_index()
   print("\nDiscarded %d cases whose CPT(s) are all unknown!\n" % (all_cases_cnt - cpt_df.shape[0]))
@@ -98,7 +98,7 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=N
   print_df_info(diags_df, "Diagnosis DF", other_cols=['ccsr_1'])
   diags_df = diags_df.dropna(axis=0, how='any', subset=['ccsr_1'])\
     .groupby('SURG_CASE_KEY')\
-    .agg({'ccsr_1': lambda x: list(x)})\
+    .agg({'ccsr_1': lambda x: list(set(x))})\
     .reset_index()\
     .rename(columns={'ccsr_1': 'CCSRS'})  # 'icd10': 'ICD10S', 'icd10': lambda x: list(x)
 
@@ -144,7 +144,19 @@ def print_df_info(df, dfname="Dashboard", other_cols=None):
   print("\n")
 
 
-def join_med_df_list_rep(med_df, dashb_df, levels=(1,)):
+def active_med_df(med_df, keep_status=None):
+  # 3: still taking, as listed; 4: still taking, not as prescribed; 10: confirmed, no home meds
+  if keep_status is None:
+    return med_df
+  med_df = med_df.loc[med_df[DRUG_STATUS_KEY].isin(list(keep_status))]
+  return med_df
+
+
+def join_med_df_list_rep(med_df, dashb_df, levels=(1,), keep_status=(3, 4, 10)):
+  # filter out inactive meds
+  med_df = active_med_df(med_df, keep_status=keep_status)
+
+  # get drug level for each medication
   med_levels = [f'LEVEL{l}_DRUG_CLASS_NAME' for l in levels[:3]]
   med_df = med_df[['SURG_CASE_KEY', 'HNA_ORDER_MNEMONIC'] + med_levels]
   med_df.loc[med_df['LEVEL1_DRUG_CLASS_NAME'].isna(), med_levels] = med_df['HNA_ORDER_MNEMONIC']  # use mnemonic if level3 med == null
