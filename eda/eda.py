@@ -9,7 +9,7 @@ import pandas as pd
 import seaborn as sns
 
 from globals import *
-from c1_data_preprocessing import preprocess_y
+from c1_data_preprocessing import gen_y_nnt
 import utils_plot
 import utils
 
@@ -19,41 +19,44 @@ def los_histogram(y, dataType='Training', ax=None):
   if ax is None:
     fig, ax = plt.subplots(1, 1, figsize=(8, 10))
   outcome_cnter = Counter(y)
-  ax.barh(range(MAX_NNT + 2), [outcome_cnter[i] for i in range(MAX_NNT + 2)], align='center')
-  ax.set_xlabel("Number of surgical cases")
+  ys = sorted(outcome_cnter.keys())
+  ax.barh(ys, [outcome_cnter[i] for i in ys], align='center')
+  ax.set_xlabel("Number of surgical cases", fontsize=16)
   ax.invert_yaxis()
-  ax.set_yticks(range(MAX_NNT + 2))
+  ax.set_yticks(ys)
   ax.set_yticklabels(NNT_CLASS_LABELS, fontsize=13)
   ax.set_title("LoS Histogram (%s)" % dataType)
   rects = ax.patches
   total_cnt = len(y)
-  labels = ["{:.1%}".format(outcome_cnter[i] / total_cnt) for i in range(MAX_NNT + 2)]
+  labels = ["{:.1%}".format(outcome_cnter[i] / total_cnt) for i in ys]
   for rect, label in zip(rects, labels):
     ht, wd = rect.get_height(), rect.get_width()
     ax.text(wd + 2.5, rect.get_y() + ht / 2, label,
                 ha='left', va='center', fontsize=15)
 
 
+# TODO: update EDA plots for NNT!!!
 def los_histogram_vert(y, ax=None, outcome=LOS, clip_y=False):
   if ax is None:
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
   y = np.array(y)
   if clip_y:
-    y[y > MAX_NNT] = MAX_NNT + 1
+    y = gen_y_nnt(y)
 
   outcome_cnter = Counter(y)
-  ax.bar(range(MAX_NNT + 2), [outcome_cnter[i] for i in range(MAX_NNT + 2)], align='center', alpha=0.85)
-  ax.set_xlabel(outcome.replace('_', ' '), fontsize=14)
-  ax.set_ylabel("Number of surgical cases", fontsize=14)
-  ax.set_xticks(range(MAX_NNT + 2))
+  xs = sorted(outcome_cnter.keys())
+  ax.bar(xs, [outcome_cnter[i] for i in xs], align='center', alpha=0.85)
+  ax.set_xlabel('Length of stay', fontsize=16)
+  ax.set_ylabel("Number of cases", fontsize=16)
+  ax.set_xticks(xs)
   ax.set_xticklabels(NNT_CLASS_LABELS, fontsize=13)
-  ax.set_title(f"{outcome.replace('_', ' ')} Histogram", fontsize=16, y=1.01)
+  ax.set_title(f"LOS Distribution", fontsize=16, y=1.01)
   rects = ax.patches
   total_cnt = len(y)
-  labels = ["{:.1%}".format(outcome_cnter[i] / total_cnt) for i in range(MAX_NNT + 2)]
+  labels = ["{:.1%}".format(outcome_cnter[i] / total_cnt) for i in xs]
   for rect, label in zip(rects, labels):
     ht, wd = rect.get_height(), rect.get_width()
-    ax.text(rect.get_x() + wd / 2, ht + 2.5, label,
+    ax.text(rect.get_x() + wd / 2, ht + 1, label,
             ha='center', va='bottom', fontsize=13)
 
 
@@ -63,7 +66,7 @@ def los_histogram_by_year(df, outcome=NNT, clip_y=False, show_pct=False, os_df=N
 
   y_df = df[['SURG_CASE_KEY', outcome, ADMIT_DTM]]
   if clip_y:
-    y_df.loc[:, outcome] = y_df[outcome].apply(lambda x: MAX_NNT + 1 if x > MAX_NNT else x)
+    y_df.loc[:, outcome] = gen_y_nnt(y_df[outcome])
   y_df.loc[:, ADMIT_YEAR] = y_df[ADMIT_DTM].dt.year
   if os_df is not None and os_aside:
     y_df.loc[y_df['SURG_CASE_KEY'].isin(os_df['SURG_CASE_KEY']), ADMIT_YEAR] = 3000  # placeholder
@@ -72,53 +75,52 @@ def los_histogram_by_year(df, outcome=NNT, clip_y=False, show_pct=False, os_df=N
   yr_nnt_cnt_df.loc[:, 'annual_total'] = yr_nnt_cnt_df.groupby(ADMIT_YEAR)['count'].transform('sum')
   yr_nnt_cnt_df.loc[:, 'count_pct'] = 100 * yr_nnt_cnt_df['count'] / yr_nnt_cnt_df['annual_total']
   display_col = 'count_pct' if show_pct else 'count'
-  ylabel = 'Annual Surgical Case Count Percentage (%)' if show_pct else 'Number of Surgical Cases'
+  ylabel = 'Case count percentage (%)' if show_pct else 'Number of cases'
 
   if ax is None:
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
   year_set = sorted(yr_nnt_cnt_df[ADMIT_YEAR].unique())
-  year_label = ['Out-of-sample' if yr == 3000 else yr for yr in year_set]
+  year_label = ['Holdout Test' if yr == 3000 else yr for yr in year_set]
   width = 0.8 / len(year_set)
   for yr_idx in range(len(year_set)):
     cur_nnt_cnt = yr_nnt_cnt_df.loc[yr_nnt_cnt_df[ADMIT_YEAR] == year_set[yr_idx]]
     xs = cur_nnt_cnt[outcome].to_numpy() + (2 * yr_idx - 3) * width / 2
     ax.bar(xs, cur_nnt_cnt[display_col], width=width, label=year_label[yr_idx], alpha=0.78)
   ax.set_ylabel(ylabel, fontsize=15, x=-0.1)
-  ax.set_xlabel(outcome.replace('_', ' '), fontsize=15)
+  ax.set_xlabel('Length of stay', fontsize=15)
   ax.yaxis.set_tick_params(labelsize=13)
-  ax.set_xticks(np.arange(MAX_NNT + 2))
+  ax.set_xticks(NNT_CLASSES)
   ax.set_xticklabels(NNT_CLASS_LABELS, fontsize=13)
-  ax.set_title(f"{outcome.replace('_', ' ')} Histogram by Year", fontsize=16, y=1.01)
+  ax.set_title(f"LOS Distribution by Year", fontsize=16, y=1.01)
   ax.legend(prop={'size': 13})
 
 
-def los_histogram_by_care_class(df, outcome=NNT, clip_y=False, pct=False, stack_hist_by_year=False, os_df=None,
-                                ax=None):
+def los_histogram_by_care_class(df, outcome=NNT, clip_y=False, pct=False, stack_hist_by_year=False, os_df=None):
+  fig, ax = plt.subplots(1, 1, figsize=(12, 8))
   if os_df is not None:
     df = pd.concat([df, os_df], axis=0)
   y_df = df[[outcome, CARE_CLASS, SPS_PRED, ADMIT_DTM]]
   y_df[ADMIT_YEAR] = y_df[ADMIT_DTM].dt.year
   if clip_y:
-    y_df.loc[:, outcome] = y_df[outcome].apply(lambda x: MAX_NNT + 1 if x > MAX_NNT else x)
-  if ax is None:
-    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    y_df.loc[:, outcome] = gen_y_nnt(y_df[outcome])
   if pct == 'global':
-    ylabel = 'Global Frequency (%)'
+    ylabel = 'Case count percentage (%)'
     normalizer = df.shape[0]
   elif pct == 'group':
-    ylabel = 'Group-wise Frequency (%)'
+    ylabel = 'Class-wise case count percentage (%)'
     normalizer = np.nan
   else:
-    ylabel = 'Count'
+    ylabel = 'Number of cases'
     normalizer = 1
 
   years = sorted(y_df[ADMIT_YEAR].unique())
   outs = sorted(y_df[outcome].unique())
-  groupby = y_df.groupby(by=CARE_CLASS)
+  groupby = dict(list(y_df.groupby(by=CARE_CLASS)))
   width = 0.8 / len(groupby)
   idx = 1
   care_cls_to_counter_graph = {}
-  for care_cls, c_df in groupby:
+  for care_cls in ['Observation', 'Inpatient']:
+    c_df = groupby[care_cls]
     print(care_cls, c_df.shape[0])
     print(f'{c_df[c_df[SPS_PRED].notnull()].shape[0]} '
           f'({"{:.2%}".format(c_df[c_df[SPS_PRED].notnull()].shape[0] / c_df.shape[0])}) '
@@ -133,25 +135,27 @@ def los_histogram_by_care_class(df, outcome=NNT, clip_y=False, pct=False, stack_
       for yr in years:
         yr_outcome_counter = defaultdict(int)
         yr_outcome_counter.update(Counter(c_df.loc[c_df[ADMIT_YEAR] == yr][outcome]))
-        cur_counter = [yr_outcome_counter[c] / normalizer for c in outs]
+        cur_counter = [100 * yr_outcome_counter[c] / normalizer for c in outs]
         g = ax.bar(xs, cur_counter, bottom=prev_counter, width=width, label=f'{care_cls}: {yr}', alpha=0.9,
                    color=plt.get_cmap('Paired').colors[2 * years.index(yr) + idx - 1])
         prev_counter += np.array(cur_counter)
         graph = g
     else:
-      graph = ax.bar(xs, [outcome_counter[c] / normalizer for c in outs],
+      graph = ax.bar(xs, [100 * outcome_counter[c] / normalizer for c in outs],
                      width=width, label=care_cls, alpha=0.8)
     care_cls_to_counter_graph[care_cls] = (outcome_counter, graph)
     idx += 1
-  ax.set_ylabel(ylabel, fontsize=15, x=-0.1)
-  ax.set_xlabel(outcome.replace('_', ' '), fontsize=15)
-  ax.yaxis.set_tick_params(labelsize=13)
-  ax.set_xticks(np.arange(MAX_NNT + 2))
-  ax.set_xticklabels(NNT_CLASS_LABELS, fontsize=13)
-  ax.set_title(f'{NNT.replace("_", " ")} Distribution over Care Class', fontsize=16, y=1.01)
-  ax.legend(prop={'size': 13})
+  ax.set_ylabel(ylabel, fontsize=16, x=-0.1)
+  ax.set_xlabel('Length of stay', fontsize=16)
+  ax.yaxis.set_tick_params(labelsize=14)
+  ax.set_xticks(outs)
+  ax.set_xticklabels(NNT_CLASS_LABELS, fontsize=14)
+  ax.set_title(f'LOS Distribution over Care Class', fontsize=18, y=1.01)
+  ax.legend(prop={'size': 14})
 
   if pct:
+    # ax.set_yticks(range())
+    # ax.set_yticklabels(NNT_CLASS_LABELS, fontsize=13)
     for care_cls, (counter, graph) in care_cls_to_counter_graph.items():
       i = 0
       keys = sorted(counter.keys())
@@ -162,10 +166,10 @@ def los_histogram_by_care_class(df, outcome=NNT, clip_y=False, pct=False, stack_
           width = p.get_width()
           height = p.get_height()
           x, y = p.get_xy()
-          plt.text(x + width / 2,
-                   y + height + 0.006,
-                   "{:.2%}".format(cnt / total),
-                   ha='center', fontsize=9)
+          ax.text(x + width / 2,
+                  height + 0.8,
+                  int(cnt),  # "{:.1%}".format(cnt / total)
+                  ha='center', va='bottom', fontsize=10)
         i += 1
 
 
@@ -182,16 +186,17 @@ def gender_eda(dashboard_df, outcome=LOS, clip_y=False):
   axs[0].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
 
   if outcome == NNT and clip_y:
-    df.loc[:, outcome] = df[outcome].apply(lambda x: MAX_NNT + 1 if x > MAX_NNT else x)
+    df[outcome] = gen_y_nnt(df[outcome])
+    outs = np.array(sorted(df[outcome].unique()))
     counter_male = Counter(df.loc[df.SEX_CODE == "M", outcome])
     counter_female = Counter(df.loc[df.SEX_CODE == "F", outcome])
-    axs[1].bar(np.arange(MAX_NNT + 2)-0.2,
-               [counter_male[i] for i in range(MAX_NNT + 2)],
+    axs[1].bar(outs-0.2,
+               [counter_male[i] for i in outs],
                width=0.4, alpha=0.78, label='Male')
-    axs[1].bar(np.arange(MAX_NNT + 2)+0.2,
-               [counter_female[i] for i in range(MAX_NNT + 2)],
+    axs[1].bar(outs+0.2,
+               [counter_female[i] for i in outs],
                width=0.4,alpha=0.78, label='Female')
-    axs[1].set_xticks(np.arange(MAX_NNT + 2))
+    axs[1].set_xticks(outs)
     axs[1].set_xticklabels(NNT_CLASS_LABELS, fontsize=13)
   else:
     bins = np.linspace(0, 21, 40)
@@ -199,9 +204,9 @@ def gender_eda(dashboard_df, outcome=LOS, clip_y=False):
     axs[1].hist([df.loc[df.SEX_CODE == "M", outcome],
                  df.loc[df.SEX_CODE == "F", outcome]],
                 bins, alpha=0.7, edgecolor='grey', linewidth=0.5, label=["Male", "Female"])
-  axs[1].set_title(f"{outcome.replace('_', ' ')} Distribution by Gender", fontsize=18, y=1.01)
-  axs[1].set_xlabel("Length of Stay (day)", fontsize=15)
-  axs[1].set_ylabel("Number of patients", fontsize=15)
+  axs[1].set_title(f"LOS Distribution by Gender", fontsize=18, y=1.01)
+  axs[1].set_xlabel("Length of stay", fontsize=15)
+  axs[1].set_ylabel("Number of cases", fontsize=15)
 
   plt.legend()
   plt.show()
@@ -216,7 +221,7 @@ def age_los_eda(dashboard_df, age_bins=None):
   axs[0].hist(dashboard_df.AGE_AT_PROC_YRS, bins=age_bins, alpha=0.7, edgecolor="black", linewidth=0.5)
   axs[0].set_title("Age distribution")
   axs[0].set_xlabel("Age (yr)")
-  axs[0].set_ylabel("Number of patients")
+  axs[0].set_ylabel("Number of cases")
 
   # Average and median LoS of each age group
   avglos_age = [0] * (len(age_bins) - 1)
@@ -244,9 +249,9 @@ def age_los_eda(dashboard_df, age_bins=None):
 
 def age_los_boxplot(df, age_bins=None, ylim=None, outcome=LOS, clip_y=False, violin=False):
   assert outcome in {LOS, NNT}
+  df = df[[outcome, AGE]]
   if clip_y:
-    df = df[[outcome, AGE]]
-    df[outcome] = df[outcome].apply(lambda x: x if x <= MAX_NNT else MAX_NNT + 1)
+    df[outcome] = gen_y_nnt(df[outcome])
 
   if not np.isinf(age_bins[-1]):
     age_bins.append(float('-inf'))
@@ -261,18 +266,21 @@ def age_los_boxplot(df, age_bins=None, ylim=None, outcome=LOS, clip_y=False, vio
     sns.violinplot(data=[age2los[k] for k in sorted(age2los.keys())], ax=ax)
   else:
     ax.boxplot([age2los[i] for i in sorted(age2los.keys())], widths=0.7, notch=True, patch_artist=True)
-  ax.set_title(f"{outcome} Distribution by Age Group", fontsize=19, y=1.01)
+  ax.set_title(f"LOS Distribution by Age Group", fontsize=19, y=1.01)
   ax.set_xlabel("Age (year)", fontsize=16)
-  ax.set_ylabel("LoS (day)", fontsize=16) if outcome == LOS else ax.set_ylabel("Number of Nights", fontsize=16)
+  ax.set_ylabel("LOS (day)", fontsize=16) if outcome == LOS else ax.set_ylabel("Length of stay", fontsize=16)
   if np.isinf(age_bins[-1]):
     labels = [f'{age_bins[i]}-{age_bins[i+1]}\n$n$={len(age2los[i])}' for i in range(len(age_bins)-2)]
     labels.append(f'{age_bins[-2]}+\n$n$={len(age2los[max(age2los.keys())])}')
   else:
     labels = [f'{age_bins[i]}-{age_bins[i + 1]}' for i in range(len(age_bins) - 1)]
   ax.set_xticklabels(labels, fontsize=13)
+  if clip_y and outcome == NNT:
+    ax.set_yticks(NNT_CLASSES)
+    ax.set_yticklabels(NNT_CLASS_LABELS, fontsize=14)
   ax.yaxis.set_tick_params(labelsize=14)
   if ylim:
-    ax.set_ylim([-0.6, ylim])
+    ax.set_ylim([-0.8, ylim])
 
   plt.show()
 
@@ -361,11 +369,12 @@ def language_interpreter_eda(dashb_df, outcome=NNT, preprocess_y=True, freq_rang
   else:
     language_interpreter_eda_violinplot(
       df, outcome, preprocess_y, freq_range,
-      f'Interpreter-needed Language vs {outcome} -- frequency ranking between {freq_range}', True)
+      f'LOS Distribution over Language and Interpreter Need (Top {freq_range[1] - freq_range[0]} most common)', True)
 
 
 # Helper function for plotting
 def language_interpreter_eda_violinplot(df, outcome, preprocess_y, freq_range, title=None, bipart=False):
+  fig, ax = plt.subplots(1, 1, figsize=(16, 9))
   lang2cnt = df.groupby(LANGUAGE).size().to_dict()
   # print('Interpreter Need value count: ', df.groupby(INTERPRETER).size().to_dict())
   print('Language set (#languages = %d): ' % len(lang2cnt), lang2cnt.keys())
@@ -374,10 +383,11 @@ def language_interpreter_eda_violinplot(df, outcome, preprocess_y, freq_range, t
   if freq_range != 'all':
     x_order = x_order[freq_range[0]:freq_range[1]]
     df = df[df[LANGUAGE].isin(x_order)]
-  y = df[outcome]
   if preprocess_y:
-    y[y > MAX_NNT] = MAX_NNT + 1
-    df[outcome] = y
+    df[outcome] = gen_y_nnt(df[outcome])
+    ax.set_yticks(sorted(df[outcome].unique()))
+    ax.set_yticklabels(NNT_CLASS_LABELS, fontsize=14)
+
   hue, hue_order, split, palette, xticklabels = None, None, False, None, [f'{x} ({lang2cnt[x]})' for x in x_order]
   if bipart:
     df = df[df[INTERPRETER].isin(['N', 'Y'])]
@@ -386,20 +396,21 @@ def language_interpreter_eda_violinplot(df, outcome, preprocess_y, freq_range, t
     hue, hue_order, split, palette = INTERPRETER, [True, False], True, {True: 'cornflowerblue', False: 'salmon'}
     lang_cnt_sorted_interTrue = defaultdict(int)
     lang_cnt_sorted_interTrue.update(df[df[INTERPRETER]].groupby(LANGUAGE).size().to_dict())
+    df = df.rename(columns={INTERPRETER: 'Interpreter Need'})
+    hue = 'Interpreter Need'
     xticklabels = [f'{x} {lang_cnt_sorted_interTrue[x], lang2cnt[x]-lang_cnt_sorted_interTrue[x]}'
                    for x in x_order]
 
-  fig, ax = plt.subplots(1, 1, figsize=(16, 9))
   sns.violinplot(x=LANGUAGE, data=df, y=outcome, hue=hue, hue_order=hue_order, split=split, ax=ax,
                  order=x_order, palette=palette)
-  ax.set_xlabel('Language (with count)', fontsize=16)
-  ax.set_ylabel('Number of Nights', fontsize=16)
-  title = f'Language vs {NNT} -- frequency ranking between {freq_range}' if title is None else title
+  ax.set_xlabel('Language (count)', fontsize=16)
+  ax.set_ylabel('Length of stay', fontsize=16)
+  title = f'LOS Distribution over Language (Top {freq_range[1] - freq_range[0]} most common languages)' if title is None else title
   ax.set_title(title, fontsize=18, y=1.01)
   ax.set_xticklabels(xticklabels, fontsize=13)
   ax.yaxis.set_tick_params(labelsize=13)
-  ax.set_ylim([-0.9, 6.9])
-  ax.set_xlim([-0.9, 16.4])
+  ax.set_ylim([-0.90, 5.99])
+  ax.set_xlim([-0.9, 15])
   fig.autofmt_xdate(rotation=45)
   plt.show()
 
@@ -422,20 +433,22 @@ def interpreter_eda(dashb_df, outcome=NNT):
 # ---------------------------------------- Major Region & NNT ----------------------------------------
 # Major region VS NNT boxplot
 def major_region_eda(dashb_df, outcome=NNT, preprocess_y=True):
+  fig, ax = plt.subplots(1, 1, figsize=(12, 8))
   y = dashb_df[outcome].to_numpy()
   if preprocess_y:
-    y[y > MAX_NNT] = MAX_NNT + 1
+    y = gen_y_nnt(y)
+    ax.set_yticks(sorted(np.unique(y)))
+    ax.set_yticklabels(NNT_CLASS_LABELS, fontsize=14)
 
   region2cnt = dashb_df[[REGION]].groupby(REGION).size().to_dict()
   region_type = ['Local', 'Regional', 'National', 'International', 'Unknown']
 
-  fig, ax = plt.subplots(1, 1, figsize=(12, 8))
   sns.violinplot(x=dashb_df[REGION], y=y, order=region_type)  # , scale='width'
-  ax.set_xlabel('Major Region', fontsize=16)
-  ax.set_ylabel('Number of Nights', fontsize=16)
-  ax.set_title('NNT vs. Major Region', fontsize=18, y=1.01)
-  ax.set_ylim([-0.5, 6.5])
-  ax.set_xticklabels([f'{k}\n$n$={region2cnt[k]}' for k in region_type], fontsize=13)
+  ax.set_xlabel('Major region', fontsize=16)
+  ax.set_ylabel('Length of stay', fontsize=16)
+  ax.set_title('LOS Distribution over Major Region', fontsize=18, y=1.01)
+  ax.set_ylim([-0.6, 5.8])
+  ax.set_xticklabels([f'{k}\n$n$={region2cnt[k]}' for k in region_type], fontsize=14)
   plt.show()
 
 
@@ -477,84 +490,66 @@ def miles_traveled_eda(dashb_df, q=15, outcome=NNT, preprocess_y=True, violin=Tr
   Xdf[MILES] = qs
   #ax.set_xlim([0, 1000])
   ax.set_ylim([-1, 40])
-  outy = Xdf[outcome].to_numpy()
   if preprocess_y:
-    outy[outy > MAX_NNT] = MAX_NNT + 1
-    Xdf[outcome] = outy
-    ax.set_ylim([-0.6, 6.6])
+    Xdf[outcome] = gen_y_nnt(Xdf[outcome])
+    ax.set_ylim([-0.6, MAX_NNT + 0.6])
+    ax.set_yticks(sorted(Xdf[outcome].unique()))
+    ax.set_yticklabels(NNT_CLASS_LABELS, fontsize=13)
+  outy = Xdf[outcome].to_numpy()
 
   if violin:
     sns.violinplot(data=Xdf, x=MILES, y=outcome)
     #ax.set_xlim([-20, 500])
   else:
     ax.scatter(dashb_df[MILES], outy)
-  ax.set_xlabel(f'Miles traveled ({q}-quantile upperbound)', fontsize=16)
-  ax.set_ylabel('Number of Bed Nights', fontsize=16)
-  ax.set_title('NNT vs. Miles traveled', fontsize=18, y=1.01)
-  ax.yaxis.set_tick_params(labelsize=13)
+  ax.set_xlabel(f'Miles traveled ({q}-quantiles upperbound)', fontsize=16)
+  ax.set_ylabel('Length of stay', fontsize=16)
+  ax.set_title('LOS Distribution over Miles Traveled', fontsize=18, y=1.01)
+  ax.yaxis.set_tick_params(labelsize=14)
+  ax.xaxis.set_tick_params(labelsize=14)
 
   plt.show()
 
 
-# ---------------------------------------- Organ System Code ----------------------------------------
-# Surgical case histogram VS OS code
-def organ_system_eda(dashboard_df):
-  diag_cnts = [dashboard_df[lbl].sum() for lbl in diaglabels]
+# ---------------------------------------- Problem Count ----------------------------------------
+def problem_cnt_eda(dashb_df, outcome=NNT, preprocess_y=True):
+  df = dashb_df[[outcome, PROBLEM_CNT]]
+  figs, axs = plt.subplots(2, 1, figsize=(15, 16))
+  if outcome == NNT and preprocess_y:
+    df[outcome] = gen_y_nnt(df[outcome])
+    axs[1].set_yticks(sorted(df[outcome].unique()))
+    axs[1].set_yticklabels(NNT_CLASS_LABELS, fontsize=14)
 
-  figs, axs = plt.subplots(1, 2, figsize=(18, 7))
-  cmap = plt.cm.tab20
-  colors = cmap(np.linspace(0., 1., len(diaglabels)))
-  axs[0].pie(diag_cnts, labels=diaglabels, colors=colors, autopct='%.2f%%', startangle=90,
-             wedgeprops={"edgecolor": "gray", 'linewidth': 0.3})
-  axs[0].set_title("Organ System Diagnosis Code Distribution", y=1.07, fontsize=15)
-  axs[0].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+  cap = 20
+  df['capped_probCnt0'] = df[PROBLEM_CNT].apply(lambda x: x if x < cap else cap)
+  counter = Counter(df['capped_probCnt0'])
+  xs = sorted(counter.keys())
+  axs[0].bar(xs, [counter[x] for x in xs], alpha=0.8)
+  axs[0].set_title('Per-case Problem Count Histogram', fontsize=18, y=1.01)
+  axs[0].set_xlabel(f'Problem count per case', fontsize=16)
+  axs[0].set_ylabel('Number of cases', fontsize=16)
+  axs[0].yaxis.set_tick_params(labelsize=14)
+  axs[0].xaxis.set_tick_params(labelsize=14)
+  axs[0].set_xticks(xs)
+  axs[0].set_xticklabels(list(map(int, xs[:-1])) + [r'$\geq$%d'%cap], fontsize=14)
+  rects = axs[0].patches
+  labels = ["{:.1%}".format(counter[x] / df.shape[0]) for x in xs]
+  for rect, label in zip(rects, labels):
+    ht, wd = rect.get_height(), rect.get_width()
+    axs[0].text(rect.get_x() + wd / 2, ht + 2.5, label,
+                ha='center', va='bottom', fontsize=9)
 
-  dashboard_df['OS_code_count'] = dashboard_df[diaglabels].sum(axis=1)
-  print("Number of patients with more than 1 diagnosed conditions: ",
-        dashboard_df[dashboard_df['OS_code_count'] > 1].shape[0])
-
-  bins = range(0, 22, 1)
-  arr = axs[1].hist(dashboard_df['OS_code_count'], bins=bins,
-              color="purple", alpha=0.6, edgecolor="black", linewidth=0.5)
-  axs[1].set_title("Number of Organ System Codes Distribution", fontsize=15,
-                   y=1.05)
-  axs[1].set_xlabel("Number of organ system codes")
-  axs[1].set_ylabel("Number of patients")
-  for i in bins[:-1]:
-    plt.text(arr[1][i],arr[0][i],str(int(arr[0][i])))
-  plt.show()
-
-
-# Organ system code & LOS
-def organ_system_los_boxplot(dashboard_df, exclude_outliers=0, xlim=None):
-  # Box plot of LoS distribution over all 21 OS codes
-  #dashboard_df = utils.drop_outliers(dashboard_df, exclude_outliers)
-
-  diag2los = defaultdict(list)
-  for diag in diaglabels:
-    diag2los[diag] = dashboard_df[dashboard_df[diag] == 1].LENGTH_OF_STAY.tolist()
-  dlabels = [k for k, _ in sorted(diag2los.items(), key=lambda kv: np.median(kv[1]))]
-
-  fig, ax = plt.subplots(figsize=(25, 17))
-  cmap = plt.cm.get_cmap('tab20')
-  colors = [cmap(i) for i in range(len(dlabels))]
-  colors[-1] = plt.cm.get_cmap('tab20b')(2)
-
-  bplot = ax.boxplot([diag2los[d] for d in dlabels], widths=0.7, notch=True, vert=False,
-                     patch_artist=True, flierprops={'color': colors})
-  ax.set_title("LoS Distribution by Organ System Diagnosis Code", fontsize=22, y=1.01)
-  ax.set_xlabel("LoS (day)", fontsize=16)
-  ax.set_yticklabels(dlabels, fontsize=14)
-  ax.set_ylabel("Organ System Code", fontsize=16)
-  if xlim:
-    ax.set_xlim([0, xlim])
-
-  for patch, color in zip(bplot["fliers"], colors):
-    patch.set_markeredgecolor(color)
-    patch.set_markeredgewidth(2)
-
-  for patch, color in zip(bplot['boxes'], colors):
-    patch.set_facecolor(color)
+  #cap = 13
+  df['capped_probCnt1'] = df[PROBLEM_CNT].apply(lambda x: x if x < cap else cap)
+  sns.violinplot(data=df, x='capped_probCnt1', y=outcome)
+  axs[1].set_title('LOS Distribution over Problem Count', fontsize=18, y=1.01)
+  axs[1].set_xlabel(f'Problem count per case', fontsize=16)
+  axs[1].set_ylabel('Length of stay', fontsize=16)
+  axs[1].yaxis.set_tick_params(labelsize=14)
+  #axs[1].xaxis.set_tick_params(labelsize=14)
+  axs[1].set_xticklabels(list(map(int, sorted(df['capped_probCnt1'].unique())[:-1])) + [r'$\geq$%d'%cap], fontsize=14)
+  #ax.scatter(df[PROBLEM_CNT], df[outcome])
+  #ax.hist(df[PROBLEM_CNT], bins=list(range(0, 21)) + [float('inf')])
 
 
 # --------------------------------------- Max total CHEWS & LOS ---------------------------------------
