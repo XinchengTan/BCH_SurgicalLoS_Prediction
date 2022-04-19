@@ -3,12 +3,58 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import random
+from collections import Counter
 
 import globals
 from globals import *
 from c1_data_preprocessing import gen_y_nnt
 
 
+# ------------------------------------------ Medication Type Count - Outcome ------------------------------------------
+def med_count_eda(dashb_df, level, outcome=NNT, preprocess_y=True, max_cnt=5):
+  figs, axs = plt.subplots(2, 1, figsize=(12, 16))
+  MED_col = DRUG_COLS[level-1]
+  if level == 4:
+    level = '3 or below'
+  df = dashb_df[[outcome, MED_col]]
+  df['med_cnt'] = df[MED_col].apply(lambda x: len(set(x)))
+  if preprocess_y and outcome == NNT:
+    df[outcome] = gen_y_nnt(df[outcome])
+    axs[1].set_yticks(sorted(df[outcome].unique()))
+    axs[1].set_yticklabels(NNT_CLASS_LABELS, fontsize=14)
+
+  cap = max_cnt
+  df['capped_cnt0'] = df['med_cnt'].apply(lambda x: x if x < cap else cap)
+  counter = Counter(df['capped_cnt0'])
+  xs = sorted(counter.keys())
+  axs[0].bar(xs, [counter[x] for x in xs], alpha=0.8)
+  axs[0].set_title(f'Medication (Level-{level}) Count Histogram', fontsize=18, y=1.01)
+  axs[0].set_xlabel(f'Level-{level} medication count per case', fontsize=16)
+  axs[0].set_ylabel('Number of cases', fontsize=16)
+  axs[0].yaxis.set_tick_params(labelsize=14)
+  axs[0].xaxis.set_tick_params(labelsize=14)
+  axs[0].set_xticks(xs)
+  axs[0].set_xticklabels(list(map(int, xs[:-1])) + [r'$\geq$%d' % cap], fontsize=14)
+  rects = axs[0].patches
+  labels = ["{:.1%}".format(counter[x] / df.shape[0]) for x in xs]
+  for rect, label in zip(rects, labels):
+    ht, wd = rect.get_height(), rect.get_width()
+    axs[0].text(rect.get_x() + wd / 2, ht + 35, label,
+                ha='center', va='bottom', fontsize=12)
+
+  # cap = 13
+  df['capped_cnt1'] = df['med_cnt'].apply(lambda x: x if x < cap else cap)
+  sns.violinplot(data=df, x='capped_cnt1', y=outcome, scale='width', width=0.75)
+  axs[1].set_title(f'LOS Distribution over Medication (Level-{level}) Count', fontsize=18, y=1.01)
+  axs[1].set_xlabel(f'Level-{level} medication category count per case', fontsize=16)
+  axs[1].set_ylabel('Length of stay', fontsize=16)
+  axs[1].yaxis.set_tick_params(labelsize=14)
+  axs[1].set_xticklabels(list(map(int, sorted(df['capped_cnt1'].unique())[:-1])) + [r'$\geq$%d' % cap],
+                         fontsize=14)
+  plt.tight_layout(h_pad=6)
+  plt.savefig('med_cnt.png', dpi=300)
+
+# ----------------------------------------- Top-k Medication - Outcome -----------------------------------------
 def med_eda(dashb_df: pd.DataFrame, med_level, outcome=LOS, topK=20, xlim=30):
   MED_col = DRUG_COLS[med_level - 1]
   if med_level == 4:
