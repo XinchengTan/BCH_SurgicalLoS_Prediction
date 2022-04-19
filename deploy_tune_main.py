@@ -85,13 +85,11 @@ def init_result_dir(parent_dir, dir_name):
 
 
 def get_result_dir_name(args):
-  time_id = datetime.datetime.now(tz=pytz.timezone('US/Eastern')).strftime('%m-%d_%H:%M:%S')
   dir_name = f'{args.res_prefix}' \
              f'{"+".join(args.oh_cols)}' \
              f'-SCL{args.scaler}' \
              f'-CW{args.cls_weight.replace(".", "p", 1)}' \
-             f'-pcCNT[{"+".join(args.percase_cnt_vars)}]' \
-             f'-{time_id}'
+             f'-pcCNT({"+".join(args.percase_cnt_vars)})'
   return dir_name
 
 
@@ -135,6 +133,7 @@ if __name__ == '__main__':
              SCR_OVERPRED0, SCR_UNDERPRED0, SCR_OVERPRED2, SCR_UNDERPRED2]
 
   # Result
+  time_id = datetime.datetime.now(tz=pytz.timezone('US/Eastern')).strftime('%m-%d_%H:%M')
   result_dir = init_result_dir(RESULT_DIR, get_result_dir_name(args))
 
   # 1. Generate training set dataframe with all sources of information combined
@@ -186,9 +185,9 @@ if __name__ == '__main__':
                                      refit=False,
                                      use_gpu=args.gpu)
     # 3.2 Save CV results
-    pd.DataFrame(search.cv_results_).to_csv(result_dir / f'{md}_cv.csv', index=False)  # result_dir
+    pd.DataFrame(search.cv_results_).to_csv(result_dir / f'{md}_cv_{time_id}.csv', index=False)  # result_dir
 
   # 4. Save config & feature list
-  hist_dataset.FeatureEngMod.save_to_pickle(result_dir / 'FtrEngMod_tune.pkl')
+  hist_dataset.FeatureEngMod.save_to_pickle(result_dir / f'FtrEngMod_tune_{time_id}.pkl')
   print(f'\n[tune_main] Saved FeatureEngineeringModifier to FtrEngMod_tune.pkl!')
 
