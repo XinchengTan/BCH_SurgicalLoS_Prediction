@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import random
 from collections import Counter
 from tqdm import tqdm
 
@@ -12,7 +13,7 @@ from globals import *
 from c1_data_preprocessing import gen_y_nnt
 
 
-
+# ------------------------------------------- Per-case CCSR count - Outcome -------------------------------------------
 def ccsr_cnt_eda(df, outcome=NNT, preprocess_y=True):
   figs, axs = plt.subplots(2, 1, figsize=(16, 18))
   df = df[[outcome, CCSRS]]
@@ -50,6 +51,72 @@ def ccsr_cnt_eda(df, outcome=NNT, preprocess_y=True):
   axs[1].yaxis.set_tick_params(labelsize=14)
   axs[1].set_xticklabels(list(map(int, sorted(df['capped_cnt1'].unique())[:-1])) + [r'$\geq$%d' % cap],
                          fontsize=14)
+
+
+# ------------------------------------------- Top-k CCSR - Outcome -------------------------------------------
+def ccsr_eda(dashb_df: pd.DataFrame, outcome=LOS, topK=20, xlim=30):
+  total = dashb_df.shape[0]
+  df = dashb_df[[LOS, NNT, CCSRS, 'SURG_CASE_KEY']]
+  figs, axs = plt.subplots(1, 2, figsize=(27, 11), gridspec_kw={'width_ratios': [5, 2]})
+  ax, ax2 = axs[0], axs[1]
+  df = df.explode(CCSRS).fillna({CCSRS: 'No CCSRs'})
+
+  groupby = df.groupby(by=CCSRS)
+  df['case_cnt'] = groupby['SURG_CASE_KEY'].transform('count')
+  df['los_median'] = groupby[outcome].transform('median')
+  if xlim:
+    df[outcome] = df[outcome].apply(lambda x: x if x < xlim else xlim + random.uniform(0, 0.5))
+    ax.set_xlim([0, xlim+0.5])
+  pproc_to_los = groupby.agg({outcome: lambda x: list(x),
+                              'case_cnt': lambda x: len(x),
+                              'los_median': lambda x: max(x),
+                              }).reset_index()\
+    .sort_values(by='case_cnt', ascending=False)
+  pproc_to_los['cumsum_cnt'] = pproc_to_los['case_cnt'].cumsum()
+  topK_pproc_dict = pproc_to_los.head(topK).set_index(CCSRS).sort_values(by='los_median').to_dict()
+  topK_pproc_to_los = topK_pproc_dict[outcome]
+
+  cmap = plt.cm.get_cmap('tab20')
+  colors = cmap(np.linspace(0., 1., topK))
+
+  bplot = ax.boxplot(topK_pproc_to_los.values(), widths=0.7, notch=True, vert=False,
+                     patch_artist=True, flierprops={'color': colors})
+  ax.set_title(f"LOS Distribution over {topK} Most Common CCSR Diagnoses", fontsize=24, y=1.02)
+  ax.set_xlabel("Length of stay", fontsize=20)
+  ax.set_ylabel("CCSR diagnosis", fontsize=20)
+  ax.set_xticks(np.arange(0, xlim+1))
+  ax.set_xticklabels(list(map(str, np.arange(0, xlim))) + [r'$\geq$%d'%xlim], fontsize=15)
+  ax.set_yticklabels(topK_pproc_to_los.keys(), fontsize=15)
+
+  for patch, color in zip(bplot["fliers"], colors):
+    patch.set_markeredgecolor(color)
+    patch.set_markeredgewidth(2)
+
+  for patch, color in zip(bplot['boxes'], colors):
+    patch.set_facecolor(color)
+
+  # fig, ax2 = plt.subplots(figsize=(6, 9))
+  ax2.barh(range(topK), topK_pproc_dict['case_cnt'].values(), align='center', alpha=0.85, height=0.7)
+  ax2.set_xlabel("Number of cases", fontsize=19)
+  #ax.invert_yaxis()
+  ax2.set_yticks(range(topK))
+  ax2.set_yticklabels([''] * topK, fontsize=13)
+  ax2.xaxis.set_tick_params(labelsize=13)
+
+  ax2.set_title("CCSR Diagnosis Histogram", fontsize=24, y=1.02)
+  rects = ax2.patches
+  labels = ["{:.1%}".format(cnt / total) for cnt in topK_pproc_dict['case_cnt'].values()]
+  for rect, label in zip(rects, labels):
+    ht, wd = rect.get_height(), rect.get_width()
+    ax2.text(wd + 15, rect.get_y() + ht / 2, label,
+            ha='left', va='center', fontsize=12)
+  ax2.set_xlim([0, 1.1 * max(topK_pproc_dict['case_cnt'].values())])
+  ax2.set_ylim([-0.5, topK-0.5])
+  plt.tight_layout(w_pad=1)
+  plt.savefig('ccsr_top20.png', dpi=500)
+  plt.show()
+
+  return df.head(15)
 
 
 # ---------------------------------------- Organ System Code ----------------------------------------
