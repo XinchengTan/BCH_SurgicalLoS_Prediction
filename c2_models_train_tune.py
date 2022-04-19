@@ -198,7 +198,7 @@ def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
       'max_leaf_nodes': [None] + list(range(5, 101, 5)),
       'max_samples': np.arange(0.1, 1, 0.1),
       'min_samples_leaf': [1] + [i for i in range(2, 17, 2)],
-      'min_samples_split': list(range(2, min_samples_split_max, 3)),
+      'min_samples_split': list(range(2, min_samples_split_max, 10)),
       'n_estimators': [20, 30, 40, 50, 80, 100, 200, 300, 400]
     }
     if not param_space['min_samples_split']:
