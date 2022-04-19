@@ -22,7 +22,7 @@ def get_args():
   parser.add_argument('--gpu', default=False, action='store_true')
   parser.add_argument('--n_jobs', default=-1, type=int)
   parser.add_argument('--outcome', default=NNT, type=str)
-  parser.add_argument('--weight', default='none', choices=['disc', 'cont', 'none'], type=str)
+  parser.add_argument('--weightzs', default='none', choices=['disc', 'cont', 'none'], type=str)
   parser.add_argument('--oh_cols', default=[], nargs='+')
   parser.add_argument('--percase_cnt_vars', default=[], nargs='+')
   parser.add_argument('--scaler', default='robust', type=str)
@@ -88,7 +88,7 @@ def get_result_dir_name(args):
   time_id = datetime.datetime.now(tz=pytz.timezone('US/Eastern')).strftime('%m-%d_%H:%M:%S')
   dir_name = f'{args.res_prefix}' \
              f'{"+".join(args.oh_cols)}' \
-             f'-SCA{args.scaler}' \
+             f'-SCL{args.scaler}' \
              f'-CW{args.cls_weight.replace(".", "p", 1)}' \
              f'-pcCNT[{"+".join(args.percase_cnt_vars)}]' \
              f'-{time_id}'
@@ -122,7 +122,7 @@ if __name__ == '__main__':
   args = get_args()
   # Data
   outcome = args.outcome
-  force_weight = args.weight != 'none'
+  force_weight = args.weightzs != 'none'
   scaler = None if args.scaler == 'none' else args.scaler
   onehot_cols = get_onehot_cols(args.oh_cols)
   percase_cnt_vars = get_onehot_cols(args.percase_cnt_vars)
@@ -186,35 +186,9 @@ if __name__ == '__main__':
                                      refit=False,
                                      use_gpu=args.gpu)
     # 3.2 Save CV results
-    pd.DataFrame(search.cv_results_).to_csv(RESULT_DIR / f'{md}_{get_result_dir_name(args)}_cv.csv',
-                                            index=False)  # result_dir
+    pd.DataFrame(search.cv_results_).to_csv(result_dir / f'{md}_cv.csv', index=False)  # result_dir
 
   # 4. Save config & feature list
-  # hist_dataset.FeatureEngMod.save_to_pickle(result_dir / 'FtrEngMod_tune.pkl')
-  # print(f'\n[tune_main] Saved FeatureEngineeringModifier to FtrEngMod_tune.pkl!')
-
-
-
-  # # 2. Leave 20% data for testing
-  # np.random.seed(SEED)
-  # test_case_keys = np.random.choice(hist_data_df['SURG_CASE_KEY'].to_list(),
-  #                                   size=hist_data_df.shape[0] * 0.2,
-  #                                   replace=False)
-  # pd.DataFrame({'test_case_key': test_case_keys}).to_csv(DATA_HOME / f'{outcome}-tuning_test_keys.csv', index=False)
-
-  # with open(PRETRAINED_CLFS_DIR / f'{time_id}_{md}clf.joblib', 'wb') as md_file:
-  #   joblib.dump(clf, md_file)
-  # print(f'[tune_main] Saved "{md}" to "{time_id}_{md}clf.joblib"')
-
-  # 5. Evaluate performance
-  # train_perf_resp, test_perf_resp = eval_model_all_ktrials(
-  #   {0: hist_dataset},
-  #   {0: md_to_clf},
-  #   eval_by_cohort=None,
-  #   scorers=DEFAULT_SCORERS_BINCLF + [SCR_AUC],
-  # )
-
-  # 6. Save performance of the best of each classifier, and the feature list
-  # save_fp = Path(AGGREGATIVE_RESULTS_DIR / f'{time_id}_tuned_clf_perf.csv')
-  # test_perf_resp.to_csv(save_fp, index=False)
+  hist_dataset.FeatureEngMod.save_to_pickle(result_dir / 'FtrEngMod_tune.pkl')
+  print(f'\n[tune_main] Saved FeatureEngineeringModifier to FtrEngMod_tune.pkl!')
 
