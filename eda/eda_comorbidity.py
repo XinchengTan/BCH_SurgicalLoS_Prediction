@@ -3,9 +3,133 @@ from collections import defaultdict
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+from collections import Counter
 from tqdm import tqdm
 
 import globals
+from globals import *
+from c1_data_preprocessing import gen_y_nnt
+
+
+
+def ccsr_cnt_eda(df, outcome=NNT, preprocess_y=True):
+  figs, axs = plt.subplots(2, 1, figsize=(16, 18))
+  df = df[[outcome, CCSRS]]
+  df['ccsr_cnt'] = df[CCSRS].apply(lambda x: len(set(x)))
+  if preprocess_y and outcome == NNT:
+    df[outcome] = gen_y_nnt(df[outcome])
+    axs[1].set_yticks(sorted(df[outcome].unique()))
+    axs[1].set_yticklabels(NNT_CLASS_LABELS, fontsize=14)
+
+  cap = 20
+  df['capped_cnt0'] = df['ccsr_cnt'].apply(lambda x: x if x < cap else cap)
+  counter = Counter(df['capped_cnt0'])
+  xs = sorted(counter.keys())
+  axs[0].bar(xs, [counter[x] for x in xs], alpha=0.8)
+  axs[0].set_title(f'Per-case CCSR Count Histogram', fontsize=18, y=1.01)
+  axs[0].set_xlabel(f'CCSR count per case', fontsize=16)
+  axs[0].set_ylabel('Number of cases', fontsize=16)
+  axs[0].yaxis.set_tick_params(labelsize=14)
+  axs[0].xaxis.set_tick_params(labelsize=14)
+  axs[0].set_xticks(xs)
+  axs[0].set_xticklabels(list(map(int, xs[:-1])) + [r'$\geq$%d' % cap], fontsize=14)
+  rects = axs[0].patches
+  labels = ["{:.1%}".format(counter[x] / df.shape[0]) for x in xs]
+  for rect, label in zip(rects, labels):
+    ht, wd = rect.get_height(), rect.get_width()
+    axs[0].text(rect.get_x() + wd / 2, ht + 2.5, label,
+                ha='center', va='bottom', fontsize=9)
+
+  # cap = 13
+  df['capped_cnt1'] = df['ccsr_cnt'].apply(lambda x: x if x < cap else cap)
+  sns.violinplot(data=df, x='capped_cnt1', y=outcome)
+  axs[1].set_title('LOS Distribution over CCSR Count', fontsize=18, y=1.01)
+  axs[1].set_xlabel(f'CCSR count per case', fontsize=16)
+  axs[1].set_ylabel('Length of stay', fontsize=16)
+  axs[1].yaxis.set_tick_params(labelsize=14)
+  axs[1].set_xticklabels(list(map(int, sorted(df['capped_cnt1'].unique())[:-1])) + [r'$\geq$%d' % cap],
+                         fontsize=14)
+
+
+# ---------------------------------------- Organ System Code ----------------------------------------
+def os_code_colors():
+  cmap = plt.cm.get_cmap('tab20')
+  colors = cmap(np.linspace(0., 1., len(OS_CODE_LIST) - 1))
+  colors = np.array(list(colors) + [colors[6]])
+  return colors
+
+
+# Surgical case histogram VS OS code
+def organ_system_eda(dashboard_df, show_pct=False):
+  diag_cnts = [dashboard_df[lbl].sum() for lbl in OS_CODE_LIST]
+
+  figs, axs = plt.subplots(1, 2, figsize=(18, 7))
+  colors = os_code_colors()
+  axs[0].pie(diag_cnts, labels=OS_CODE_LIST, colors=colors, autopct='%.2f%%', startangle=90,
+             wedgeprops={"edgecolor": "gray", 'linewidth': 0.3})
+  axs[0].set_title("Organ System Diagnosis Code Distribution", y=1.07, fontsize=16)
+  axs[0].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+
+  dashboard_df['OS_code_count'] = dashboard_df[OS_CODE_LIST].sum(axis=1)
+  print("Number of patients with more than 1 diagnosed conditions: ",
+        dashboard_df[dashboard_df['OS_code_count'] > 1].shape[0])
+
+  os_counter = Counter(dashboard_df['OS_code_count'])
+  xs = sorted(os_counter.keys())
+  axs[1].bar(xs, [os_counter[x] for x in xs],
+             color="purple", alpha=0.6, edgecolor="black", linewidth=0.5)
+  axs[1].set_title("Per-case Body System Diagnoses Count Distribution", fontsize=16, y=1.05)
+  axs[1].set_xlabel("Number of body system diagnoses per case", fontsize=14)
+  axs[1].set_ylabel("Number of cases", fontsize=14)
+  axs[1].set_xticks(xs)
+  rects = axs[1].patches
+  if show_pct:
+    labels = ["{:.1%}".format(os_counter[x] / dashboard_df.shape[0]) for x in xs]
+  else:
+    labels = [str(os_counter[x]) for x in xs]  # "{:.1%}".format(outcome_cnter[i] / total_cnt) for i in xs
+  for rect, label in zip(rects, labels):
+    ht, wd = rect.get_height(), rect.get_width()
+    axs[1].text(rect.get_x() + wd / 2, ht + 2.5, label,
+                ha='center', va='bottom', fontsize=9)
+
+  # for i in bins[:-1]:
+  #   plt.text(arr[1][i],arr[0][i],str(int(arr[0][i])))
+  plt.show()
+
+
+# Organ system code & LOS
+def organ_system_los_boxplot(dashboard_df, exclude_outliers=0, xlim=None):
+  # Box plot of LoS distribution over all 21 OS codes
+  #dashboard_df = utils.drop_outliers(dashboard_df, exclude_outliers)
+
+  diag2los = defaultdict(list)
+  for diag in OS_CODE_LIST:
+    diag2los[diag] = dashboard_df[dashboard_df[diag] == 1].LENGTH_OF_STAY.tolist()
+  dlabels = [k for k, _ in sorted(diag2los.items(), key=lambda kv: np.median(kv[1]))]
+
+  fig, ax = plt.subplots(figsize=(25, 17))
+  colors = os_code_colors()
+  colors = [colors[OS_CODE_LIST.index(diag)] for diag in dlabels]
+
+  bplot = ax.boxplot([diag2los[d] for d in dlabels], widths=0.7, notch=True, vert=False,
+                     patch_artist=True, flierprops={'color': colors})
+  ax.set_title("LOS Distribution over Body System Diagnosis", fontsize=22, y=1.01)
+  ax.set_xlabel("LOS (day)", fontsize=18)
+  ax.set_yticklabels(dlabels, fontsize=14)
+  ax.set_ylabel("Body system diagnosis", fontsize=18)
+  ax.xaxis.set_tick_params(labelsize=14)
+  if xlim:
+    ax.set_xlim([0, xlim])
+
+  for patch, color in zip(bplot["fliers"], colors):
+    patch.set_markeredgecolor(color)
+    patch.set_markeredgewidth(2)
+
+  for patch, color in zip(bplot['boxes'], colors):
+    patch.set_facecolor(color)
+
+
 
 
 def pproc_cohort_ccsr_eda(ppcc_df, topK_ccsr=10, cohort=globals.COHORT_TO_PPROCS):
