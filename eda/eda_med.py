@@ -2,42 +2,124 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import random
 
 import globals
+from globals import *
+from c1_data_preprocessing import gen_y_nnt
 
 
-def med_category_vs_los(df: pd.DataFrame, level, level_decile: pd.DataFrame, freq_range=(0, 20), outcome=globals.LOS,
-                        violin=True):
-  med_col = globals.DRUG_COLS[level-1]  # column name of the medication type at 'level'
+def med_eda(dashb_df: pd.DataFrame, med_level, outcome=LOS, topK=20, xlim=30):
+  MED_col = DRUG_COLS[med_level - 1]
+  if med_level == 4:
+    med_level = '3 or below'
+  total = dashb_df.shape[0]
+  df = dashb_df[[LOS, NNT, MED_col, 'SURG_CASE_KEY']]
+
+  figs, axs = plt.subplots(1, 2, figsize=(27, 11), gridspec_kw={'width_ratios': [5, 2]})
+  ax, ax2 = axs[0], axs[1]
+
+  df = df.explode(MED_col).fillna({MED_col: 'no medication'})
+  groupby = df.groupby(by=MED_col)
+  df['case_cnt'] = groupby['SURG_CASE_KEY'].transform('count')
+  df['los_median'] = groupby[outcome].transform('median')
+  if xlim:
+    df[outcome] = df[outcome].apply(lambda x: x if x < xlim else xlim+random.uniform(0, 0.5))
+    ax.set_xlim([0, xlim+0.5])
+  pproc_to_los = groupby.agg({outcome: lambda x: list(x),
+                              'case_cnt': lambda x: len(x),
+                              'los_median': lambda x: max(x),
+                              }).reset_index()\
+    .sort_values(by='case_cnt', ascending=False)
+  pproc_to_los['cumsum_cnt'] = pproc_to_los['case_cnt'].cumsum()
+  topK_pproc_dict = pproc_to_los.head(topK).set_index(MED_col).sort_values(by='los_median').to_dict()
+  topK_pproc_to_los = topK_pproc_dict[outcome]
+
+  cmap = plt.cm.get_cmap('tab20')
+  colors = cmap(np.linspace(0., 1., topK))
+
+  bplot = ax.boxplot(topK_pproc_to_los.values(), widths=0.7, notch=True, vert=False,
+                     patch_artist=True, flierprops={'color': colors})
+  ax.set_title(f"LOS Distribution over {topK} Most Common Level-{med_level} Medication", fontsize=24, y=1.02)
+  ax.set_xlabel("Length of stay", fontsize=20)
+  ax.set_ylabel(f"Level-{med_level} medication type", fontsize=20)
+  ax.set_xticks(np.arange(0, xlim+1))
+  ax.set_xticklabels(list(map(str, np.arange(0, xlim))) + [r'$\geq$%d'%xlim], fontsize=15)
+  ax.set_yticklabels(topK_pproc_to_los.keys(), fontsize=15)
+
+  for patch, color in zip(bplot["fliers"], colors):
+    patch.set_markeredgecolor(color)
+    patch.set_markeredgewidth(2)
+
+  for patch, color in zip(bplot['boxes'], colors):
+    patch.set_facecolor(color)
+
+  # fig, ax2 = plt.subplots(figsize=(6, 9))
+  ax2.barh(range(topK), topK_pproc_dict['case_cnt'].values(), align='center', alpha=0.85, height=0.7)
+  ax2.set_xlabel("Number of cases", fontsize=19)
+  #ax.invert_yaxis()
+  ax2.set_yticks(range(topK))
+  ax2.set_yticklabels([''] * topK, fontsize=13)
+  ax2.xaxis.set_tick_params(labelsize=13)
+
+  ax2.set_title(f"Level-{med_level} Medication Histogram", fontsize=24, y=1.02)
+  rects = ax2.patches
+  labels = ["{:.1%}".format(cnt / total) for cnt in topK_pproc_dict['case_cnt'].values()]
+  for rect, label in zip(rects, labels):
+    ht, wd = rect.get_height(), rect.get_width()
+    ax2.text(wd + 15, rect.get_y() + ht / 2, label,
+            ha='left', va='center', fontsize=11)
+  ax2.set_xlim([0, 1.1 * max(topK_pproc_dict['case_cnt'].values())])
+  ax2.set_ylim([-0.5, topK-0.5])
+  plt.tight_layout(w_pad=1)
+  plt.savefig('med_top20.png', dpi=500)
+  plt.show()
+
+
+
+def med_category_vs_los(data_df: pd.DataFrame, level, level_decile: pd.DataFrame, freq_range=(0, 20),
+                        outcome=LOS, preprocess_y=False, violin=True):
+  fig, ax = plt.subplots(1, 1, figsize=(20, 13))
+  med_col = DRUG_COLS[level-1]  # column name of the medication type at 'level'
   med_cnt, med_dcl, med_median = f'MED{level}_COUNT', f'MED{level}_DECILE', f'MED{level}_MEDIAN'
-
-  med_exp = df[[outcome, med_col]].explode(med_col).dropna(subset=[med_col])
+  df = data_df[[outcome, med_col]]
+  if outcome == NNT and preprocess_y:
+    df[outcome] = gen_y_nnt(df[outcome])
+    ax.set_yticks(sorted(df[outcome].unique()))
+    ax.set_yticklabels(NNT_CLASS_LABELS, fontsize=14)
+  else:
+    ax.set_ylim(-3, 10)
+  #print(df[outcome].unique())
+  med_exp = df.explode(med_col).dropna(subset=[med_col])
   topK_frequent_med = level_decile.sort_values(by=med_cnt, ascending=False)[freq_range[0]:freq_range[1]]
 
   med_exp_topK_cnt = med_exp[med_exp[med_col].isin(topK_frequent_med[med_col])]\
     .join(level_decile.set_index(med_col)[[med_cnt, med_median, 'MED%d_DECILE' % level]], on=med_col, how='inner')\
-    .sort_values(by=med_median, ascending=False)
+    .sort_values(by=med_median)
 
-  fig, ax = plt.subplots(1, 1, figsize=(20, 13))
   if violin:
     # Violin Plot
-    # White dot: median; thick grey bar: interquantile range (25% - 75%); thin grey bar: rest of data
+    # White dot: median; thick grey bar: interquartile range (25% - 75%); thin grey bar: rest of data
     sns.violinplot(med_exp_topK_cnt[med_col], med_exp_topK_cnt[outcome], ax=ax)
-    ax.plot(med_exp_topK_cnt[med_col], med_exp_topK_cnt[med_dcl], linestyle='None',
-            marker="*", markersize=10, markeredgecolor="red", markerfacecolor="red")
+    # ax.plot(med_exp_topK_cnt[med_col], med_exp_topK_cnt[med_dcl], linestyle='None',
+    #         marker="*", markersize=10, markeredgecolor="tomato", markerfacecolor="tomato")
   else:
     # Scatter Plot
     ax.scatter(med_exp_topK_cnt[med_col], med_exp_topK_cnt[outcome], facecolors='none', edgecolors='g')
     ax.plot(med_exp_topK_cnt[med_col], med_exp_topK_cnt[med_dcl], linestyle='None',
             marker="*", markersize=10, markeredgecolor="red", markerfacecolor="red")
 
-  ax.set_ylim(-5, 10)
-  ax.set_xlabel("Level %d Medication Type" % level, fontsize=15)
-  ax.set_ylabel("Length of Stay (days)", fontsize=15)
-  ax.set_title("LoS Distribution by Medication Type (frequency range=%s)" % str(freq_range), fontsize=18, y=1.01)
-  ax.xaxis.set_tick_params(labelsize=13)
-  ax.yaxis.set_tick_params(labelsize=13)
+  ax.set_xlabel("Level-%d medication type" % level, fontsize=16)
+  ax.set_ylabel("Length of stay", fontsize=16)
+  ax.set_title(f"LOS Distribution by Level-{level} Medication Type (frequency range={freq_range})", fontsize=20, y=1.01)
+  ax.set_xticks(np.arange(freq_range[0], freq_range[1]))
+  xtick_labels = med_exp_topK_cnt[med_col].unique()
+  xtick_suffix = [level_decile.set_index(med_col).loc[med, med_cnt] for med in xtick_labels]
+  ax.set_xticklabels([f'{xtick_labels[i]}\n($n$={xtick_suffix[i]})'
+                      for i in range(freq_range[0], freq_range[1])], fontsize=13)
+  ax.yaxis.set_tick_params(labelsize=14)
   fig.autofmt_xdate(rotation=45)
   plt.show()
+
 
 
