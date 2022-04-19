@@ -24,6 +24,7 @@ def get_args():
   parser.add_argument('--outcome', default=NNT, type=str)
   parser.add_argument('--weight', default='none', choices=['disc', 'cont', 'none'], type=str)
   parser.add_argument('--oh_cols', default=[], nargs='+')
+  parser.add_argument('--percase_cnt_vars', default=[], nargs='+')
   parser.add_argument('--scaler', default='robust', type=str)
 
   # Model tuning
@@ -38,17 +39,26 @@ def get_args():
   return args
 
 
-def get_onehot_cols(args):
+# can be reused to parse percase_cnt_vars
+def get_onehot_cols(args_oh_cols):
   oh_cols = []
-  for oh in args.oh_cols:
-    if oh == 'cpt':
-      oh_cols.append(CPTS)
-    elif oh == 'ccsr':
+  for oh in args_oh_cols:
+    if oh == 'ccsr':
       oh_cols.append(CCSRS)
+    elif oh == 'cpt':
+      oh_cols.append(CPTS)
     elif oh == 'pproc':
       oh_cols.append(PRIMARY_PROC)
     elif oh == 'cptgrp':
       oh_cols.append(CPT_GROUPS)
+    elif oh == 'med1':
+      oh_cols.append(DRUG_COLS[0])
+    elif oh == 'med2':
+      oh_cols.append(DRUG_COLS[1])
+    elif oh == 'med3':
+      oh_cols.append(DRUG_COLS[2])
+    elif oh == 'med123':
+      oh_cols.append(DRUG_COLS[3])
   return oh_cols
 
 
@@ -78,8 +88,9 @@ def get_result_dir_name(args):
   time_id = datetime.datetime.now(tz=pytz.timezone('US/Eastern')).strftime('%m-%d_%H:%M:%S')
   dir_name = f'{args.res_prefix}' \
              f'{"+".join(args.oh_cols)}' \
-             f'-{args.scaler}Scaler' \
-             f'-cw{args.cls_weight.replace(".", "p", 1)}' \
+             f'-SCA{args.scaler}' \
+             f'-CW{args.cls_weight.replace(".", "p", 1)}' \
+             f'-pcCNT[{"+".join(args.percase_cnt_vars)}]' \
              f'-{time_id}'
   return dir_name
 
@@ -113,17 +124,18 @@ if __name__ == '__main__':
   outcome = args.outcome
   force_weight = args.weight != 'none'
   scaler = None if args.scaler == 'none' else args.scaler
-  onehot_cols = get_onehot_cols(args)
+  onehot_cols = get_onehot_cols(args.oh_cols)
+  percase_cnt_vars = get_onehot_cols(args.percase_cnt_vars)
   decile_config = get_decileFtr_config()
 
   # Modeling
-  md_list = [XGBCLF]  if len(args.models) == 0 else args.models  # , LGR, KNN, RMFCLF
+  md_list = [XGBCLF] if len(args.models) == 0 else args.models  # , LGR, KNN, RMFCLF
   cls_weight = get_cls_weight(args)
   scorers = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_BAL, SCR_RMSE, SCR_MAE,
              SCR_OVERPRED0, SCR_UNDERPRED0, SCR_OVERPRED2, SCR_UNDERPRED2]
 
   # Result
-  result_dir = init_result_dir(AGGREGATIVE_RESULTS_DIR, get_result_dir_name(args))
+  result_dir = init_result_dir(RESULT_DIR, get_result_dir_name(args))
 
   # 1. Generate training set dataframe with all sources of information combined
   hist_data_df = prepare_data(data_fp=DATA_DIR / "historic4.csv",
@@ -142,6 +154,7 @@ if __name__ == '__main__':
   hist_dataset = Dataset(df=hist_data_df, outcome=outcome,
                          ftr_cols=FEATURE_COLS_NO_WEIGHT_ALLMEDS,
                          col2decile_ftrs2aggf=decile_config,
+                         percase_cnt_vars=percase_cnt_vars,
                          onehot_cols=onehot_cols,
                          discretize_cols=[AGE],
                          scaler=scaler, scale_numeric_only=True,
@@ -173,11 +186,12 @@ if __name__ == '__main__':
                                      refit=False,
                                      use_gpu=args.gpu)
     # 3.2 Save CV results
-    pd.DataFrame(search.cv_results_).to_csv(result_dir / f'{md}_CV_results.csv', index=False)
+    pd.DataFrame(search.cv_results_).to_csv(RESULT_DIR / f'{md}_{get_result_dir_name(args)}_cv.csv',
+                                            index=False)  # result_dir
 
   # 4. Save config & feature list
-  hist_dataset.FeatureEngMod.save_to_pickle(result_dir / 'FtrEngMod_tune.pkl')
-  print(f'\n[tune_main] Saved FeatureEngineeringModifier to FtrEngMod_tune.pkl!')
+  # hist_dataset.FeatureEngMod.save_to_pickle(result_dir / 'FtrEngMod_tune.pkl')
+  # print(f'\n[tune_main] Saved FeatureEngineeringModifier to FtrEngMod_tune.pkl!')
 
 
 

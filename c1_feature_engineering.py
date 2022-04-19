@@ -15,13 +15,14 @@ class FeatureEngineeringModifier(object):
                input_scaler_type=None, scale_numeric_only=True,
                col2decile_ftrs2aggf=DEFAULT_COL2DECILE_FTR2AGGF, decile_outcome=LOS, decile_gen=None,
                add_hybrid_pproc_cptgrp_col=False, nonrare_pprocs=None, rare_pproc_cptgrp_cohorts=None,
-               ftr_cols=None, feature_names=None):
+               ftr_cols=None, feature_names=None, percase_cnt_vars=DEFAULT_PERCASE_CNT_VARS):
     # Check args
     self._check_args(onehot_cols, decile_gen)
 
     # Basic feature modifications (one-hot encoding, ccsr trimming, discretization of continuous col)
     self.onehot_cols = onehot_cols
     self.onehot_dtypes = [ONEHOT_COL2DTYPE[oh] for oh in self.onehot_cols]  # dtype of the columns to be onehot-encoded
+    self.percase_cnt_vars = percase_cnt_vars
     self.trimmed_ccsr = trimmed_ccsr
     self.discretize_cols = discretize_cols
     # Meta data for input scaler
@@ -64,6 +65,25 @@ class FeatureEngineeringModifier(object):
   def add_feature_surgery_length(self, data_df: pd.DataFrame):
 
     return
+
+  def add_percase_clinical_var_count(self, Xdf: pd.DataFrame, clinical_vars=None, inplace=False):
+    if clinical_vars is None:
+      clinical_vars = self.percase_cnt_vars
+    if clinical_vars is None or len(clinical_vars) == 0:
+      return Xdf
+
+    if not inplace:
+      Xdf = Xdf.copy()
+    var_to_percase_cnt = {CCSRS: CCSR_PERCASE_CNT, CPTS: CPT_PERCASE_CNT, CPT_GROUPS: CPT_GROUP_PERCASE_CNT,
+                          DRUG_COLS[0]: MED1_PERCASE_CNT, DRUG_COLS[1]: MED2_PERCASE_CNT, DRUG_COLS[2]: MED3_PERCASE_CNT,
+                          DRUG_COLS[3]: MED123_PERCASE_CNT}
+    for var in clinical_vars:
+      percase_cnt_col = var_to_percase_cnt.get(var, None)
+      if percase_cnt_col is None:
+        warnings.warn(f'[add_percase_clinical_var_count] Skipped an unknown clinical variable "{var}"!')
+        continue
+      Xdf[percase_cnt_col] = Xdf[var].apply(lambda x: len(list(x)))
+    return Xdf
 
   def discretize_columns_df(self, Xdf: pd.DataFrame, discretize_cols=None, inplace=False):
     if discretize_cols is None:

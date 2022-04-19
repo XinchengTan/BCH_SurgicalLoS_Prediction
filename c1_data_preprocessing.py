@@ -39,7 +39,7 @@ class Dataset(object):
                onehot_cols=[], discretize_cols=None, test_pct=0.2, test_case_keys=None, cohort=COHORT_ALL,
                trimmed_ccsr=None, target_features=None, decile_gen=None, ftr_eng: FeatureEngineeringModifier=None,
                add_hybrid_pproc_cptgrp_col=False, nonrare_pprocs=None, rare_pproc_cptgrp_cohorts=None,
-               remove_o2m=(True, True), scaler=None, scale_numeric_only=True, care_class=None):
+               remove_o2m=(True, True), scaler=None, scale_numeric_only=True, care_class=None, percase_cnt_vars=None):
     # For record keeping
     self.df = df.copy()  # only accessed with properly filtered surg_case_keys
     self.outcome = outcome
@@ -84,6 +84,7 @@ class Dataset(object):
     if ftr_eng is None:
       self.FeatureEngMod = FeatureEngineeringModifier(
         onehot_cols, trimmed_ccsr, discretize_cols,
+        percase_cnt_vars=percase_cnt_vars,
         input_scaler_type=scaler, scale_numeric_only=scale_numeric_only,
         col2decile_ftrs2aggf=col2decile_ftrs2aggf, decile_outcome=LOS, decile_gen=decile_gen,
         add_hybrid_pproc_cptgrp_col=add_hybrid_pproc_cptgrp_col,
@@ -330,6 +331,9 @@ class Dataset(object):
     # Discretize certain continuous columns by request
     self.FeatureEngMod.discretize_columns_df(Xdf, inplace=True)
 
+    # Engineer per-case count feature for clinical variables
+    Xdf = self.FeatureEngMod.add_percase_clinical_var_count(Xdf)
+
     # One-hot encode indicator variables
     Xdf = self.FeatureEngMod.onehot_encode_cols(Xdf, onehot_cols)  # onehot_dtypes should have been specified in FeatureEngMod
 
@@ -354,6 +358,7 @@ class Dataset(object):
     if remove_nonnumeric:
       Xdf.drop(columns=NON_NUMERIC_COLS + ftrEng_dep_cols_to_drop, inplace=True, errors='ignore')
     print("\nAfter droppping nonnumeric cols: Xdf - ", Xdf.shape)
+
     # Convert dataframe to numerical numpy matrix and save the corresponding features' names
     X = Xdf.to_numpy(dtype=np.float64)
     target_features = Xdf.columns.to_list()
@@ -397,6 +402,9 @@ class Dataset(object):
 
     # Discretize certain continuous columns by request
     self.FeatureEngMod.discretize_columns_df(Xdf, inplace=True)
+
+    # Engineer per-case count feature for clinical variables
+    Xdf = self.FeatureEngMod.add_percase_clinical_var_count(Xdf)
 
     if onehot_cols is not None:
       # One-hot encode the required columns according to a given historical set of features (e.g. CPT, CCSR etc.)
