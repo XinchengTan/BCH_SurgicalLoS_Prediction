@@ -20,7 +20,7 @@ Event2DatetimeCol = {ADMIT: 'HAR_ADMIT_DATE', DISCHARGE: 'HAR_DISCHARGE_DATE',
 
 
 # -------------------------------- Patient hospital event time of day & NNT --------------------------------
-def plot_event_time_of_day_los(dashb_df, event=globals.ADMIT, outcome=globals.NNT):
+def plot_event_time_of_day_los(dashb_df, event=ADMIT, outcome=NNT):
   event_col = Event2DatetimeCol.get(event, None)
   if event_col is None:
     raise ValueError(f'{event} column is not available yet!')
@@ -30,8 +30,8 @@ def plot_event_time_of_day_los(dashb_df, event=globals.ADMIT, outcome=globals.NN
   print(hr2cnt)
 
   fig, ax = plt.subplots(1, 1, figsize=(15, 10))
-  if outcome == globals.NNT:
-    ax.set_yticklabels(globals.NNT_CLASS_LABELS)
+  if outcome == NNT:
+    ax.set_yticklabels(NNT_CLASS_LABELS)
     df.loc[df[outcome] > MAX_NNT] = MAX_NNT + 1
   sns.violinplot(data=df, x=event_col+'_HOUR', y=outcome, ax=ax)
   ax.set_title(f'{event} Hour of Day & {outcome} Distribution', fontsize=19)
@@ -45,23 +45,23 @@ def plot_event_time_of_day_los(dashb_df, event=globals.ADMIT, outcome=globals.NN
 def time_of_day_historgram(df, event='ADMIT'):
   total = df.SURG_CASE_KEY.nunique()
   alpha = 0.9
-  if event == globals.ADMIT_DTM:
+  if event == ADMIT_DTM:
     event_df = df.groupby(df[ADMIT_DTM].dt.hour).SURG_CASE_KEY.count()
     event_txt = "Admission"
     alpha = 0.65
-  elif event == globals.WHEELOUT:
+  elif event == WHEELOUT:
     event_df = df.groupby(df.ACTUAL_STOP_DATE_TIME.dt.hour).SURG_CASE_KEY.count()
     event_txt = "Wheel-out"
-  elif event == globals.DISCHARGE_DTM:
+  elif event == DISCHARGE_DTM:
     event_df = df.groupby(df[DISCHARGE_DTM].dt.hour).SURG_CASE_KEY.count()
     event_txt = "Discharge"
-  elif event == globals.IPSTART:
+  elif event == IPSTART:
     event_df = df.groupby(df.INCISION_PROCEDURE_START_DATE_TIME.dt.hour).SURG_CASE_KEY.count()
     event_txt = "Incision Procedure Start"
-  elif event == globals.SURG_START_DTM:
+  elif event == SURG_START_DTM:
     event_df = df.groupby(df[SURG_START_DTM].dt.hour).SURG_CASE_KEY.count()
     event_txt = "Surgeon Start"
-  elif event == globals.SURG_END_DTM:
+  elif event == SURG_END_DTM:
     event_df = df.groupby(df[SURG_END_DTM].dt.hour).SURG_CASE_KEY.count()
     event_txt = "Surgery End"
   else:
@@ -73,14 +73,16 @@ def time_of_day_historgram(df, event='ADMIT'):
 
   event_cnts = [event_df[i] for i in range(24)]
   fig, ax = plt.subplots(1, 1, figsize=(12, 8))
-  ax.bar(range(24), event_cnts, alpha=alpha)
+  ax.bar(np.arange(24)-0.5, event_cnts, alpha=alpha, width=0.76)
+  if event == DISCHARGE_DTM:
+    ax.axvline(x=11, ls='--', lw=1.5, color='red', alpha=0.8, label='Time of Discharge Notice')
   ax.set_xticks(np.arange(24))
   ax.set_title("%s Time Histogram" % event_txt, fontsize=19, y=1.01)
-  ax.set_xlabel("%s Hour" % event_txt, fontsize=16)
+  ax.set_xlabel("%s hour of day" % event_txt, fontsize=16)
   ax.set_ylabel("Number of cases", fontsize=16)
   ax.yaxis.set_tick_params(labelsize=13)
   ax.xaxis.set_tick_params(labelsize=13)
-
+  ax.legend(prop={'size': 14})
 
   i = 0
   rects = ax.patches
@@ -91,7 +93,7 @@ def time_of_day_historgram(df, event='ADMIT'):
       ax.text(x + wd / 2, ht + 20, "{:.1%}".format(event_df[i] / total),
               ha='center', va='bottom', fontsize=8)
     i += 1
-
+  plt.savefig(f'{event}.png', dpi=500)
   plt.show()
 
 
@@ -124,14 +126,14 @@ def pre_admission_wait_time_hist(df, bins=None):
 def gen_postop_los(df, counting_unit="H"):
   post_los_df = (df[DISCHARGE_DTM] - df[SURG_END_DTM]).astype('timedelta64[ns]')
   # print("before rounding", post_los_df.head(6))
-  if counting_unit == globals.HOUR:
+  if counting_unit == HOUR:
     post_los_df = post_los_df.dt.round('1h').astype('timedelta64[h]')
     unit_txt = "hour"
     # print("after rounding: ", post_los_df.head(6))
-  elif counting_unit == globals.DAY:
+  elif counting_unit == DAY:
     post_los_df = post_los_df.dt.round('1h').astype('timedelta64[D]')
     unit_txt = "day"
-  elif counting_unit == globals.NIGHT:
+  elif counting_unit == NIGHT:
     # TODO: Figure out how to handle edge cases!
     #post_los_df = post_los_df[df.DISCHARGE_DATE_TIME.dt.hour]
     unit_txt = "night"
@@ -156,7 +158,7 @@ def postop_los_histogram(df, unit="H", exclude_outliers=0, plot_los=False):
   ax.set_xlim([bins[0], bins[-1]])
 
   if plot_los:
-    los_df = df.LENGTH_OF_STAY if unit == globals.DAY else df.LENGTH_OF_STAY * 24
+    los_df = df.LENGTH_OF_STAY if unit == DAY else df.LENGTH_OF_STAY * 24
     if exclude_outliers > 0:
       los_df.drop(los_df.nlargest(exclude_outliers).index, inplace=True)
 
@@ -174,9 +176,9 @@ def postop_los_histogram(df, unit="H", exclude_outliers=0, plot_los=False):
   return post_los_df
 
 
-def los_postop_los_scatter(df, unit=globals.HOUR, xylim=None):
+def los_postop_los_scatter(df, unit=HOUR, xylim=None):
   postop_los_df, unit_txt = gen_postop_los(df, counting_unit=unit)
-  los_df = df.LENGTH_OF_STAY * 24 if unit == globals.HOUR else df.LENGTH_OF_STAY
+  los_df = df.LENGTH_OF_STAY * 24 if unit == HOUR else df.LENGTH_OF_STAY
 
   fig, ax = plt.subplots(figsize=(11,10))
   ax.scatter(los_df, postop_los_df, s=20, facecolors='none', edgecolors='purple')
@@ -189,7 +191,7 @@ def los_postop_los_scatter(df, unit=globals.HOUR, xylim=None):
   lims = np.array([np.min([ax.get_xlim(), ax.get_ylim()]),
                    np.max([ax.get_xlim(), ax.get_ylim()])])
   ax.plot(lims, lims, '--', color='k', linewidth=3, alpha=0.8)
-  if unit == globals.HOUR:
+  if unit == HOUR:
     ax.plot(lims, lims - 10, '--', color='r', linewidth=2.5, alpha=0.8)
 
   plt.show()
