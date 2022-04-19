@@ -2,12 +2,18 @@
 EDA on date-time related features,
 such as time of admission, discharge, end of surgery, actual start (wheel-in), actual stop (wheel out) etc.
 """
+import datetime
+
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sns
+from collections import Counter
 
 import globals
 from globals import *
+from c1_data_preprocessing import gen_y_nnt
+
 
 Event2DatetimeCol = {ADMIT: 'HAR_ADMIT_DATE', DISCHARGE: 'HAR_DISCHARGE_DATE',
                      SURGEONSTART: 'SURGEON_START_DT_TM', SURGEONEND: 'SURGERY_END_DT_TM'}
@@ -38,23 +44,25 @@ def plot_event_time_of_day_los(dashb_df, event=globals.ADMIT, outcome=globals.NN
 # histograms (admit, discharge, end of surgery, wheel-out time ...)
 def time_of_day_historgram(df, event='ADMIT'):
   total = df.SURG_CASE_KEY.nunique()
-  if event == globals.ADMIT:
-    event_df = df.groupby(df['HAR_ADMIT_DATE'].dt.hour).SURG_CASE_KEY.count()
+  alpha = 0.9
+  if event == globals.ADMIT_DTM:
+    event_df = df.groupby(df[ADMIT_DTM].dt.hour).SURG_CASE_KEY.count()
     event_txt = "Admission"
+    alpha = 0.65
   elif event == globals.WHEELOUT:
     event_df = df.groupby(df.ACTUAL_STOP_DATE_TIME.dt.hour).SURG_CASE_KEY.count()
     event_txt = "Wheel-out"
-  elif event == globals.DISCHARGE:
-    event_df = df.groupby(df['HAR_DISCHARGE_DATE'].dt.hour).SURG_CASE_KEY.count()
+  elif event == globals.DISCHARGE_DTM:
+    event_df = df.groupby(df[DISCHARGE_DTM].dt.hour).SURG_CASE_KEY.count()
     event_txt = "Discharge"
   elif event == globals.IPSTART:
     event_df = df.groupby(df.INCISION_PROCEDURE_START_DATE_TIME.dt.hour).SURG_CASE_KEY.count()
     event_txt = "Incision Procedure Start"
-  elif event == globals.STARTOS:
-    event_df = df.groupby(df['SURGEON_START_DT_TM'].dt.hour).SURG_CASE_KEY.count()
+  elif event == globals.SURG_START_DTM:
+    event_df = df.groupby(df[SURG_START_DTM].dt.hour).SURG_CASE_KEY.count()
     event_txt = "Surgeon Start"
-  elif event == globals.ENDOS:
-    event_df = df.groupby(df['SURGERY_END_DT_TM'].dt.hour).SURG_CASE_KEY.count()
+  elif event == globals.SURG_END_DTM:
+    event_df = df.groupby(df[SURG_END_DTM].dt.hour).SURG_CASE_KEY.count()
     event_txt = "Surgery End"
   else:
     raise KeyError("%s is not supported for EDA" % event)
@@ -64,33 +72,57 @@ def time_of_day_historgram(df, event='ADMIT'):
       event_df[h] = 0
 
   event_cnts = [event_df[i] for i in range(24)]
-  plt.rcParams['figure.figsize'] = (11, 7)
-  graph = plt.bar(range(24), event_cnts)
-  plt.xticks(np.arange(24), labels=np.arange(24))
-  plt.title("%s Time - Cases Histogram" % event_txt, fontsize=15)
-  plt.xlabel("%s Hour" % event_txt, fontsize=13)
-  plt.ylabel("Number of Surgical Cases", fontsize=13)
+  fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+  ax.bar(range(24), event_cnts, alpha=alpha)
+  ax.set_xticks(np.arange(24))
+  ax.set_title("%s Time Histogram" % event_txt, fontsize=19, y=1.01)
+  ax.set_xlabel("%s Hour" % event_txt, fontsize=16)
+  ax.set_ylabel("Number of cases", fontsize=16)
+  ax.yaxis.set_tick_params(labelsize=13)
+  ax.xaxis.set_tick_params(labelsize=13)
+
 
   i = 0
-  for p in graph:
+  rects = ax.patches
+  for rect in rects:
     if event_df[i] > 0:
-      width = p.get_width()
-      height = p.get_height()
-      x, y = p.get_xy()
-
-      plt.text(x + width / 2,
-               y + height * 1.02,
-               "{:.2%}".format(event_df[i] / total),
-               ha='center', fontsize=8)
+      ht, wd = rect.get_height(), rect.get_width()
+      x, y = rect.get_xy()
+      ax.text(x + wd / 2, ht + 20, "{:.1%}".format(event_df[i] / total),
+              ha='center', va='bottom', fontsize=8)
     i += 1
 
   plt.show()
 
 
-# ---------------------------------- Postoperative LoS Histogram ----------------------------------
+# ---------------------------------- Histogram of Pre-admission Wait Time ----------------------------------
+def pre_admission_wait_time_hist(df, bins=None):
+  df = df[[ADMIT_DTM, BOOKING_DTM]].apply(pd.to_datetime)
+  df['pre-admission_wait_days'] = (df[ADMIT_DTM] - df[BOOKING_DTM]) / np.timedelta64(1, 'D')
+  print('Minimum pre-admission wait days: ', df['pre-admission_wait_days'].min())
+  fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+  if bins is None:
+    ax.hist(df['pre-admission_wait_days'], bins=20)
+  else:
+    if not np.isinf(bins[-1]):
+      bins = np.concatenate([bins, [float('inf')]])
+    counts, edges = np.histogram(df['pre-admission_wait_days'], bins)
+    ax.bar(edges[:-1], counts, alpha=0.8, color='gray', align='center')
+    labels = list(map(str, edges[:-1]))
+    labels[-1] = f'{labels[-1]}+'
+    ax.set_xticks(edges[:-1])
+    ax.set_xticklabels(labels, fontsize=13)
+    print(counts, '\n', edges)
+
+  ax.set_xlabel('Pre-admission Wait Days', fontsize=14)
+  ax.set_ylabel('Number of Cases', fontsize=14)
+  ax.set_title('Pre-admission Wait Days Histogram', fontsize=16, y=1.01)
+
+
+# -----------------------------------------  Postoperative LoS Histogram -----------------------------------------
 # Calculate post-operative LoS
 def gen_postop_los(df, counting_unit="H"):
-  post_los_df = (df.DISCHARGE_DATE_TIME - df.ACTUAL_STOP_DATE_TIME).astype('timedelta64[ns]')
+  post_los_df = (df[DISCHARGE_DTM] - df[SURG_END_DTM]).astype('timedelta64[ns]')
   # print("before rounding", post_los_df.head(6))
   if counting_unit == globals.HOUR:
     post_los_df = post_los_df.dt.round('1h').astype('timedelta64[h]')
@@ -148,9 +180,9 @@ def los_postop_los_scatter(df, unit=globals.HOUR, xylim=None):
 
   fig, ax = plt.subplots(figsize=(11,10))
   ax.scatter(los_df, postop_los_df, s=20, facecolors='none', edgecolors='purple')
-  ax.set_title("LoS VS Postoperative LoS (%s)" % unit_txt, fontsize=16)
-  ax.set_xlabel("LoS (%s)" % unit_txt, fontsize=14)
-  ax.set_ylabel("Postoperative LoS (%s)" % unit_txt, fontsize=14)
+  ax.set_title("LOS VS Postoperative LOS (%s)" % unit_txt, fontsize=16)
+  ax.set_xlabel("Length of stay (%s)" % unit_txt, fontsize=14)
+  ax.set_ylabel("Postoperative LOS (%s)" % unit_txt, fontsize=14)
   if xylim:
     ax.set_xlim([0, xylim])
     ax.set_ylim([0, xylim])
@@ -162,22 +194,66 @@ def los_postop_los_scatter(df, unit=globals.HOUR, xylim=None):
 
   plt.show()
 
+# -----------------------------------------  Operative Length and Post-op LoS -----------------------------------------
+def op_length_postopLos_eda(dashb_df):
+  df = dashb_df[[LOS, SURG_START_DTM, SURG_END_DTM, DISCHARGE_DTM]]
+  df['op_length'] = pd.to_datetime(dashb_df[SURG_END_DTM]) - pd.to_datetime(dashb_df[SURG_START_DTM]) / np.timedelta64(1, 'H')
+  postop_los_df, unit_txt = gen_postop_los(df)
 
-# def los_histogram(df, unit="D", exclude_outliers=0):
-#
-#
-#   minLos, maxLos = min(df.LENGTH_OF_STAY), max(df.LENGTH_OF_STAY)
-#   if exclude_outliers > 0:
-#
-#     maxLos = max(los_df)
-#
-#   fig, ax = plt.subplots(figsize=(12, 7))
-#   bins = np.linspace(minLos, maxLos + globals.DELTA, 100)
-#   ax.set_xlim([bins[0], bins[-1]])
-#   ax.hist(df.LENGTH_OF_STAY, bins, color="red", alpha=0.65, edgecolor='black', linewidth=0.5)
-#   plt.title("LoS Histogram")
-#   plt.xlabel("LoS (%s)" % unit_txt)
-#   plt.ylabel("Number of surgical cases")
-#   plt.show()
-#
-#   return
+
+
+
+# -------------------------------- Patient 30-day Revisit Flag - LOS distribution --------------------------------
+def gen_revisit_col(dashb_df):
+  # MRN, SURG_CASE_KEY, DISCHARGE_DTM, ADMIT_DTM
+  df = dashb_df.loc[:, ['MRN', 'SURG_CASE_KEY', ADMIT_DTM, DISCHARGE_DTM]]
+  df = df.join(df.groupby('MRN').count()['SURG_CASE_KEY'].reset_index(name='visit_cnt').set_index('MRN'), on='MRN', how='left')
+  df = df[df['visit_cnt'] > 1]
+  surg_key_to_revisit30 = defaultdict(int)
+  for mrn in df['MRN'].unique():
+    mrn_df = df.loc[df['MRN'] == mrn, ['SURG_CASE_KEY', ADMIT_DTM, DISCHARGE_DTM]].sort_values(by=ADMIT_DTM)
+    prev_discharge_dtm = pd.to_datetime(mrn_df.iloc[0][DISCHARGE_DTM])
+    for i in range(1, len(mrn_df)):
+      admit_dtm = pd.to_datetime(mrn_df.iloc[i][ADMIT_DTM])
+      if (admit_dtm - prev_discharge_dtm) / np.timedelta64(1, 'D') <= 30:
+        print(admit_dtm, prev_discharge_dtm)
+        surg_key_to_revisit30[mrn_df.iloc[i]['SURG_CASE_KEY']] = 1
+      prev_discharge_dtm = pd.to_datetime(mrn_df.iloc[i][DISCHARGE_DTM])
+
+  return surg_key_to_revisit30
+
+
+
+def revisit30_eda(dashb_df, outcome=NNT, preprocess_y=True):
+  fig, ax = plt.subplots(figsize=(12, 8))
+  df = dashb_df[[outcome, 'revisit']]
+  if outcome == NNT and preprocess_y:
+    df[outcome] = gen_y_nnt(df[outcome])
+    ax.set_xticks(sorted(df[outcome].unique()))
+    ax.set_xticklabels(NNT_CLASS_LABELS, fontsize=14)
+  revisit_counter = Counter(df[dashb_df['revisit'] == 1][outcome])
+  no_revisit_counter = Counter(df[dashb_df['revisit'] == 0][outcome])
+  revisit_total, non_revisit_total = sum(revisit_counter.values()), sum(no_revisit_counter.values())
+  xs = np.array(sorted(no_revisit_counter.keys()))
+  ax.bar(xs-0.2, [100 * revisit_counter[x] / revisit_total for x in xs], label='30-day Readmission', width=0.4, alpha=0.8,
+         color='salmon')
+  ax.bar(xs+0.2, [100 * no_revisit_counter[x] / non_revisit_total for x in xs], label='Non-readmission', width=0.4, alpha=0.8,
+         color='steelblue')
+  ax.set_title('LOS Distribution by Readmission Indicator', fontsize=19, y=1.01)
+  ax.set_xlabel('Length of stay', fontsize=16)
+  ax.set_ylabel('Case count percentage (%)', fontsize=16)
+  ax.yaxis.set_tick_params(labelsize=14)
+  ax.legend(prop={'size': 13})
+
+  rects = ax.patches
+  labels = [int(revisit_counter[x]) for x in xs]
+  for rect, label in zip(rects[:6], labels):
+    ht, wd = rect.get_height(), rect.get_width()
+    ax.text(rect.get_x() + wd / 2, ht+0.5, label,
+            ha='center', va='bottom', fontsize=11)
+
+  labels = [int(no_revisit_counter[x]) for x in xs]
+  for rect, label in zip(rects[6:], labels):
+    ht, wd = rect.get_height(), rect.get_width()
+    ax.text(rect.get_x() + wd / 2, ht + 0.5, label,
+            ha='center', va='bottom', fontsize=11)
