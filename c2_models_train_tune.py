@@ -217,14 +217,15 @@ def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
     else:
       colsample_bytree_range = np.arange(0.8, 1.01, 0.05)
     param_space = {
-      'n_estimators': [30, 80, 120, 150, 200, 300],
+      'n_estimators': [50, 100, 150, 200, 300],
       'learning_rate': [0.003, 0.01, 0.03, 0.1, 0.3, 1],
       'subsample': np.arange(0.8, 1.01, 0.05),
       'colsample_bytree': colsample_bytree_range,
+      'colsample_bylevel': [0.4, 0.8, 0.9, 1],
       'max_depth': [3, 4, 5, 6, 7],
       'gamma': [0, 0.1, 0.3, 1, 3, 5],
-      'min_child_weight': [0.1, 0.3, 0.6, 1, 2],
-      'lambda': [0.01, 0.1, 1],
+      'min_child_weight': [0.01, 0.1, 0.3, 0.6, 1, 2],
+      'lambda': [0, 0.01, 0.1, 1],
     }
     # Tune unbalanced binary class weight parameter
     if num_classes == 2:
