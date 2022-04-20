@@ -175,11 +175,13 @@ def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
   elif md == SVCLF:
     clf = SVC(random_state=SEED, kernel='rbf', probability=False)
     param_space = {'C': [0.001, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
-                   'gamma': sorted(list({1 / n_frts, 1, 0.3, 0.1, 0.03, 0.01, 0.001})),
+                   'gamma': ['scale'] + list({1 / n_frts, 1, 0.3, 0.1, 0.03, 0.01, 0.001}),
                    }
   elif md == SVC_POLY:
     clf = SVC(random_state=SEED, kernel='poly')
     param_space = {'C': [0.001, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
+                   'gamma': ['scale'] + list({1 / n_frts, 1, 0.3, 0.1, 0.03, 0.01, 0.001}),
+                   'coef0': [0, 0.001, 0.01, 0.1, 1],
                    'degree': [2, 3, 4, 5],
                    }
   elif md == KNN:
