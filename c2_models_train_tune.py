@@ -116,8 +116,11 @@ def tune_model_randomSearch(md, X, y, kfold, scorers, args, n_iters=20, refit=Fa
                                    return_train_score=True, verbose=4)
 
   # define sample weights, based on class_weight scheme
-  sample_weights = gen_sample_weights(y, cls_weight=cls_weight)
-  search_cv.fit(X, y, sample_weight=sample_weights)
+  if md != KNN:
+    sample_weights = gen_sample_weights(y, cls_weight=cls_weight)
+    search_cv.fit(X, y, sample_weight=sample_weights)
+  else:
+    search_cv.fit(X, y)
   return search_cv
 
 
