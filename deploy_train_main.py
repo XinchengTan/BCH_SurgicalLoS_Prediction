@@ -58,6 +58,7 @@ if __name__ == '__main__':
                          discretize_cols=[AGE],
                          scaler='robust', scale_numeric_only=True,
                          remove_o2m=(True, True),
+                         percase_cnt_vars=DEFAULT_PERCASE_CNT_VARS,
                          test_pct=0)
   print(f'\n[train_main] Finished data preprocessing and feature engineering! '
         f'hist_dataset.Xtrain shape: {hist_dataset.Xtrain.shape}, '
