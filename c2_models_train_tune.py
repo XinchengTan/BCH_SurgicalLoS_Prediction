@@ -173,15 +173,13 @@ def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
     param_space = {'alpha': [0.001, 0.003, 0.01, 0.03, 0.06, 0.1, 0.3, 0.6, 1, 2, 3, 4, 6, 8, 10, 12, 15]}
     clf = MultinomialNB()
   elif md == SVCLF:
-    clf = SVC(random_state=SEED, probability=False)
+    clf = SVC(random_state=SEED, kernel='rbf', probability=False)
     param_space = {'C': [0.001, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'gamma': sorted(list({1 / n_frts, 1, 0.3, 0.1, 0.03, 0.01, 0.001})),
-                   'kernel': ['rbf'],
                    }
   elif md == SVC_POLY:
-    clf = SVC(random_state=SEED)
+    clf = SVC(random_state=SEED, kernel='poly')
     param_space = {'C': [0.001, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
-                   'kernel': ['poly'],
                    'degree': [2, 3, 4, 5],
                    }
   elif md == KNN:
