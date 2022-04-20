@@ -7,7 +7,6 @@ from collections import Counter
 from tqdm import tqdm
 from typing import Any, Dict, List
 
-# TODO: add catBoost
 from catboost import CatBoostClassifier
 from imblearn.ensemble import BalancedBaggingClassifier, BalancedRandomForestClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -25,6 +24,7 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.ensemble import VotingClassifier
 from sklearn.neural_network import MLPRegressor, MLPClassifier
 from xgboost import XGBClassifier, XGBRegressor
+# from mlens.ensemble import SuperLearner
 
 from globals import *
 from c1_data_preprocessing import Dataset

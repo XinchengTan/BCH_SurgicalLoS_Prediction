@@ -171,24 +171,24 @@ def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
     clf = MultinomialNB()
   elif md == SVCLF:
     clf = SVC(random_state=SEED, probability=False)
-    param_space = {'C': [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
-                   'gamma': sorted(list({1 / n_frts, 1, 0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001})),
+    param_space = {'C': [0.001, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
+                   'gamma': sorted(list({1 / n_frts, 1, 0.3, 0.1, 0.03, 0.01, 0.001})),
                    'kernel': ['rbf'],
                    }
   elif md == SVC_POLY:
     clf = SVC(random_state=SEED)
-    param_space = {'C': [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
+    param_space = {'C': [0.001, 0.01, 0.03, 0.1, 0.3, 1, 3, 10],
                    'kernel': ['poly'],
                    'degree': [2, 3, 4, 5],
                    }
   elif md == KNN:
-    clf = KNeighborsClassifier(metric='minkowski')
+    clf = KNeighborsClassifier(algorithm='auto', n_jobs=-1)
     param_space = {
-      'algorithm': ['ball_tree', 'kd_tree', 'brute'],
-      'leaf_size': list(range(20, minority_size, 10)),
-      'n_neighbors': list(range(5, minority_size + 1, 10)),
-      'p': [1, 2, 3],
-      'weights': ['uniform', 'distance']
+      'leaf_size': list(range(20, 51, 5)) + [100, 150, 200, 300],
+      'n_neighbors': list(range(5, 101, 5)),
+      'p': [1, 2],
+      'weights': ['uniform', 'distance'],
+      'metric': ['chebyshev', 'minkowski']
     }
   elif md == RMFCLF:
     clf = RandomForestClassifier(random_state=SEED)
