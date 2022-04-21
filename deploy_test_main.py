@@ -74,7 +74,7 @@ if __name__ == '__main__':
 
   # 2. Load input scaler to a preprocessed Dataset object on holdout test set, using meta data from the
   # correspondingly-scaled historical set
-  md = XGBCLF
+  md = SVCLF  # XGBCLF
   os_dataset = load_scaled_os_dataset(MODEL_TO_SCALER[md])
 
   # 3. Load pretrained model
