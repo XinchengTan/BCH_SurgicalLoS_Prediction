@@ -11,7 +11,7 @@ CARE_CLASS_FP = PROJECT_DIR / 'Data_new_all0/cases_2018_to_2021_10_updated.csv'
 # Deployment files dir
 DEPLOY_DATA_DIR = PROJECT_DIR / 'Deployment_test_data'
 DEPLOY_DEP_FILES_DIR = PROJECT_DIR / 'Deployment_dep_files'
-CPT_TO_CPTGROUP_FILE = DEPLOY_DEP_FILES_DIR / 'cpt2group.csv'
+CPT_TO_CPTGROUP_FILE = DEPLOY_DEP_FILES_DIR / 'cpt2group_level4.csv'
 FTR_ENG_MOD_FILE = DEPLOY_DEP_FILES_DIR / 'hist_FtrEngMod.pkl'
 O2M_FILE = DEPLOY_DEP_FILES_DIR / 'hist_o2m_cases.csv'
 PRETRAINED_CLFS_DIR = DEPLOY_DEP_FILES_DIR / 'pretrained_models'

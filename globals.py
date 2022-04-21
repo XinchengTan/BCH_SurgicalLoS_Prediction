@@ -234,7 +234,7 @@ if not COMBINE_01:
   NNT_CLASS_LABELS = [str(i) for i in range(MAX_NNT + 1)] + [f'{MAX_NNT + 1}+']
 else:
   NNT_CUTOFFS = list(range(1, MAX_NNT+1))
-  NNT_CLASSES = list(range(MAX_NNT + 1))
+  NNT_CLASSES = list(range(MAX_NNT+1))
   NNT_CLASS_LABELS = [r'$\leq$1'] + [str(i) for i in range(2, MAX_NNT + 1)] + [r'$\geq$' + str(MAX_NNT + 1)]
 NNT_CLASS_CNT = len(NNT_CLASSES)
 
