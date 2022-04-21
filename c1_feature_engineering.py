@@ -215,6 +215,8 @@ class FeatureEngineeringModifier(object):
         Xdf = self.join_with_pproc_decile(Xdf, self.decile_generator.pproc_decile, ftr2aggf)
       elif col == CPT:
         Xdf = self.join_with_cpt_decile(Xdf, self.decile_generator.cpt_decile, ftr2aggf)
+      elif col == CPT_GROUP:
+        Xdf = self.join_with_cptgrp_decile(Xdf, self.decile_generator.cpt_group_decile, ftr2aggf)
       elif col == CCSR:
         Xdf = self.join_with_ccsr_decile(Xdf, self.decile_generator.ccsr_decile, ftr2aggf)
       elif col == MED1:
@@ -270,6 +272,29 @@ class FeatureEngineeringModifier(object):
     print("[FtrEng-join_CPT_dcl] Input Xdf shape: ", Xdf.shape, '; Output Xdf shape: ', Xdf_ret.shape,
           "\nAdded decile columns: ", decile_col2aggf.keys())
     return Xdf_ret
+
+  def join_with_cptgrp_decile(self, Xdf: pd.DataFrame, cptgrp_decile: pd.DataFrame,
+                           decile_col2aggf={CPT_GROUP_DECILE: 'max'}):
+    # Note: Assume Xdf contains the CPT list column before one-hot encoding
+    # 1. Explode Xdf on column 'CPTS'; 2. Groupby 'SURG_CASE_KEY' and apply agg func
+    if Xdf.shape[0] == 0:
+      return Xdf
+    Xdf_w_decile = Xdf[['SURG_CASE_KEY', CPT_GROUPS]] \
+      .explode(CPT_GROUPS) \
+      .dropna(subset=[CPT_GROUPS])  # drop cases with empty CPT grp list (shouldn't happen tho)
+    Xdf_w_decile = Xdf_w_decile.rename(columns={CPT_GROUPS: CPT_GROUP}) \
+      .join(cptgrp_decile.set_index(CPT_GROUP)[decile_col2aggf.keys()], on=CPT_GROUP, how='inner') \
+      .groupby('SURG_CASE_KEY') \
+      .agg(decile_col2aggf)
+    # Drop any placeholder column added by match_Xdf_cols_to_target_ftrs()
+    Xdf.drop(columns=decile_col2aggf.keys(), inplace=True, errors='ignore')
+    # Join selected columns in the decile df on 'SURG_CASE_KEY' with the input Xdf
+    Xdf_ret = Xdf.join(Xdf_w_decile, on='SURG_CASE_KEY', how='inner')
+
+    print("[FtrEng-join_CPTgrp_decile] Input Xdf shape: ", Xdf.shape, '; Output Xdf shape: ', Xdf_ret.shape,
+          "\nAdded decile columns: ", decile_col2aggf.keys())
+    return Xdf_ret
+
 
   def join_with_med_decile(self, Xdf: pd.DataFrame, med_decile: pd.DataFrame, level=1,
                            decile_col2aggf={MED1_DECILE: 'max'}):

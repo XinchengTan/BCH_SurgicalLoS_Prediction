@@ -27,7 +27,6 @@ PRIMARY_PROC = 'PRIMARY_PROC'
 SURG_GROUP = 'SURG_GROUP'
 PRIMARY_PROC_CPTGRP = 'PRIMARY_PROC_CPTGRP'  # todo: add to feature cols??
 PR_CPTGRP_X = 'PRIMARY_PROC_MAX_CPTGRP_DECILE_'  # a prefix for each primary cpt group with multiple max cptgrp decile
-COHORT_TYPE_SET = {SURG_GROUP, PRIMARY_PROC, PRIMARY_PROC_CPTGRP}
 
 # Care class types
 INPATIENT_CARE = 'Inpatient'
@@ -53,11 +52,15 @@ MED3, MED3_DECILE, MED3_PERCASE_CNT = 'MED3', 'MED3_DECILE', 'MED3_PERCASE_COUNT
 MED123, MED123_DECILE, MED123_PERCASE_CNT = 'MED123', 'MED123_DECILE', 'MED123_PERCASE_COUNT'
 PPROC, PPROC_DECILE = 'PPROC', 'PPROC_DECILE'
 
+# Evaluation cohort type set
+COHORT_TYPE_SET = {SURG_GROUP, PRIMARY_PROC, PRIMARY_PROC_CPTGRP, CPT_GROUPS}
+
 
 # COL to Dummy coded column names
 COL2DUMMIES = {STATE: ['IN_STATE', 'OUT_OF_STATE_US', 'FOREIGN'],
                REGION: ['International', 'Local', 'Regional', 'Unknown'],
-               LANGUAGE: ['ENGLISH', 'SPANISH', 'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']}  # 'ARABIC', 'PORTUGUESE', 'HAITIAN',
+               LANGUAGE: ['ENGLISH', 'SPANISH', 'ARABIC', 'HAITIAN', 'HEBREW', 'PORTUGUESE', 'VIETNAMESE',
+                          'OTHER_LANGUAGE', 'UNKNOWN_LANGUAGE']}
 
 
 # Column list for feature selection
