@@ -14,7 +14,7 @@ from globals import *
 from globals_fs import *
 
 
-MODEL_TO_SCALER = {RMFCLF: None, XGBCLF: None, KNN: 'minmax', LGR_L12: 'minmax', SVCLF: 'minmax'}  # SVCLF: 'std'
+MODEL_TO_SCALER = {RMFCLF: None, XGBCLF: None, KNN: 'minmax', LGR_L12: 'minmax', SVCLF: None}  # SVCLF: 'std' 'minmax'
 
 
 # Returns a dict for decile feature aggregation function mapping
@@ -101,9 +101,10 @@ if __name__ == '__main__':
     md_to_clf[md] = clf
 
     # 3.3 Save trained classifier
-    with open(PRETRAINED_CLFS_DIR / f'{md}clf.joblib', 'wb') as md_file:
+    md_file_name = f"{md}clf_{MODEL_TO_SCALER[md]}.joblib"
+    with open(PRETRAINED_CLFS_DIR / md_file_name, 'wb') as md_file:
       joblib.dump(clf, md_file)
-    print(f'[train_main] Saved "{md}" to "{md}clf_{MODEL_TO_SCALER[md]}.joblib"')
+    print(f'[train_main] Saved "{md}" to {md_file_name}')
 
     # 3.4 Sanity check training performance
     hist_predicted_nnt = clf.predict(hist_dataset.Xtrain)

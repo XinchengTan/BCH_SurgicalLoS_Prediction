@@ -78,7 +78,7 @@ if __name__ == '__main__':
   os_dataset = load_scaled_os_dataset(MODEL_TO_SCALER[md])
 
   # 3. Load pretrained model
-  Clf = load_pretrained_model(PRETRAINED_CLFS_DIR / f'{md}clf.joblib')
+  Clf = load_pretrained_model(PRETRAINED_CLFS_DIR / f'{md}clf_{MODEL_TO_SCALER[md]}.joblib')
   print(f'[test_main] Loaded pretrained model!')
 
   # 4. Apply pre-trained models and output predictions
