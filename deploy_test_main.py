@@ -9,6 +9,7 @@ from c0_data_prepare import prepare_data
 from c1_data_preprocessing import Dataset
 from c1_feature_engineering import FeatureEngineeringModifier
 from c2_models import SafeOneClassWrapper
+from deploy_train_main import MODEL_TO_SCALER
 from globals import *
 from globals_fs import *
 
@@ -33,6 +34,26 @@ def load_pretrained_model(fp) -> SafeOneClassWrapper:
   return clf
 
 
+def load_scaled_os_dataset(scaler):
+  assert scaler in MODEL_TO_SCALER.values(), f'Scaler "{scaler}" must be applied on historical data first!'
+  # Load Meta Data generated based on historical set
+  FtrEngMod = load_FeatureEngModifier(DEPLOY_DEP_FILES_DIR / f'hist_FtrEngMod_SCAL{scaler}.pkl')
+  O2M_df = load_o2m_df(DEPLOY_DEP_FILES_DIR / f'hist_o2m_cases_SCAL{scaler}.csv')
+
+  # Build Dataset object based on meta data from historical dataset
+  dataset = Dataset(os_data_df,
+                    outcome=NNT,
+                    ftr_cols=FtrEngMod.feature_cols,
+                    test_pct=1,
+                    target_features=FtrEngMod.feature_names,
+                    remove_o2m=(False, O2M_df),
+                    ftr_eng=FtrEngMod)
+  print(f'[test_main] Finished data preprocessing and feature engineering! '
+        f'os_dataset.Xtest shape: {dataset.Xtest.shape}, os_dataset.ytest shape: {dataset.ytest.shape}')
+  print('[test_main] Class labels: ', np.unique(dataset.ytest))
+  return dataset
+
+
 if __name__ == '__main__':
   # ---------------------------------------IMPORTANT NOTES: -------------------------------------------------
   # 1. Use data_fp = DATA_DIR / "outsample3_pseudo_deploy.csv" to simulate real testing environment
@@ -51,30 +72,19 @@ if __name__ == '__main__':
                             force_weight=False)
   print(f'[test_main] Loaded os_data_df! Shape: {os_data_df.shape}')
 
-  # 2. Load Meta Data generated based on historical set
-  FtrEngMod = load_FeatureEngModifier(FTR_ENG_MOD_FILE)
-  O2M_df = load_o2m_df(O2M_FILE)
+  # 2. Load input scaler to a preprocessed Dataset object on holdout test set, using meta data from the
+  # correspondingly-scaled historical set
+  md = XGBCLF
+  os_dataset = load_scaled_os_dataset(MODEL_TO_SCALER[md])
 
-  # 3. Preprocess & Engineer Features on test data, using meta data from historical set --> Dataset() object
-  os_dataset = Dataset(os_data_df,
-                       outcome=NNT,
-                       ftr_cols=FtrEngMod.feature_cols,
-                       test_pct=1,
-                       target_features=FtrEngMod.feature_names,
-                       remove_o2m=(False, O2M_df),
-                       ftr_eng=FtrEngMod)
-  print(f'[test_main] Finished data preprocessing and feature engineering! '
-        f'os_dataset.Xtest shape: {os_dataset.Xtest.shape}, os_dataset.ytest shape: {os_dataset.ytest.shape}')
-  print('[test_main] Class labels: ', np.unique(os_dataset.ytest))
-
-  # 4. Load pretrained model
-  Clf = load_pretrained_model(PRETRAINED_CLFS_DIR / 'xgbclf.joblib')
+  # 3. Load pretrained model
+  Clf = load_pretrained_model(PRETRAINED_CLFS_DIR / f'{md}clf.joblib')
   print(f'[test_main] Loaded pretrained model!')
 
-  # 5. Apply pre-trained models and output predictions
+  # 4. Apply pre-trained models and output predictions
   os_predicted_nnt = Clf.predict(os_dataset.Xtest)
   print('[test_main] Predicted outcome on os_dataset.Xtest:\n', os_predicted_nnt)
 
-  # 6. Check prediction accuracy (meaningless if in simulated testing mode)
+  # 5. Check prediction accuracy (meaningless if in simulated testing mode)
   print(f'[test_main] Out-of-sample Test Accuracy: '
         f'{"{:.1%}".format(accuracy_score(os_dataset.ytest, os_predicted_nnt))}')
