@@ -14,7 +14,7 @@ from globals import *
 from globals_fs import *
 
 
-MODEL_TO_SCALER = {RMFCLF: None, XGBCLF: None, KNN: 'minmax', LGR_L12: 'minmax', SVCLF: None}  # SVCLF: 'std' 'minmax'
+MODEL_TO_SCALER = {RMFCLF: None, XGBCLF: None, KNN: 'minmax', LGR_L12: 'minmax', SVCLF: 'std'}
 
 
 # Returns a dict for decile feature aggregation function mapping
@@ -44,7 +44,9 @@ def gen_scaler_to_dataset(scalers, save_meta_data=True):
   scaler_to_dataset = {}
   for scaler in scalers:
     print('scaler: ', scaler)
-    # Create Dataset object based on scaler
+    # Create Dataset object based on input 'scaler'
+    # To change the hypterparameters, e.g. what features to use, how to scale data, which feature to one-hot encode etc.,
+    # update the args to Dataset() below
     dataset = Dataset(df=hist_data_df, outcome=NNT,
                       ftr_cols=FEATURE_COLS_NO_WEIGHT_ALLMEDS,
                       col2decile_ftrs2aggf=get_decileFtr_config(),
@@ -83,8 +85,7 @@ if __name__ == '__main__':
   print(f'\n[train_main] Loaded os_data_df! Shape: {hist_data_df.shape}')
 
   # 2. Preprocess & Engineer Features on training data -> Dataset() object
-  # To change the hypterparameters, e.g. what features to use, how to scale data, which feature to one-hot encode etc.,
-  # update the args to Dataset() below
+  #    set 'save_meta_data' to True if dependencies do not exist locally yet
   scaler_to_dataset = gen_scaler_to_dataset(set(MODEL_TO_SCALER.values()), save_meta_data=False)
 
   # 3. Train models -- Modify the 'md_list' to add or remove models
