@@ -52,6 +52,101 @@ def cpt_count_eda(dashb_df, outcome=NNT, preprocess_y=True):
                          fontsize=14)
 
 
+# --------------------------------------- Clinical Variable Risk Score & Outcome ---------------------------------------
+def clinical_var_risk_score_eda(dashb_df, use_pproc=False, use_cptgrp=False, use_ccsr=False, outcome=NNT,
+                                preprocess_y=True, min_cnt=5, xlim=15, orient='h', save=False):
+  if use_pproc:
+    PROC_col, PROC_type = PRIMARY_PROC, 'Primary Procedure'
+  elif use_cptgrp:
+    PROC_col, PROC_type = CPT_GROUPS, 'CPT Group'
+  elif use_ccsr:
+    PROC_col, PROC_type = CCSRS, 'CCSR'
+  else:
+    PROC_col, PROC_type = CPTS, 'CPT'
+
+  total = dashb_df.shape[0]
+  df = dashb_df[[LOS, NNT, PROC_col, 'SURG_CASE_KEY']]
+  if preprocess_y:
+    df[outcome] = gen_y_nnt(df[outcome])
+
+  if not use_pproc:
+    df = df.explode(PROC_col)
+    if not use_ccsr:
+      assert np.all(df[PROC_col].notnull()), f'{PROC_type} list should not be empty!'
+
+  groupby = df.groupby(by=PROC_col)
+  pproc_to_los_stat = groupby[LOS].median().reset_index(name='los_median').join(
+    groupby['SURG_CASE_KEY'].count().reset_index(name='case_cnt').set_index(PROC_col),
+    on=PROC_col,
+    how='inner'
+  )
+  pproc_to_los_stat = pproc_to_los_stat[pproc_to_los_stat['case_cnt'] >= min_cnt]
+
+  df_filtered = df.join(pproc_to_los_stat.set_index(PROC_col), on=PROC_col, how='inner')
+  df_filtered = df_filtered.groupby('SURG_CASE_KEY').max().reset_index(drop=False)  # select the max los-median
+  print('Remaining cases: ', df_filtered['SURG_CASE_KEY'].count())
+
+  outlier_df = df_filtered[df_filtered['los_median'] >= xlim]
+  if xlim:
+    df_filtered['los_median'] = df_filtered['los_median'].apply(lambda x: x if x < xlim else xlim+random.uniform(0, 0.5))
+
+  if orient == 'h':
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))  # gridspec_kw={'width_ratios': [2, 1]}
+    sns.violinplot(data=df_filtered, x='los_median', y=NNT, orient='h', ax=ax, scale='width',
+                   palette=plt.cm.get_cmap('coolwarm')(np.linspace(0., 1., NNT_CLASS_CNT)))
+    ax.invert_yaxis()
+    if xlim:
+      xlim = min(xlim, int(np.round(max(df_filtered['los_median']))))
+      ax.set_xlim([-0.8, xlim + 0.9])
+    ax.set_xticks(np.arange(0, xlim + 1))
+    ax.set_xticklabels(list(range(0, xlim)) + [f'$\geq$ {xlim}'], fontsize=14)
+  else:
+    figs, axs = plt.subplots(2, 1, figsize=(12, 16))  # gridspec_kw={'width_ratios': [2, 1]}
+    ax, ax2 = axs[0], axs[1]
+    df_filtered['los_median'] = df_filtered['los_median'].apply(lambda x: int(np.round(x)))
+    counter = Counter(df_filtered['los_median'])
+    print(counter)
+    sns.violinplot(data=df_filtered, x='los_median', y=NNT, ax=ax, scale='width',
+                   palette=plt.cm.get_cmap('coolwarm')(np.linspace(0., 1., len(counter))))
+    xs = np.array(sorted(counter.keys()))
+    print(xs)
+    xticks = np.arange(len(xs))
+    ax.set_xticks(xticks)
+    ax.set_xticklabels(list(xs[:-1]) + [f'$\geq$ {max(counter.keys())}'], fontsize=14)
+
+    ax2.bar(xticks, [100 * counter[x] / total for x in xs], alpha=0.85, color='grey')
+    ax2.set_title(f'{PROC_type} Risk Score Histogram', fontsize=18, y=1.01)
+    ax2.set_xlabel(f'{PROC_type} risk score', fontsize=16)
+    ax2.set_ylabel('Case count percentage (%)', fontsize=16)
+    ax2.set_xticks(xticks)
+    ax2.set_xticklabels(list(xs[:-1]) + [f'$\geq$ {max(counter.keys())}'], fontsize=14)
+    ax2.yaxis.set_tick_params(labelsize=14)
+    ax.set_xlim([-0.8, xticks[-1] + 0.8])
+    ax2.set_xlim([-0.8, xticks[-1] + 0.8])
+    print(ax2.get_xlim())
+    rects = ax2.patches
+    labels = [int(counter[x]) for x in xs]
+    for rect, label in zip(rects, labels):
+      ht, wd = rect.get_height(), rect.get_width()
+      ax2.text(rect.get_x() + wd / 2, ht + 0.5, label,
+               ha='center', va='bottom', fontsize=12)
+    plt.tight_layout(h_pad=5)
+
+  ax.set_title(f'Per-case {PROC_type} Risk Score vs LOS Outcome', fontsize=18, y=1.04)
+  ax.set_xlabel(f'{PROC_type} risk score per case', fontsize=16)
+  ax.set_ylabel('LOS (outcome class)', fontsize=16)
+  if preprocess_y:
+    ax.set_yticks(sorted(df[outcome].unique()))
+    ax.set_yticklabels(NNT_CLASS_LABELS, fontsize=14)
+  #plt.setp(ax.collections, alpha=.9)
+  if save:
+    plt.savefig(f'{PROC_type}_risk_score.png', dpi=400)
+
+  # print(Counter(outlier_df[PROC_col]))
+  #  return outlier_df.sort_values(by='case_cnt')
+  #return df_filtered.head(10)
+
+
 # ----------------------------------------- Top-k Primary Procedure - Outcome -----------------------------------------
 def pproc_eda(dashb_df: pd.DataFrame, outcome=LOS, topK=20, xlim=30):
   total = dashb_df.shape[0]
@@ -106,7 +201,7 @@ def pproc_eda(dashb_df: pd.DataFrame, outcome=LOS, topK=20, xlim=30):
   for rect, label in zip(rects, labels):
     ht, wd = rect.get_height(), rect.get_width()
     ax2.text(wd + 15, rect.get_y() + ht / 2, label,
-            ha='left', va='center', fontsize=11)
+             ha='left', va='center', fontsize=11)
   ax2.set_xlim([0, 1.1 * max(topK_pproc_dict['case_cnt'].values())])
   ax2.set_ylim([-0.5, topK-0.5])
   plt.tight_layout(w_pad=1)
@@ -152,27 +247,6 @@ def pproc_los_median_eda(dashb_df, outcome=NNT, preprocess_y=True, min_cnt=5, xl
   ax.invert_yaxis()
   plt.setp(ax.collections, alpha=.9)
   if save:
-    plt.savefig('pproc_los_med_outcome.png', dpi=400)
+    plt.savefig('pproc_los_median_outcome.png', dpi=400)
   return outlier_df
-  #return df_filtered.head(10)
-  #df['case_cnt'] = groupby['SURG_CASE_KEY'].transform('count')
-
-  # outcome_cnter = Counter(y)
-  # ys = sorted(outcome_cnter.keys())
-  # ax.barh(ys, [outcome_cnter[i] for i in ys], align='center')
-  # ax.set_xlabel("Number of surgical cases", fontsize=16)
-  # ax.invert_yaxis()
-  # ax.set_yticks(ys)
-  # ax.set_yticklabels(NNT_CLASS_LABELS, fontsize=13)
-  # ax.set_title("LoS Histogram (%s)" % dataType)
-  # rects = ax.patches
-  # total_cnt = len(y)
-  # labels = ["{:.1%}".format(outcome_cnter[i] / total_cnt) for i in ys]
-  # for rect, label in zip(rects, labels):
-  #   ht, wd = rect.get_height(), rect.get_width()
-  #   ax.text(wd + 2.5, rect.get_y() + ht / 2, label,
-  #           ha='left', va='center', fontsize=15)
-  # ax2.scatter([1,1], [1,1])
-
-  plt.show()
 

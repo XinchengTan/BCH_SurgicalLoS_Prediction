@@ -118,6 +118,8 @@ def ccsr_eda(dashb_df: pd.DataFrame, outcome=LOS, topK=20, xlim=30):
 
   return df.head(15)
 
+# ------------------------------------------- CCSR-wise LOS median - Outcome -------------------------------------------
+# see function in 'clinical_var_risk_score_eda()' in eda_proc.py
 
 # ---------------------------------------- Organ System Code ----------------------------------------
 def os_code_colors():
