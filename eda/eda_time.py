@@ -215,8 +215,8 @@ def op_length_postopLos_eda(dashb_df, max_los=5, xlim=None, ylim=None):
     ax.set_xticks(np.arange(xlim+1))
 
   #ax.scatter(df['op_length'], df['postop_los'], s=20, facecolors='none', edgecolors='purple')
-  cmap = plt.cm.get_cmap('tab10')
-  colors = cmap(np.linspace(0., 1., max_los+2))[::-1]
+  cmap = plt.cm.get_cmap('coolwarm')
+  colors = cmap(np.linspace(0., 1., max_los+2))
   print(Counter(df['postop_los']))
   bplot = ax.boxplot([df.loc[df['postop_los'] == x, 'op_length'].to_list() for x in np.arange(max_los+2)], widths=0.7, notch=True,
                      vert=False, patch_artist=True, flierprops={'color': colors})
