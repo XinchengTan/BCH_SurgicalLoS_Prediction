@@ -229,7 +229,11 @@ class Dataset(object):
     target_case_keys = self.filter_X_case_keys(data_case_keys, sda_only, surg_only, years, care_class=care_class)
 
     # 2. Generate a mapping between cohort label and the corresponding X, y matrix for modeling
-    df_by_cohort = self.cohort_df.set_index('SURG_CASE_KEY')\
+    df = self.cohort_df
+    if by_cohort == CPT_GROUPS:
+      df = df.explode(by_cohort)
+      assert np.all(df[by_cohort].notnull()), f'Cohort Type "{by_cohort}" contains empty list!'
+    df_by_cohort = df.set_index('SURG_CASE_KEY')\
       .loc[target_case_keys].reset_index()\
       .groupby(by=by_cohort)['SURG_CASE_KEY']
     cohort_to_Xy_case_keys = {}
