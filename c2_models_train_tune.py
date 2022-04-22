@@ -8,6 +8,7 @@ from globals import *
 from c1_data_preprocessing import Dataset
 from c2_models_nnt import *
 from c2_models_chews import *
+from c3_ensemble import *
 from c4_model_perf import MyScorer
 
 
@@ -24,7 +25,11 @@ def train_model_all_ktrials(models, k_datasets: Dict[Any, Dataset], cls_weight,
     for md in models:
       print('md=', md)
       if dataset_k.outcome == NNT:
-        clf = get_model(md, cls_weight=cls_weight)
+        if md != SUPER_LEARNER:
+          clf = get_model(md, cls_weight=cls_weight)
+        else:
+          print('Using super learner!')
+          clf = SuperLearner(get_default_base_models(), LGR, base_fitted=False)
       elif dataset_k.outcome in BINARY_NNT_SET:
         clf = get_model_binclf(md, cls_weight=cls_weight)
       elif dataset_k.outcome == RESPIR_DECLINE:
@@ -237,6 +242,16 @@ def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
       param_space['scale_pos_weight'] = np.arange(1, unbalanced_ratio + 1, step)
       if unbalanced_ratio not in param_space['scale_pos_weight']:
         param_space['scale_pos_weight'] = np.append(param_space['scale_pos_weight'], unbalanced_ratio)
+  elif md == BAGCLF:
+    print('tuning bagging clf')
+    clf = BaggingClassifier(random_state=SEED)  #, n_jobs=30
+    param_space = {
+      # 'base_estimator__max_depth': [1, 2, 3, 4, 5],
+      'n_estimators': [20, 40, 60, 80, 100, 120, 150, 200, 300],
+      'max_samples': [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1],
+      'max_features': [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1],
+      'bootstrap_features': [True, False]
+    }
   elif md == CATBOOST:
     # TODO: finish this
     clf = CatBoostClassifier()
@@ -264,7 +279,7 @@ def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
     param_space = {
       'ccp_alpha': [0, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3],
       'max_depth': [None] + list(range(2, 21, 1)),
-      'max_features': list(range(2, 1 + n_frts // 2, 10)) + [n_frts],
+      'max_features': ['sqrt', 'log2', None, 0.5, 0.6, 0.7, 0.8, 0.9],
       'max_leaf_nodes': [None] + list(range(5, 101, 5)),
       'min_samples_leaf': [1] + [i for i in range(2, 17, 2)],
       'min_samples_split': list(range(2, min_samples_split_max, 3)),
