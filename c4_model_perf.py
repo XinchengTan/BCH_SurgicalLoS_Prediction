@@ -121,6 +121,8 @@ class MyScorer:
         perf_row_dict[scorer_name] = balanced_accuracy_score(ytrue, ypred)
       elif scorer_name.startswith(SCR_RECALL_PREFIX):
         cls = int(scorer_name.lstrip(SCR_RECALL_PREFIX))
+        if COMBINE_01:
+          cls -= 1  # map to class label in modeling
         perf_row_dict[scorer_name] = MyScorer.classwise_recall(ytrue, ypred, cls)
       elif scorer_name == SCR_MAE:
         perf_row_dict[scorer_name] = MyScorer.scorer_mae(ytrue, ypred)
