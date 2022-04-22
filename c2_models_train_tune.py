@@ -269,7 +269,6 @@ def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
       'min_samples_leaf': [1] + [i for i in range(2, 17, 2)],
       'min_samples_split': list(range(2, min_samples_split_max, 3)),
       'splitter': ['best', 'random'],
-      'n_estimators': [20, 30, 40, 50, 80, 100, 200, 300, 400],
     }
   else:
     raise NotImplementedError("Model %s is not supported!" % md)
