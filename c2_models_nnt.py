@@ -31,7 +31,7 @@ def get_model(model, cls_weight='balanced'):
   elif model == PR:
     clf = RegressionBasedClassifier(PR, alpha=0.01, max_iter=300)
   elif model == SVCLF:
-    clf = SVC(gamma='scale', C=3, class_weight=cls_weight, probability=False)
+    clf = SVC(gamma='scale', C=3, class_weight=cls_weight, probability=True)
   elif model == KNN:
     clf = KNeighborsClassifier(weights='uniform', p=2, n_neighbors=25, leaf_size=20, metric='minkowski')
     # clf = KNeighborsClassifier(n_neighbors=45)
@@ -39,7 +39,11 @@ def get_model(model, cls_weight='balanced'):
   elif model == KNNCV:
     clf = KNeighborsClassifierCV({'n_neighbors': np.arange(5, 51, 5)})
   elif model == DTCLF:
-    clf = DecisionTreeClassifier(random_state=0, max_depth=4, class_weight=cls_weight)
+    # {'splitter': 'best', 'min_samples_split': 116, 'min_samples_leaf': 8, 'max_leaf_nodes': None, 'max_features': 392,
+    # 'max_depth': 11, 'ccp_alpha': 0.001}
+    clf = DecisionTreeClassifier(random_state=SEED, max_depth=11, splitter='best', min_samples_split=116,
+                                 min_samples_leaf=8, max_leaf_nodes=None, max_features=392, ccp_alpha=0.001,
+                                 class_weight=cls_weight)
   elif model == RMFCLF:
     clf = RandomForestClassifier(random_state=SEED, n_estimators=50, min_samples_split=62, min_samples_leaf=4,
                                  max_samples=0.6, max_leaf_nodes=90, max_features=322, max_depth=20,
