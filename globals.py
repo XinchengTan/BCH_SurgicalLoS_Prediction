@@ -291,6 +291,7 @@ LGR = 'lgr'  # L2 reg
 LGR_L1 = 'lgr-l1'
 LGR_L12 = 'lgr-l12'
 LGRCV = 'lgr-cv'
+GAUSNB = 'gaussian-nb'
 CATNB = 'categorical-nb'
 CNB = 'complement-nb'
 MNB = 'multinomial-nb'
@@ -308,8 +309,11 @@ CATBOOST = 'catboost'
 MLPCLF = 'mlp'
 ORDCLF_LOGIT = 'ord-clf-logit'
 ORDCLF_PROBIT = 'ord-clf-probit'
+BAGCLF = 'bagging'
 BAL_BAGCLF = 'bal-bagging'
 ENSEMBLE_MAJ_EQ = 'ensemble-maj-eq'
+SUPER_LEARNER = 'super-learner'
+
 
 #             SVC: "Support Vector Classifier" --- very time-consuming
 clf2name = {LGR: "LogisticRegression",
