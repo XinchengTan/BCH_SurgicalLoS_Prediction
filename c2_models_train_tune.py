@@ -262,13 +262,14 @@ def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
   elif md == DTCLF:
     clf = DecisionTreeClassifier(random_state=SEED)
     param_space = {
-      'max_depth': [None] + list(range(2, 21, 2)),
+      'max_depth': [None] + list(range(2, 21, 1)),
       'max_features': list(range(2, 1 + n_frts // 2, 10)) + [n_frts],
       'max_leaf_nodes': [None] + list(range(5, 101, 5)),
       'max_samples': np.arange(0.1, 1, 0.1),
       'min_samples_leaf': [1] + [i for i in range(2, 17, 2)],
       'min_samples_split': list(range(2, min_samples_split_max, 3)),
       'splitter': ['best', 'random'],
+      'n_estimators': [20, 30, 40, 50, 80, 100, 200, 300, 400],
     }
   else:
     raise NotImplementedError("Model %s is not supported!" % md)

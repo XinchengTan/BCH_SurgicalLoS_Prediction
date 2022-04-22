@@ -15,7 +15,7 @@ from sklearn.model_selection import cross_val_score, GridSearchCV, RandomizedSea
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV, PoissonRegressor, Ridge, RidgeCV
-from sklearn.naive_bayes import CategoricalNB, ComplementNB, MultinomialNB
+from sklearn.naive_bayes import CategoricalNB, ComplementNB, MultinomialNB, GaussianNB
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.svm import SVC, SVR
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
@@ -24,6 +24,9 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.ensemble import VotingClassifier
 from sklearn.neural_network import MLPRegressor, MLPClassifier
 from xgboost import XGBClassifier, XGBRegressor
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.ensemble import BaggingClassifier
+from sklearn.ensemble import ExtraTreesClassifier
 # from mlens.ensemble import SuperLearner
 
 from globals import *
