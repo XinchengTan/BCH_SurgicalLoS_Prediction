@@ -190,13 +190,13 @@ def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
                    'degree': [2, 3, 4, 5],
                    }
   elif md == KNN:
-    clf = KNeighborsClassifier(algorithm='auto', n_jobs=-1)
+    clf = KNeighborsClassifier(algorithm='auto', n_jobs=-1, leaf_size=20, metric='minkowski')
     param_space = {
-      'leaf_size': list(range(20, 51, 5)) + [100, 150, 200, 300],
-      'n_neighbors': list(range(5, 101, 5)),
+      #'leaf_size': list(range(20, 51, 5)) + [100, 150, 200, 300],
+      'n_neighbors': list(range(5, 61, 2)) + [70, 80, 90, 100, 200, 300],
       'p': [1, 2],
       'weights': ['uniform', 'distance'],
-      'metric': ['chebyshev', 'minkowski']
+      #'metric': ['chebyshev', 'minkowski']
     }
   elif md == RMFCLF:
     clf = RandomForestClassifier(random_state=SEED)
