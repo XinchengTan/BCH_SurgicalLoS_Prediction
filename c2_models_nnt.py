@@ -61,6 +61,15 @@ def get_model(model, cls_weight='balanced'):
     # clf = XGBClassifier(max_depth=6, learning_rate=0.03, n_estimators=200, random_state=SEED, use_label_encoder=False,
     #                     eval_metric='mlogloss', objective='multi:softmax', num_class=MAX_NNT+2,
     #                     subsample=1, min_child_weight=2, reg_lambda=1, gamma=0.1, colsample_bytree=0.9)
+  elif model == BAGCLF:
+    clf = BaggingClassifier(n_estimators=200, max_samples=0.4, max_features=0.4, bootstrap_features=False,
+                            random_state=SEED)
+  elif model == GAUSSNB:
+    clf = GaussianNB()
+  elif model == ADABOOST:
+    clf = AdaBoostClassifier(n_estimators=100, random_state=SEED)
+  elif model == EXTREECLF:
+    clf = ExtraTreesClassifier(n_estimators=100, max_depth=6, random_state=SEED)
   elif model == ORDCLF_LOGIT:
     clf = OrdinalClassifier(distr='logit', solver='bfgs', disp=True)
   elif model == ORDCLF_PROBIT:
