@@ -64,11 +64,6 @@ def gen_k_datasets_from_test_case_keys(dashb_df: pd.DataFrame, kt_test_case_keys
 # Generate ktrials/kfolds of datasets for each binary outcome cutoff
 def gen_k_datasets_from_test_case_keys_binaryClf(dashb_df: pd.DataFrame, kt_test_case_keys: Dict,
                                                  **kwargs) -> Dict[str, Dict]:
-  decileFtr_aggs = kwargs.get('col2decile_ftrs2aggf', DEFAULT_COL2DECILE_FTR2AGGF)
-  print('\nDecile feature aggregations:')
-  for k, v in decileFtr_aggs.items():
-    print(k, v)
-
   bin_kt_datasets = defaultdict(dict)
   for kt, test_keys in tqdm(kt_test_case_keys.items()):
     for bin_nnt in BINARY_NNT_SET:

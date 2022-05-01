@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 from collections import defaultdict
@@ -7,6 +9,45 @@ from typing import Any, Dict, List, Sized
 from c1_data_preprocessing import Dataset
 from globals import *
 import utils_plot
+
+
+def remove_md_from_k_model_dict(k_model_dict, md, is_binary=False):
+  deleted = False
+  if not is_binary:
+    for k in k_model_dict.keys():
+      if md in k_model_dict[k].keys():
+        del k_model_dict[k][md]
+        deleted = True
+  else:
+    for bin, k_clf_dict in k_model_dict.items():
+      for k in k_clf_dict.keys():
+        if md in k_clf_dict[k].keys():
+          del k_clf_dict[k][md]
+          deleted = True
+  if not deleted:
+    warnings.warn(f'Model "{md}" is not included in the input mapping!')
+
+  return k_model_dict
+
+
+def merge_k_model_dict(k_model_dict1, k_model_dict2):
+  # If the same model key exists in both mapping, the merged dict takes the clf from 'k_model_dict2'
+  assert len(k_model_dict1) == len(k_model_dict2), 'Input mappings must have the same length!'
+  k_model_dict = {}
+  for k in k_model_dict1:
+    k_model_dict[k] = {**k_model_dict1[k], **k_model_dict2[k]}
+  return k_model_dict
+
+
+def merge_bin_k_model_dict(bin_k_model_dict1, bin_k_model_dict2):
+  assert set(bin_k_model_dict1.keys()) == set(bin_k_model_dict2.keys()), \
+         'Input mappings must have the same binary clf tasks!'
+  if len(bin_k_model_dict1) == 0:
+    return {}
+  bin_k_model_dict = {}
+  for bin, k_model_dict1 in bin_k_model_dict1.items():
+    bin_k_model_dict[bin] = merge_k_model_dict(k_model_dict1, bin_k_model_dict2[bin])
+  return bin_k_model_dict
 
 
 # Returns the classifier's name in a readable format
@@ -113,8 +154,8 @@ def format_perf_df(perf_df: pd.DataFrame):
         formatter_ret[scr] = SCR_FORMATTER[SCR_MAE]
       elif scr.startswith(SCR_RMSE):
         formatter_ret[scr] = SCR_FORMATTER[SCR_RMSE]
-      elif scr.startswith(SCR_AUC):
-        formatter_ret[scr] = SCR_FORMATTER[SCR_AUC]
+      elif scr.startswith(SCR_AUROC) or scr.startswith('auroc'):
+        formatter_ret[scr] = SCR_FORMATTER[SCR_AUROC]
       elif scr.startswith(SCR_F1_BINCLF):
         formatter_ret[scr] = SCR_FORMATTER[SCR_F1_BINCLF]
       else:
