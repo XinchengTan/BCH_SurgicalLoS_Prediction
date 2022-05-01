@@ -29,6 +29,7 @@ class FeatureEngineeringModifier(object):
     self.scaler_type = input_scaler_type
     self.scale_numeric_only = scale_numeric_only
     self.input_scaler = None
+    self.scaler_dict = dict()
     # Meta data for generating decile features
     self.col2decile_ftr2aggf = col2decile_ftrs2aggf
     self.decile_outcome = decile_outcome
@@ -436,6 +437,26 @@ class FeatureEngineeringModifier(object):
       Xtrain = scaler.fit_transform(Xtrain)
     self.input_scaler = scaler
     return Xtrain
+
+  # Fit all scalers
+    # scaler_dict = {'minmax': MinMaxScaler(), 'std': StandardScaler(), 'robust': RobustScaler()}
+    # for scl, scaler in scaler_dict.items():
+    #   if self.scale_numeric_only:
+    #     numeric_colidxs = np.where(np.in1d(feature_names, ALL_POSSIBLE_NUMERIC_COLS))[0]
+    #     scaler.fit(Xtrain[:, numeric_colidxs])
+    #     if scl == self.scaler_type:
+    #       Xtrain[: numeric_colidxs] = scaler.transform(Xtrain[:, numeric_colidxs])
+    #       self.input_scaler = scaler
+    #   else:
+    #     scaler.fit(Xtrain)
+    #     if scl == self.scaler_type:
+    #       Xtrain = scaler.transform(Xtrain)
+    #       self.input_scaler = scaler
+    # self.scaler_dict = scaler_dict
+    # if self.scaler_type is None or Xtrain.shape[0] == 0:
+    #   return Xtrain
+    # return Xtrain
+
 
   def scale_Xtest(self, Xtest, feature_names):
     if self.scaler_type is None or Xtest.shape[0] == 0:

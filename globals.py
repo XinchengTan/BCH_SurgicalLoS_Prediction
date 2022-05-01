@@ -41,7 +41,10 @@ NNT_B2 = 'NUM_OF_NIGHTS <= 2'
 NNT_B3 = 'NUM_OF_NIGHTS <= 3'
 NNT_B4 = 'NUM_OF_NIGHTS <= 4'
 NNT_B5 = 'NUM_OF_NIGHTS <= 5'
-BINARY_NNT_SET = {NNT_B0, NNT_B1, NNT_B2, NNT_B3, NNT_B4, NNT_B5}  # NNT_Bx  max(x) = MAX_NNT
+if COMBINE_01:
+  BINARY_NNT_SET = {NNT_B1, NNT_B2, NNT_B3, NNT_B4, NNT_B5}  # NNT_Bx  max(x) = MAX_NNT
+else:
+  BINARY_NNT_SET = {NNT_B0, NNT_B1, NNT_B2, NNT_B3, NNT_B4, NNT_B5}  # NNT_Bx  max(x) = MAX_NNT
 OS_CODES = 'OS_CODES'
 CCSRS, CCSR, CCSR_DECILE, ZERO_CCSR, CCSR_PERCASE_CNT = 'CCSRS', 'CCSR', 'CCSR_DECILE', 'Zero_CCSRs', 'CCSR_PERCASE_COUNT'
 CPTS, CPT, CPT_DECILE, CPT_PERCASE_CNT = 'CPTS', 'CPT', 'CPT_DECILE', 'CPT_PERCASE_COUNT'
@@ -156,6 +159,8 @@ ALL_POSSIBLE_NUMERIC_COLS = [
   'PPROC_QT75', 'CPT_QT75', 'CPT_GROUP_QT75', 'MED1_QT75', 'MED2_QT75', 'MED3_QT75', 'MED123_QT75', 'CCSR_QT75',
   'PPROC_MIN', 'CPT_MIN', 'CPT_GROUP_MIN', 'MED1_MIN', 'MED2_MIN', 'MED3_MIN', 'MED123_MIN', 'CCSR_MIN',
   'PPROC_MAX', 'CPT_MAX', 'CPT_GROUP_MAX', 'MED1_MAX', 'MED2_MAX', 'MED3_MAX', 'MED123_MAX', 'CCSR_MAX',
+  CCSR_PERCASE_CNT, CPT_GROUP_PERCASE_CNT, CPT_PERCASE_CNT,
+  MED1_PERCASE_CNT, MED2_PERCASE_CNT, MED3_PERCASE_CNT, MED123_PERCASE_CNT,
 ]
 
 
@@ -296,6 +301,7 @@ CATNB = 'categorical-nb'
 CNB = 'complement-nb'
 MNB = 'multinomial-nb'
 SVCLF = 'svc'
+SVC_LINEAR = 'svc-linear'
 SVC_POLY = 'svc-poly'
 SVC_POLY3 = 'svc-poly3'
 SVC_POLY4 = 'svc-poly4'
@@ -331,7 +337,10 @@ clf2name_eval = dict(clf2name)
 clf2name_eval[ENSEMBLE_MAJ_EQ] = "Ensemble Model (maj - eq)"
 clf2name_eval[SURGEON] = "Surgeon Prediction"
 
-# XGBCLF: "XGBoost Classifier",
+# Class weights
+BAL_CLSWT = 'balanced'
+NONLINEAR_CLSWT = 'nonlinear-cls-wt'
+
 # ORDCLF_LOGIT: "Ordinal Classifier - Logit",
 # ORDCLF_PROBIT: "Ordinal Classifier - Probit",
 
@@ -375,6 +384,8 @@ FPRPCT15 = "< 0.15"
 # Evaluation metrics
 SCR_ACC = 'accuracy'
 SCR_AUC = 'roc_auc'
+SCR_AUROC = 'auroc'
+SCR_AUROC_NEG = 'auroc-neg'
 SCR_ACC_BAL = 'balanced_accuracy'
 SCR_ACC_ERR1 = 'Accuracy (tol = 1 NNT)'
 SCR_ACC_ERR2 = 'Accuracy (tol = 2 NNT)'
@@ -387,6 +398,9 @@ SCR_OVERPRED2 = 'Extreme Overprediction Rate'
 SCR_F1_BINCLF = 'f1'
 SCR_PREC_BINCLF = 'precision'
 SCR_RECALL_BINCLF = 'recall'
+SCR_F1_BINCLF_NEG = 'f1-neg'
+SCR_PREC_BINCLF_NEG = 'precision-neg'
+SCR_RECALL_BINCLF_NEG = 'recall-neg'
 SCR_RECALL_ALL_CLS = 'recall_all_classes'
 SCR_RECALL_PREFIX = 'recall_class'  # prefix for recall of a particular class: recall of class X has label 'recall_clsX'
 SCR_RECALL0 = 'recall_class0'
@@ -402,12 +416,15 @@ else:
   SCR_RECALL_ALL_LIST = [SCR_RECALL0, SCR_RECALL1, SCR_RECALL2, SCR_RECALL3, SCR_RECALL4, SCR_RECALL5, SCR_RECALL6]
 DEFAULT_SCORERS = [SCR_ACC, SCR_ACC_ERR1, SCR_ACC_ERR2, SCR_OVERPRED0, SCR_UNDERPRED0, SCR_OVERPRED2, SCR_UNDERPRED2,
                    SCR_MAE, SCR_RMSE] + SCR_RECALL_ALL_LIST # SCR_ACC_BAL,
-DEFAULT_SCORERS_BINCLF = [SCR_ACC, SCR_RECALL_BINCLF, SCR_PREC_BINCLF, SCR_F1_BINCLF]  # SCR_AUC
+DEFAULT_SCORERS_BINCLF = [SCR_ACC, SCR_AUROC, # SCR_AUROC_NEG,
+                          SCR_F1_BINCLF, SCR_RECALL_BINCLF, SCR_PREC_BINCLF,
+                          SCR_F1_BINCLF_NEG, SCR_RECALL_BINCLF_NEG, SCR_PREC_BINCLF_NEG, ]  #
 
 # Scorer formatter for pd output
 SCR_FORMATTER = defaultdict(lambda: "{:.1%}".format)
-SCR_FORMATTER.update({SCR_MAE: "{:.2f}".format, SCR_RMSE: "{:.2f}".format, SCR_F1_BINCLF: "{:.2f}".format,
-                      SCR_AUC: "{:.2f}".format})
+SCR_FORMATTER.update({SCR_MAE: "{:.2f}".format, SCR_RMSE: "{:.2f}".format,
+                      SCR_AUROC: "{:.2f}".format, SCR_AUROC_NEG: "{:.2f}".format,
+                      SCR_F1_BINCLF: "{:.2f}".format, SCR_F1_BINCLF_NEG: "{:.2f}".format, })
 
 # SCR_ACC: "{:.1%}".format, SCR_ACC_BAL: "{:.1%}".format, SCR_ACC_ERR1: "{:.1%}".format,
 # SCR_ACC_ERR2: "{:.1%}".format, SCR_OVERPRED: "{:.1%}".format, SCR_UNDERPRED: "{:.1%}".format,

@@ -2,6 +2,7 @@
 from pathlib import Path
 
 PROJECT_DIR = Path('/Users/caratan/Desktop/ML4Health/Dashboard-Project')
+FIG_DIR = Path('/Users/caratan/Desktop/a_thesis_plots')
 # Data dir
 DATA_HOME = PROJECT_DIR / 'Data_new_all'
 DATA_TRIALS_HOME = PROJECT_DIR / 'Data_ktrials'
