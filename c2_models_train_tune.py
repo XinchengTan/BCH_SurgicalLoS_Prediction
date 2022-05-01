@@ -13,12 +13,12 @@ from c4_model_perf import MyScorer
 
 
 # -------------------------------------- Train models on k Datasets (Multi-class) --------------------------------------
-def train_model_all_ktrials(models, k_datasets: Dict[Any, Dataset], cls_weight,
+def train_model_all_ktrials(models, k_datasets: Dict[Any, Dataset], cls_weight, alpha=None,
                             train_sda_only=False, train_surg_only=False, train_care_class=None) -> Dict:
   models = [LGR, KNN, RMFCLF, XGBCLF] if models is None else models  # GBCLF,
   k_model_dict = {}
   for k, dataset_k in tqdm(k_datasets.items()):
-    # Fit models
+    # Fit model
     Xtrain, ytrain = dataset_k.get_Xytrain_by_case_key(dataset_k.train_case_keys, care_class=train_care_class,
                                                        sda_only=train_sda_only, surg_only=train_surg_only)
     model_dict = {}
@@ -41,7 +41,10 @@ def train_model_all_ktrials(models, k_datasets: Dict[Any, Dataset], cls_weight,
       else:
         warnings.warn(f'Outcome "{dataset_k.outcome}" is not supported yet! Skipped training')
         continue
-      clf.fit(Xtrain, ytrain)
+      if cls_weight == NONLINEAR_CLSWT and md == XGBCLF:
+        clf.fit(Xtrain, ytrain, sample_weight=gen_sample_weights(ytrain, cls_weight, alpha=alpha))
+      else:
+        clf.fit(Xtrain, ytrain)
       model_dict[md] = clf
     k_model_dict[k] = model_dict
   return k_model_dict
@@ -60,6 +63,7 @@ def train_model_all_ktrials_binclf(models, bin_kt_datasets: Dict[str, Dict[int, 
   return bin_k_model_dict
 
 
+@DeprecationWarning
 def get_refit_val(scorers, refit):
   if (len(scorers) == 1) or (type(refit) == str):
     return refit
@@ -190,7 +194,7 @@ def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
                    'degree': [2, 3, 4, 5],
                    }
   elif md == KNN:
-    clf = KNeighborsClassifier(algorithm='auto', n_jobs=-1, leaf_size=20, metric='minkowski')
+    clf = KNeighborsClassifier(algorithm='auto', n_jobs=30, leaf_size=20, metric='minkowski')
     param_space = {
       #'leaf_size': list(range(20, 51, 5)) + [100, 150, 200, 300],
       'n_neighbors': list(range(5, 61, 2)) + [70, 80, 90, 100, 200, 300],
@@ -247,9 +251,9 @@ def gen_model_param_space(md, X, y, scorers, kfold=5, use_gpu=False):
     clf = BaggingClassifier(random_state=SEED)  #, n_jobs=30
     param_space = {
       # 'base_estimator__max_depth': [1, 2, 3, 4, 5],
-      'n_estimators': [20, 40, 60, 80, 100, 120, 150, 200, 300],
-      'max_samples': [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1],
-      'max_features': [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1],
+      'n_estimators': [10, 20, 40, 60, 80, 100, 120, 150, 200, 300],
+      'max_samples': [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1],
+      'max_features': [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1],
       'bootstrap_features': [True, False]
     }
   elif md == CATBOOST:
@@ -301,13 +305,15 @@ def count_total_candidates(param_space: Dict):
 
 
 # Generate sample weights to use in model.fit(sample_weight=...)
-def gen_sample_weights(y, cls_weight=None):
+def gen_sample_weights(y, cls_weight=None, alpha=None):
   if cls_weight is None:
     return np.ones_like(y)
 
   if type(cls_weight) == float:
     cls_weight = flex_log_class_weight(y, mu=cls_weight)
-  elif cls_weight != 'balanced':
+  elif cls_weight == NONLINEAR_CLSWT:
+    cls_weight = nonlinear_class_weights(y, alpha=alpha)
+  elif cls_weight != BAL_CLSWT:
     raise NotImplementedError(f'Got an invalid cls_weight: {cls_weight}!')
   # if 'balanced', class_weight = n_samples / (n_classes * np.bincount(y))
   print('[c2_models_train_tune] class_weight: ', cls_weight)
@@ -319,13 +325,24 @@ def gen_sample_weights(y, cls_weight=None):
 # Log-based smooth class weight for imbalanced class
 def flex_log_class_weight(y, mu=0.15):
   label2count = Counter(y)
-  total = np.sum(list(label2count.values()))
+  total = len(y)
   class_weight = dict()
 
   for cls, cls_cnt in label2count.items():
     score = np.log(mu * total / float(cls_cnt))
     class_weight[cls] = max(1.0, score)  # todo: why 1.0 instead of a smaller number?
 
+  return class_weight
+
+
+# paper link: https://www.hindawi.com/journals/jhe/2021/4714898/
+def nonlinear_class_weights(y, alpha=0):
+  label2count = Counter(y)
+  total = len(y)
+  class_weight = dict()
+  for cls, cls_cnt in label2count.items():
+    v_cls = cls_cnt / total
+    class_weight[cls] = 0.5 + alpha / (1 + np.exp(v_cls))
   return class_weight
 
 
