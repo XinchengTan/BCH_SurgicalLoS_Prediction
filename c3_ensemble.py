@@ -14,19 +14,36 @@ from tqdm import tqdm
 from globals import *
 from c2_models import *
 from c2_models_nnt import *
+from utils_eval import get_clf_name
 
-# # This function tries to ensemble all binary classifiers into 1 prediction
-# def gen_binclfs_ensemble_pred(preds_mat, preds_proba=None, byMax=False):
-#   # pred_mat: (#cases, #bin_clfs)
-#   agg_preds = np.zeros(preds_mat.shape[0])
-#   if byMax:
-#     last1_coord = np.argwhere(preds_mat == 1)
-#     agg_preds[last1_coord[:, 0]] = last1_coord[:, 1]
-#     return agg_preds
-#   if preds_proba is not None:
-#     rowmax_idx = np.argmax(preds_proba, axis=1)
+
+def get_default_voter_md_abbr():
+  return [LGR, KNN, GAUSSNB, ADABOOST, BAGCLF, EXTREECLF, DTCLF, RMFCLF, XGBCLF]
+
+
+def make_votingClf_single_bin(model_dict, base_models=None, voting='hard'):
+  # if base_models is None, use all models in the k_model_dict
+  base_model_dict = model_dict if base_models is None else {k: v for k, v in model_dict.items() if k in base_models}
+  base_models = list(base_model_dict.items())
+  voting_clf = VotingClassifier(estimators=base_models, voting=voting)
+  return {'VotingClf': voting_clf}
+
+
+def make_votingClf_all_bins(bin_model_dict, base_models=None, voting='hard'):
+  bin_voting_clf = {}
+  for bn, model_dict in bin_model_dict.items():
+    bin_voting_clf[bn] = {0: make_votingClf_single_bin(model_dict, base_models, voting)}
+  return bin_voting_clf
+
+# def make_voting_clf_from_mds_kfold_binclf(bin_k_model_dict, base_models=None):
+#   # if base_models is None, use all models in the k_model_dict
+#   bin_k_voterClf_dict = {}
+#   for bin_outcome, k_model_dict in bin_k_model_dict.items():
+#     k_voterClf_dict = defaultdict(list)
+#     for k, model_dict in k_model_dict.items():
+#       k_voterClf_dict[k] = Ensemble(tasks=[BIN_CLF], md2clfs={get_clf_name(clf): {BIN_CLF}})
 #
-#     pass
+#   return
 
 
 # TODO: In the future, need to allow other weighting schemes, e.g. by predict_proba, --> can create a separate class
@@ -50,8 +67,8 @@ class Ensemble(object):
       if tsk not in ALL_TASKS:
         raise NotImplementedError("Task %s is not supported yet!" % tsk)
       for md, tsk2clfs in self.md2clfs.items():
-        if md not in ALL_MODELS:
-          raise NotImplementedError("Model %s is not supported yet!" % md)
+        # if md not in ALL_MODELS:
+        #   raise NotImplementedError("Model %s is not supported yet!" % md)
         if len(tsk2clfs) == 0:
           raise ValueError("Model %s is not trained on any task!" % md)
         # if tsk2clfs.get(tsk, None) is None or len(tsk2clfs[tsk]) == 0:
@@ -131,7 +148,6 @@ class Ensemble(object):
     majority_class = np.argmax(self._votes_over_nnt, axis=1)
     return majority_class
 
-
   def get_votes_std(self, ytrue=None):
     # generate the distribution of the votes for each class
     if self._votes_over_nnt is None:
@@ -161,14 +177,15 @@ def get_default_base_models():
   # models.append(make_pipeline(StandardScaler(), GaussianNB()))
   #models.append(SVC(gamma='scale', probability=True))
   #models.append(get_model(KNN))
+  #models.append(BaggingClassifier(n_estimators=100, random_state=SEED))
   models.append(get_model(LGR, cls_weight=None))
   models.append(GaussianNB())
   models.append(AdaBoostClassifier(n_estimators=100, random_state=SEED))
-  models.append(BaggingClassifier(n_estimators=100, random_state=SEED))
-  models.append(ExtraTreesClassifier(n_estimators=100, max_depth=6))
-  models.append(get_model(DTCLF))
-  models.append(get_model(RMFCLF))
-  models.append(get_model(XGBCLF))
+  models.append(ExtraTreesClassifier(n_estimators=100, max_depth=6, random_state=SEED))
+  models.append(get_model(BAGCLF))
+  models.append(get_model(DTCLF, cls_weight=None))
+  models.append(get_model(RMFCLF, cls_weight=None))
+  models.append(get_model(XGBCLF, cls_weight=None))
   return models
 
 
@@ -182,6 +199,8 @@ class SuperLearner(object):
     else:
       raise NotImplementedError
     #self.meta_X, self.meta_y = None, None
+    # TODO: pass md_to_scaler dict in init()
+    # TODO: pass numeric_idx & input scaler_dict to fit() & predict()
 
   def fit(self, X, y, kfold=10):
     meta_X, meta_y = self._get_out_of_fold_predictions(X, y, kfd=kfold)
