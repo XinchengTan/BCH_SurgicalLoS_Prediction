@@ -31,7 +31,7 @@ class MyScorer:
         scr_dict[scorer] = 'accuracy'
       elif scorer == SCR_ACC_BAL:
         scr_dict[scorer] = 'balanced_accuracy'
-      elif scorer == SCR_AUC:
+      elif scorer == SCR_AUROC:
         scr_dict[scorer] = 'roc_auc' if binary_cls else 'roc_auc_ovr'
       elif scorer == SCR_RECALL_BINCLF:
         scr_dict[scorer] = 'recall'
@@ -39,6 +39,12 @@ class MyScorer:
         scr_dict[scorer] = 'precision'
       elif scorer == SCR_F1_BINCLF:
         scr_dict[scorer] = 'f1'
+      elif scorer == SCR_RECALL_BINCLF_NEG:
+        scr_dict[scorer] = make_scorer(recall_score, pos_label=0)
+      elif scorer == SCR_PREC_BINCLF_NEG:
+        scr_dict[scorer] = make_scorer(precision_score, pos_label=0)
+      elif scorer == SCR_F1_BINCLF_NEG:
+        scr_dict[scorer] = make_scorer(f1_score, pos_label=0)
       elif scorer == SCR_MAE:
         scr_dict[scorer] = make_scorer(MyScorer.scorer_mae, greater_is_better=False)
       elif scorer == SCR_RMSE:
@@ -146,7 +152,15 @@ class MyScorer:
         perf_row_dict[scorer_name] = precision_score(ytrue, ypred)
       elif scorer_name == SCR_F1_BINCLF:
         perf_row_dict[scorer_name] = f1_score(ytrue, ypred)
-      elif scorer_name == SCR_AUC:
+      elif scorer_name == SCR_RECALL_BINCLF_NEG:
+        perf_row_dict[scorer_name] = recall_score(ytrue, ypred, pos_label=0)
+      elif scorer_name == SCR_PREC_BINCLF_NEG:
+        perf_row_dict[scorer_name] = precision_score(ytrue, ypred, pos_label=0)
+      elif scorer_name == SCR_F1_BINCLF_NEG:
+        perf_row_dict[scorer_name] = f1_score(ytrue, ypred, pos_label=0)
+      elif scorer_name == SCR_AUROC_NEG:
+        perf_row_dict[scorer_name] = -1
+      elif scorer_name == SCR_AUROC:
         perf_row_dict[scorer_name] = -1
         if enable_warning:
           warnings.warn('Default ROC AUC to -1. To calculate actual AUC, please use MyScorer.calc_auc_roc()')
@@ -155,7 +169,10 @@ class MyScorer:
     return perf_row_dict
 
   @staticmethod
-  def calc_auc_roc(ytrue, clf, X):
+  def calc_auc_roc(ytrue, clf, X, pos_label=1):
+    if pos_label == 0:
+      ytrue = 1 - np.array(ytrue)
+
     # Multi-class classifier
     if len(set(ytrue)) > 2:
       try:
@@ -168,17 +185,21 @@ class MyScorer:
 
     # Binary classifier
     try:
-      ypred_proba = clf.predict_proba(X)[:, 1]
+      ypred_proba = clf.predict_proba(X)[:, pos_label]
       auc = roc_auc_score(ytrue, ypred_proba)
+      #print(auc)
       return auc
     except Exception:
-      try:
-        ypred_proba = clf.decision_function(X)
-        auc = roc_auc_score(ytrue, ypred_proba)
-        return auc
-      except Exception:
-        warnings.warn("Input classifier has neither predict_proba() nor decision_function() method!")
-        return -1
+      print('AUROC got an exception!')
+      warnings.warn(f"Input classifier{clf} has neither predict_proba() nor decision_function() method!")
+      return -1
+      # try:
+      #   ypred_proba = clf.decision_function(X)
+      #   auc = roc_auc_score(ytrue, ypred_proba)
+      #   return auc
+      # except Exception:
+      #   warnings.warn("Input classifier has neither predict_proba() nor decision_function() method!")
+      #   return -1
 
 
 # Evaluate models' performance across k trials
@@ -247,13 +268,15 @@ def eval_model_by_cohort_Xydata(trial_i, dataset: Dataset, clf, cohort_to_XyKeys
     if len(X) > 0:
       pred = clf.predict(X)
       scores = MyScorer.apply_scorers(scorers, y, pred, enable_warning=False)
-      if SCR_AUC in scorers:
-        scores[SCR_AUC] = MyScorer.calc_auc_roc(y, clf, X)
+      if SCR_AUROC in scorers:
+        scores[SCR_AUROC] = MyScorer.calc_auc_roc(y, clf, X)
+      if SCR_AUROC_NEG in scorers:
+        scores[SCR_AUROC_NEG] = MyScorer.calc_auc_roc(y, clf, X, pos_label=0)
       class_to_counts = get_class_count(y, outcome=dataset.outcome)
       perf_df = append_perf_row_generic(
-        perf_df, scores, {**class_to_counts,
-                          **{'Xtype': Xtype, 'Cohort': cohort, 'Model': md_name, 'Count': X.shape[0],
-                             'Trial': trial_i, 'Year': year_label}
+        perf_df, scorers, {**class_to_counts,
+                           **{'Xtype': Xtype, 'Cohort': cohort, 'Model': md_name, 'Count': X.shape[0],
+                              'Trial': trial_i, 'Year': year_label}
                           })
       if surg_only:
         true_surg_preds = dataset.get_surgeon_pred_df_by_case_key(cohort_case_keys, years=years, care_class=care_class)
@@ -322,8 +345,10 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
   if Xtrain is not None and len(Xtrain) > 0:
     train_pred = clf.predict(Xtrain)
     train_scores = MyScorer.apply_scorers(scorers, ytrain, train_pred, enable_warning=False)
-    if SCR_AUC in scorers:
-      train_scores[SCR_AUC] = MyScorer.calc_auc_roc(ytrain, clf, Xtrain)
+    if SCR_AUROC in scorers:
+      train_scores[SCR_AUROC] = MyScorer.calc_auc_roc(ytrain, clf, Xtrain)
+    if SCR_AUROC_NEG in scorers:
+      train_scores[SCR_AUROC_NEG] = MyScorer.calc_auc_roc(ytrain, clf, Xtrain, pos_label=0)
     train_perf_df = append_perf_row_generic(
       train_perf_df, train_scores, {**get_class_count(ytrain, outcome=dataset.outcome),
                                     **{'Xtype': 'train', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
@@ -332,8 +357,10 @@ def eval_model(dataset: Dataset, clf, scorers=None, trial_i=None, sda_only=False
   if Xtest is not None and len(Xtest) > 0:
     test_pred = clf.predict(Xtest)
     test_scores = MyScorer.apply_scorers(scorers, ytest, test_pred, enable_warning=False)
-    if SCR_AUC in scorers:
-      test_scores[SCR_AUC] = MyScorer.calc_auc_roc(ytest, clf, Xtest)
+    if SCR_AUROC in scorers:
+      test_scores[SCR_AUROC] = MyScorer.calc_auc_roc(ytest, clf, Xtest)
+    if SCR_AUROC_NEG in scorers:
+      test_scores[SCR_AUROC_NEG] = MyScorer.calc_auc_roc(ytest, clf, Xtest, pos_label=0)
     test_perf_df = append_perf_row_generic(
       test_perf_df, test_scores, {**get_class_count(ytest, outcome=dataset.outcome),
                                   **{'Xtype': 'test', 'Cohort': cohort, 'Model': md_name, 'Trial': trial_i,
