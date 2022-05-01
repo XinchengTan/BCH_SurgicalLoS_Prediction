@@ -630,8 +630,10 @@ def gen_y_nnt(y):
 
 def gen_y_nnt_binary(y, cutoff):  # task: predict if LoS <= cutoff (cutoff in range(0, MAX_NNT + 1)
   yb = np.copy(y)
-  yb[y <= cutoff] = 1
-  yb[y > cutoff] = 0
+  yb[y <= cutoff] = 0
+  yb[y > cutoff] = 1
+  # yb[y <= cutoff] = 1
+  # yb[y > cutoff] = 0
   return yb
 
 
