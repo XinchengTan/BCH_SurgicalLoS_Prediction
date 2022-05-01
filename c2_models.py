@@ -17,7 +17,7 @@ from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV, PoissonRegressor, Ridge, RidgeCV
 from sklearn.naive_bayes import CategoricalNB, ComplementNB, MultinomialNB, GaussianNB
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
-from sklearn.svm import SVC, SVR
+from sklearn.svm import SVC, SVR, LinearSVC
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
