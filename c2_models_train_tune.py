@@ -14,33 +14,51 @@ from c4_model_perf import MyScorer
 
 # -------------------------------------- Train models on k Datasets (Multi-class) --------------------------------------
 def train_model_all_ktrials(models, k_datasets: Dict[Any, Dataset], cls_weight, alpha=None,
-                            train_sda_only=False, train_surg_only=False, train_care_class=None) -> Dict:
+                            train_sda_only=False, train_surg_only=False, train_care_class=None,
+                            kt_md_dataset: Dict[int, Dict[str, Dataset]]=None) -> Dict:
   models = [LGR, KNN, RMFCLF, XGBCLF] if models is None else models  # GBCLF,
   k_model_dict = {}
   for k, dataset_k in tqdm(k_datasets.items()):
-    # Fit model
+    # Get model-specific dataset
+    md_dataset_k = None if kt_md_dataset is None else kt_md_dataset[k]
+    # Get training data
     Xtrain, ytrain = dataset_k.get_Xytrain_by_case_key(dataset_k.train_case_keys, care_class=train_care_class,
                                                        sda_only=train_sda_only, surg_only=train_surg_only)
+    outcome = dataset_k.outcome
+    # Fit models
     model_dict = {}
     for md in models:
       print('md=', md)
-      if dataset_k.outcome == NNT:
+      # Train models according to the task
+      if outcome == NNT:
         if md != SUPER_LEARNER:
           clf = get_model(md, cls_weight=cls_weight)
         else:
           print('Using super learner!')
           clf = SuperLearner(get_default_base_models(), LGR, base_fitted=False)
-      elif dataset_k.outcome in BINARY_NNT_SET:
-        clf = get_model_binclf(md, cls_weight=cls_weight)
-      elif dataset_k.outcome == RESPIR_DECLINE:
+      elif outcome == POSTOP_NNT:
+        clf = get_model_postop(md, cls_weight=cls_weight)  # todo: add super learner
+      elif outcome in BINARY_NNT_SET:
+        if md != SUPER_LEARNER:
+          clf = get_model_binclf(md, cls_weight=cls_weight)
+        else:
+          print('Using super learner!')
+          clf = SuperLearner(get_default_base_models(is_binary=True), LGR, base_fitted=False)
+      elif outcome == RESPIR_DECLINE:
         clf = get_model_respir_decline(md, cls_weight=cls_weight)
-      elif dataset_k.outcome == CARDIO_DECLINE:
+      elif outcome == CARDIO_DECLINE:
         clf = get_model_cardio_decline(md, cls_weight=cls_weight)
-      elif dataset_k.outcome == NEURO_DECLINE:
+      elif outcome == NEURO_DECLINE:
         clf = get_model_neuro_decline(md, cls_weight=cls_weight)
       else:
-        warnings.warn(f'Outcome "{dataset_k.outcome}" is not supported yet! Skipped training')
+        warnings.warn(f'Outcome "{outcome}" is not supported yet! Skipped training')
         continue
+
+      # Switch to model-specific dataset (e.g. based on input normalizer) for training
+      if (md_dataset_k is not None) and (md in md_dataset_k.keys()):
+        dataset = md_dataset_k[md]
+        Xtrain, ytrain = dataset.get_Xytrain_by_case_key(dataset.train_case_keys, care_class=train_care_class,
+                                                         sda_only=train_sda_only, surg_only=train_surg_only)
       if cls_weight == NONLINEAR_CLSWT and md == XGBCLF:
         clf.fit(Xtrain, ytrain, sample_weight=gen_sample_weights(ytrain, cls_weight, alpha=alpha))
       else:
@@ -53,13 +71,15 @@ def train_model_all_ktrials(models, k_datasets: Dict[Any, Dataset], cls_weight, 
 # ------------------------------------- Train models on k Datasets (Binary class) --------------------------------------
 # Train models for all binary outcomes across k trials/folds
 def train_model_all_ktrials_binclf(models, bin_kt_datasets: Dict[str, Dict[int, Dataset]], cls_weight,
-                                   train_sda_only=False, train_surg_only=False, train_care_class=None):
+                                   train_sda_only=False, train_surg_only=False, train_care_class=None,
+                                   bin_kt_md_dataset: Dict[str, Dict[int, Dict[str, Dataset]]]=None):
   bin_k_model_dict = defaultdict(dict)
   for bin_nnt, kt_datasets in tqdm(bin_kt_datasets.items(), desc='Binary Outcomes'):
     print('Outcome: ', bin_nnt)
+    kt_md_dataset = None if bin_kt_md_dataset is None else bin_kt_md_dataset[bin_nnt]
     bin_k_model_dict[bin_nnt] = train_model_all_ktrials(models, k_datasets=kt_datasets, cls_weight=cls_weight,
                                                         train_sda_only=train_sda_only, train_surg_only=train_surg_only,
-                                                        train_care_class=train_care_class)
+                                                        train_care_class=train_care_class, kt_md_dataset=kt_md_dataset)
   return bin_k_model_dict
 
 

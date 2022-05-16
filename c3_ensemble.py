@@ -6,6 +6,7 @@ import pandas as pd
 from typing import Dict, List, AnyStr
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import KFold
+from sklearn.base import BaseEstimator
 from sklearn.metrics import accuracy_score
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -35,15 +36,38 @@ def make_votingClf_all_bins(bin_model_dict, base_models=None, voting='hard'):
     bin_voting_clf[bn] = {0: make_votingClf_single_bin(model_dict, base_models, voting)}
   return bin_voting_clf
 
-# def make_voting_clf_from_mds_kfold_binclf(bin_k_model_dict, base_models=None):
-#   # if base_models is None, use all models in the k_model_dict
-#   bin_k_voterClf_dict = {}
-#   for bin_outcome, k_model_dict in bin_k_model_dict.items():
-#     k_voterClf_dict = defaultdict(list)
-#     for k, model_dict in k_model_dict.items():
-#       k_voterClf_dict[k] = Ensemble(tasks=[BIN_CLF], md2clfs={get_clf_name(clf): {BIN_CLF}})
-#
-#   return
+
+def add_voting_ensemble_binclf(bin_k_model_dict, base_models=None, skip_models=[]):
+  new_bin_k_model_dict = {}
+  for bn, k_model_dict in bin_k_model_dict.items():
+    new_bin_k_model_dict[bn] = add_voting_ensemble(k_model_dict, base_models, skip_models)
+  return new_bin_k_model_dict
+
+
+def add_voting_ensemble(k_model_dict, base_models=None, skip_models=[]):
+  new_k_model_dict = {}
+  for k, model_dict in k_model_dict.items():
+    if base_models is None:
+      voting_clf = Ensemble(tasks=[TASK_MULTI_CLF],
+                            md2clfs={md: {TASK_MULTI_CLF: [clf]} for md, clf in model_dict.items() if md not in skip_models})
+    else:
+      voting_clf = Ensemble(tasks=[TASK_MULTI_CLF],
+                            md2clfs={md: {TASK_MULTI_CLF: [clf]} for md, clf in model_dict.items() if md in base_models},)
+    new_k_model_dict[k] = {**model_dict, **{ENSEMBLE_MAJ_EQ: voting_clf}}
+  return new_k_model_dict
+
+
+# def add_and_fit_super_learner(k_model_dict, base_models=None, skip_models=[]):
+#   new_k_model_dict = {}
+#   for k, model_dict in k_model_dict.items():
+#     if base_models is None:
+#       voting_clf = SuperLearner(base_estimators=list(model_dict.values()))
+#     else:
+#       voting_clf = Ensemble(tasks=[TASK_MULTI_CLF],
+#                             md2clfs={md: {TASK_MULTI_CLF: [clf]} for md, clf in model_dict.items() if
+#                                      md in base_models}, )
+#     new_k_model_dict[k] = {**model_dict, **{ENSEMBLE_MAJ_EQ: voting_clf}}
+#   return new_k_model_dict
 
 
 # TODO: In the future, need to allow other weighting schemes, e.g. by predict_proba, --> can create a separate class
@@ -71,10 +95,6 @@ class Ensemble(object):
         #   raise NotImplementedError("Model %s is not supported yet!" % md)
         if len(tsk2clfs) == 0:
           raise ValueError("Model %s is not trained on any task!" % md)
-        # if tsk2clfs.get(tsk, None) is None or len(tsk2clfs[tsk]) == 0:
-        #   raise ValueError("Model %s is not trained on task %s" % (md, tsk))
-        # try:
-        #   check_is_fitted()
 
   def predict(self, X):
     # TODO: assign md2taskpreds here!! Do NOT init in __init__
@@ -111,11 +131,13 @@ class Ensemble(object):
   def predict_proba(self, X):
     """
     Outputs the probability of each class being the true outcome.
-    This is identical to the proportion of the votes in each class.
+    This takes the average of the class probability of all its base estimators.
     """
     self.predict(X)
-    rowsum = np.sum(self._votes_over_nnt, axis=1)
-    return self._votes_over_nnt / rowsum
+    base_estimators = {md: self.md2clfs[md][MULTI_CLF][0] for md in self.md2clfs}
+    base_clf_probas = np.asarray([clf.predict_proba(X) for clf in base_estimators.values()])
+    avg_proba = np.average(base_clf_probas, axis=0,)
+    return avg_proba
 
   def get_ensemble_upper_bound(self, ytrue):
     # calculate the maximum possible accuracy: as long as the true class has at least 1 vote
@@ -171,21 +193,19 @@ class Ensemble(object):
     return s
 
 
-def get_default_base_models():
-  models = list()
-  # models.append(make_pipeline(StandardScaler(), get_model(LGR, cls_weight=None)))
+def get_default_base_models(is_binary=False):
+  models = {}
   # models.append(make_pipeline(StandardScaler(), GaussianNB()))
-  #models.append(SVC(gamma='scale', probability=True))
-  #models.append(get_model(KNN))
-  #models.append(BaggingClassifier(n_estimators=100, random_state=SEED))
-  models.append(get_model(LGR, cls_weight=None))
-  models.append(GaussianNB())
-  models.append(AdaBoostClassifier(n_estimators=100, random_state=SEED))
-  models.append(ExtraTreesClassifier(n_estimators=100, max_depth=6, random_state=SEED))
-  models.append(get_model(BAGCLF))
-  models.append(get_model(DTCLF, cls_weight=None))
-  models.append(get_model(RMFCLF, cls_weight=None))
-  models.append(get_model(XGBCLF, cls_weight=None))
+  # models.append(SVC(gamma='scale', probability=True))
+  models[LGR] = get_model(LGR, cls_weight=None) if not is_binary else get_model_binclf(LGR, cls_weight=None)
+  models[SVC_LINEAR] = get_model(SVC_LINEAR, cls_weight=None) if not is_binary else get_model_binclf(SVC_LINEAR, cls_weight=None)
+  models[KNN] = get_model(KNN, cls_weight=None) if not is_binary else get_model_binclf(KNN, cls_weight=None)
+  models[ADABOOST] = AdaBoostClassifier(n_estimators=100, random_state=SEED)
+  models[EXTREECLF] = get_model(EXTREECLF, cls_weight=None) if not is_binary else get_model_binclf(EXTREECLF, cls_weight=None)
+  models[BAGCLF] = get_model(BAGCLF) if not is_binary else get_model_binclf(BAGCLF, cls_weight=None)
+  models[DTCLF] = get_model(DTCLF, cls_weight=None) if not is_binary else get_model_binclf(DTCLF, cls_weight=None)
+  models[RMFCLF] = get_model(RMFCLF, cls_weight=None) if not is_binary else get_model_binclf(RMFCLF, cls_weight=None)
+  models[XGBCLF] = get_model(XGBCLF, cls_weight=None) if not is_binary else get_model_binclf(XGBCLF, cls_weight=None)
   return models
 
 
@@ -208,10 +228,12 @@ class SuperLearner(object):
     self._fit_meta_model(meta_X, meta_y)
 
   def predict(self, X):
+    # if not self.base_fitted:
+    #   raise Exception('Base_estimators are not fitted yet!')
     # build meta_X
     meta_X = list()
-    for model in self.base_models:
-      yhat = model.predict_proba(X)
+    for md, clf in self.base_models.items():
+      yhat = clf.predict_proba(X)
       meta_X.append(yhat)
     meta_X = np.hstack(meta_X)
     # predict via meta model
@@ -229,10 +251,10 @@ class SuperLearner(object):
       train_y, test_y = y[train_idx], y[test_idx]
       meta_y.extend(test_y)
       # fit and make predictions with each sub-model
-      for model in self.base_models:
-        print(f'[super-learner] {model}')
-        model.fit(train_X, train_y)
-        yhat = model.predict_proba(test_X)  # --> (n_samples, n_classes)
+      for md, clf in self.base_models.items():
+        print(f'[super-learner] {md}')
+        clf.fit(train_X, train_y)
+        yhat = clf.predict_proba(test_X)  # --> (n_samples, n_classes)
         # store columns
         fold_yhats.append(yhat)
       # store fold yhats as columns
@@ -242,8 +264,34 @@ class SuperLearner(object):
 
   def _fit_base_model(self, X, y):
     if not self.base_fitted:
-      for model in self.base_models:
-        model.fit(X, y)
+      for clf in self.base_models.values():
+        clf.fit(X, y)
+      self.base_fitted = True
 
   def _fit_meta_model(self, X, y):
     self.meta_model.fit(X, y)
+
+
+class SuperLearnerV2(BaseEstimator):
+
+  def __init__(self, sl_v1: SuperLearner):
+    self.sl_v1 = sl_v1
+
+  def predict_proba(self, X):
+    if not self.sl_v1.base_fitted:
+      raise Exception('Base_estimators are not fitted yet!')
+    # build meta_X
+    meta_X = list()
+    for md, clf in self.sl_v1.base_models.items():
+      yhat = clf.predict_proba(X)
+      meta_X.append(yhat)
+    meta_X = np.hstack(meta_X)
+    proba = self.sl_v1.meta_model.predict_proba(meta_X)
+    print(proba)
+    return proba
+
+  def predict(self, X):
+    return self.sl_v1.predict(X)
+
+  def fit(self, X, y, kfold=10):
+    self.sl_v1.fit(X, y, kfold)
