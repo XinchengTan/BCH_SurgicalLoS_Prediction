@@ -92,7 +92,7 @@ class Dataset(object):
         rare_pproc_cptgrp_cohorts=rare_pproc_cptgrp_cohorts,
         ftr_cols=ftr_cols,
         feature_names=None
-      )  # TODO: pass in care_class arg?
+      )
     else:
       assert ftr_eng.__class__.__name__ == 'FeatureEngineeringModifier', 'ftr_eng must be of type FeatureEngineeringModifier!'
       self.FeatureEngMod = ftr_eng  # when test_pct = 1
@@ -195,8 +195,8 @@ class Dataset(object):
       query_case_keys, sda_only=sda_only, surg_only=surg_only, years=years, care_class=care_class)
     if self.test_case_keys is not None and len(self.test_case_keys) > 0:
       idxs = np.where(np.in1d(self.test_case_keys, filtered_case_keys))[0]
-      return self.Xtest[idxs, :], self.ytest[idxs]
-    return np.array([]), np.array([])
+      return self.Xtest[idxs, :], self.ytest[idxs], np.array(self.test_case_keys)[idxs]
+    return np.array([]), np.array([]), np.array([])
 
   def filter_X_case_keys(self, query_case_keys, sda_only=False, surg_only=False, years=None, care_class=None):
     filtered_case_keys = query_case_keys
@@ -322,6 +322,13 @@ class Dataset(object):
         ftrEng_dep_cols_to_drop.append(CPT_GROUPS)
     Xdf = df.copy()[feature_cols + ftrEng_dep_cols_to_drop]
 
+    # Generate primary procedure - operative length list, add relevant features
+    # (TODO: For now, force add these features for post-op LOS prediction)
+    if outcome == POSTOP_NNT:
+      self.FeatureEngMod.gen_pproc_oplen_df(Xdf)
+      Xdf = self.FeatureEngMod.add_oplen_percentile(Xdf)
+      Xdf = self.FeatureEngMod.add_oplen_deviation_pct(Xdf, middle='median')
+
     # Handle NaNs -- only remove NAs if the nullable column IS IN 'feature_cols'
     # Note that removed cases would not be accounted for in decile calculation that follows
     Xdf = self.FeatureEngMod.handle_nans(Xdf)
@@ -394,6 +401,11 @@ class Dataset(object):
       skip_cases_df = pd.read_csv(skip_cases_df_or_fp)
 
     Xdf = df.copy()[feature_cols]
+
+    # Add operative length features (TODO: For now, force add these features for post-op LOS prediction)
+    if self.outcome == POSTOP_NNT:
+      Xdf = self.FeatureEngMod.add_oplen_percentile(Xdf)
+      Xdf = self.FeatureEngMod.add_oplen_deviation_pct(Xdf, middle='median')
 
     # Handle NAs
     Xdf = self.FeatureEngMod.handle_nans(Xdf, isTrain=False)
@@ -577,7 +589,7 @@ def preprocess_outcome_col(df: pd.DataFrame, outcome, preprocess_surg_pred=False
     if preprocess_surg_pred and SPS_PRED in df.columns:
       df = preprocess_y(df, outcome, surg_y=True)
   else:
-    df = preprocess_y(df, outcome, surg_y=False)  # CHEWS outcome has no surgeon prediction
+    df = preprocess_y(df, outcome, surg_y=False)  # CHEWS outcome & post-op NNT has no surgeon prediction
   return df
 
 
@@ -594,6 +606,9 @@ def preprocess_y(df: pd.DataFrame, outcome, surg_y=False):
     y[y <= 0.5] = 0
   elif outcome == NNT:
     y = df[NNT].to_numpy() if not surg_y else df[SPS_PRED].to_numpy()
+    y = gen_y_nnt(y)
+  elif outcome == POSTOP_NNT:
+    y = df[POSTOP_NNT].to_numpy()
     y = gen_y_nnt(y)
   elif outcome in BINARY_NNT_SET:
     y = df[NNT].to_numpy() if not surg_y else df[SPS_PRED].to_numpy()

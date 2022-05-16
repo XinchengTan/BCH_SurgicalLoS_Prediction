@@ -5,6 +5,7 @@ import pandas as pd
 import pickle
 from pathlib import Path
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+from scipy import stats
 
 from globals import *
 
@@ -25,6 +26,7 @@ class FeatureEngineeringModifier(object):
     self.percase_cnt_vars = percase_cnt_vars
     self.trimmed_ccsr = trimmed_ccsr
     self.discretize_cols = discretize_cols
+    self.pproc_oplen_df = None  # a pd dataframe with primary procedure as index, list of operative length in training set as column
     # Meta data for input scaler
     self.scaler_type = input_scaler_type
     self.scale_numeric_only = scale_numeric_only
@@ -63,9 +65,43 @@ class FeatureEngineeringModifier(object):
 
     return
 
-  def add_feature_surgery_length(self, data_df: pd.DataFrame):
+  def gen_pproc_oplen_df(self, data_df: pd.DataFrame):
+    if (OPERATIVE_LENGTH not in data_df.columns) or (PRIMARY_PROC not in data_df.columns):
+      warnings.warn(f'[gen_pproc_oplen_df] "{OPERATIVE_LENGTH}" or "{PRIMARY_PROC}" column is missing in data_df!')
+      return data_df
+    pproc_oplen_df = data_df.groupby(PRIMARY_PROC) \
+                            .agg({OPERATIVE_LENGTH: lambda x: list(x)}) \
+                            .rename(columns={OPERATIVE_LENGTH: OP_LEN_PPROC_LIST})
+    self.pproc_oplen_df = pproc_oplen_df
+    #data_df = data_df.join(pproc_oplen_df, on=PRIMARY_PROC, how='inner')
+    #return data_df
 
-    return
+  def add_oplen_percentile(self, Xdf: pd.DataFrame):
+    if (OPERATIVE_LENGTH not in Xdf.columns) or (PRIMARY_PROC not in Xdf.columns):
+      warnings.warn(f'[add_oplen_percentile] "{OPERATIVE_LENGTH}" or "{PRIMARY_PROC}" column is missing in data_df!')
+      return Xdf
+    # TODO: handle pproc with low observations differently?
+    Xdf = Xdf.join(self.pproc_oplen_df, on=PRIMARY_PROC, how='inner')
+    Xdf[OP_LEN_PERCENTILE] = Xdf.apply(lambda x: stats.percentileofscore(x[OP_LEN_PPROC_LIST], x[OPERATIVE_LENGTH]),
+                                       axis=1)
+    Xdf.drop(columns=[OP_LEN_PPROC_LIST], inplace=True)
+    return Xdf
+
+  def add_oplen_deviation_pct(self, Xdf: pd.DataFrame, middle='mean'):
+    if (OPERATIVE_LENGTH not in Xdf.columns) or (PRIMARY_PROC not in Xdf.columns):
+      warnings.warn(f'[add_oplen_deviation_pct] "{OPERATIVE_LENGTH}" or "{PRIMARY_PROC}" column is missing in data_df!')
+      return Xdf
+    Xdf = Xdf.join(self.pproc_oplen_df, on=PRIMARY_PROC, how='inner')
+    if middle == 'mean':
+      Xdf[OP_LEN_MEAN_DEVIATION_PCT] = Xdf.apply(
+        lambda x: (x[OPERATIVE_LENGTH] - np.mean(x[OP_LEN_PPROC_LIST]) / np.mean(x[OP_LEN_PPROC_LIST])),
+        axis=1)
+    else:  # middle == 'median'
+      Xdf[OP_LEN_MEDIAN_DEVIATION_PCT] = Xdf.apply(
+        lambda x: (x[OPERATIVE_LENGTH] - np.median(x[OP_LEN_PPROC_LIST]) / np.median(x[OP_LEN_PPROC_LIST])),
+        axis=1)
+    Xdf.drop(columns=[OP_LEN_PPROC_LIST], inplace=True)
+    return Xdf
 
   def add_percase_clinical_var_count(self, Xdf: pd.DataFrame, clinical_vars=None, inplace=False):
     if clinical_vars is None:
@@ -115,6 +151,11 @@ class FeatureEngineeringModifier(object):
 
     Xdf_cols = Xdf.columns.to_list()
     print("[dummy_code] 0. Xdf shape: ", Xdf.shape)
+    # Care class
+    if CARE_CLASS in Xdf_cols:
+      Xdf.loc[(Xdf[CARE_CLASS] == 'Observation'), CARE_CLASS] = 0.0
+      Xdf.loc[(Xdf[CARE_CLASS] == 'Inpatient'), CARE_CLASS] = 1.0
+
     # Interpreter need or not
     if INTERPRETER in Xdf_cols:
       Xdf.loc[(Xdf.INTERPRETER_NEED == 'N'), INTERPRETER] = 0.0
