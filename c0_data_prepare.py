@@ -6,6 +6,7 @@ import numpy as np
 from pathlib import PosixPath
 
 from globals import *
+from eda.eda_time import gen_revisit_col
 
 
 pd.set_option('display.max_columns', 50)
@@ -125,6 +126,26 @@ def prepare_data(data_fp, cpt_fp, cpt_grp_fp, ccsr_fp, medication_fp, dtime_fp=N
   if exclude2021:
     dashb_df = dashb_df[dashb_df['DISCHARGE_DATE'].dt.year < 2021]
     print_df_info(dashb_df, "Final Dashboard (2021 excluded)")
+
+  # Add temporal features
+  # 1. on-admission features
+  dashb_df[ADMIT_DAY_OF_WEEK] = dashb_df[ADMIT_DTM].dt.dayofweek
+  dashb_df[ADMIT_HOUR] = dashb_df[ADMIT_DTM].dt.hour
+  readmit30 = gen_revisit_col(dashb_df, 30)
+  readmit60 = gen_revisit_col(dashb_df, 60)
+  dashb_df[READMIT30] = 0
+  dashb_df[READMIT60] = 0
+  dashb_df.loc[dashb_df['SURG_CASE_KEY'].isin([k for k, v in readmit30.items() if v == 1]), READMIT30] = 1
+  dashb_df.loc[dashb_df['SURG_CASE_KEY'].isin([k for k, v in readmit60.items() if v == 1]), READMIT60] = 1
+
+  # 2. post-operative features
+  dashb_df[OPERATIVE_LENGTH] = (dashb_df[SURG_END_DTM] - dashb_df[SURG_START_DTM]) / np.timedelta64(1, 'h')
+  dashb_df[POSTOP_NNT] = (dashb_df[DISCHARGE_DTM].dt.date - dashb_df[SURG_END_DTM].dt.date) / np.timedelta64(1, 'D')
+  dashb_df[OP_END_HOUR] = dashb_df[SURG_END_DTM].dt.hour
+
+  print('Data_df: ', dashb_df.shape)
+  dashb_df = dashb_df.loc[dashb_df[POSTOP_NNT] >= 0]
+  print('Data_df after dropping postop-los < 0', dashb_df.shape)
 
   return dashb_df
 

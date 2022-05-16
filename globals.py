@@ -35,6 +35,7 @@ OBS_CARE = 'Observation'
 # Customized new column names during dataframe preprocessing
 COMBINE_01 = True
 NNT = 'NUM_OF_NIGHTS'
+POSTOP_NNT = 'POSTOP_NUM_OF_NIGHTS'
 NNT_B0 = 'NUM_OF_NIGHTS <= 0'
 NNT_B1 = 'NUM_OF_NIGHTS <= 1'
 NNT_B2 = 'NUM_OF_NIGHTS <= 2'
@@ -112,6 +113,22 @@ FEATURE_COLS_NO_OS = ['SURG_CASE_KEY', GENDER, AGE, WEIGHT_ZS, CPTS, CPT_GROUPS,
 FEATURE_COLS_SPS = FEATURE_COLS + [SPS_PRED]
 FEATURE_COLS_NO_OS_SPS = FEATURE_COLS_NO_OS + [SPS_PRED]
 
+# Post-admission features
+ADMIT_DAY_OF_WEEK = 'Admit-day-of-week'
+ADMIT_HOUR = 'Admit-hour'
+READMIT30 = '30d-readmission'
+READMIT60 = '60d-readmission'
+FEATURE_COLS_NO_WEIGHT_ALLMEDS_POST_ADMIT = FEATURE_COLS_NO_WEIGHT_ALLMEDS + \
+                                            [CARE_CLASS, ADMIT_DAY_OF_WEEK, ADMIT_HOUR, READMIT30, READMIT60]
+# Post operative features
+OPERATIVE_LENGTH = 'Operative-length'
+OP_LEN_PPROC_LIST = 'Operative-length-list-by-pproc'
+OP_LEN_MEAN_DEVIATION_PCT = 'Op-length-deviation-from-mean'  # in percentage, could be negative
+OP_LEN_MEDIAN_DEVIATION_PCT = 'Op-length-deviation-from-median'  # in percentage, could be negative
+OP_LEN_PERCENTILE = 'Operative-length-percentile'
+OP_END_HOUR = 'Operation-end-hour'
+FEATURE_COLS_NO_WEIGHT_ALLMEDS_POST_OP = FEATURE_COLS_NO_WEIGHT_ALLMEDS_POST_ADMIT + [OPERATIVE_LENGTH]
+
 # Default per-case count features
 DEFAULT_PERCASE_CNT_VARS = [CCSRS, CPTS, DRUG_COLS[-1]]
 
@@ -161,6 +178,8 @@ ALL_POSSIBLE_NUMERIC_COLS = [
   'PPROC_MAX', 'CPT_MAX', 'CPT_GROUP_MAX', 'MED1_MAX', 'MED2_MAX', 'MED3_MAX', 'MED123_MAX', 'CCSR_MAX',
   CCSR_PERCASE_CNT, CPT_GROUP_PERCASE_CNT, CPT_PERCASE_CNT,
   MED1_PERCASE_CNT, MED2_PERCASE_CNT, MED3_PERCASE_CNT, MED123_PERCASE_CNT,
+  ADMIT_HOUR, ADMIT_DAY_OF_WEEK, OPERATIVE_LENGTH, OP_END_HOUR,
+  OP_LEN_PERCENTILE, OP_LEN_MEAN_DEVIATION_PCT, OP_LEN_MEDIAN_DEVIATION_PCT,
 ]
 
 
@@ -253,6 +272,7 @@ XVAL = 'val'
 XAGREE = 'model & surgeon agree'
 XDISAGREE = 'model & surgeon disagree' # can define anything reasonable
 XDISAGREE1 = 'model & surgeon diagree by 1 night'
+XDISAGREE_GT1 = 'model & surgeon diagree by >1 night'
 XDISAGREE2 = 'model & surgeon disagree by 2 nights'
 XDISAGREE_GT2 = 'model & surgeon disagree by 2+ nights'
 XALL_ONE2ONE = 'one-to-one (all)'  # TODO: denoise training data to include only one-to-one cases
@@ -386,6 +406,7 @@ SCR_ACC = 'accuracy'
 SCR_AUC = 'roc_auc'
 SCR_AUROC = 'auroc'
 SCR_AUROC_NEG = 'auroc-neg'
+SCR_AUPRC = 'auprc'
 SCR_ACC_BAL = 'balanced_accuracy'
 SCR_ACC_ERR1 = 'Accuracy (tol = 1 NNT)'
 SCR_ACC_ERR2 = 'Accuracy (tol = 2 NNT)'
@@ -422,7 +443,7 @@ DEFAULT_SCORERS_BINCLF = [SCR_ACC, SCR_AUROC, # SCR_AUROC_NEG,
 
 # Scorer formatter for pd output
 SCR_FORMATTER = defaultdict(lambda: "{:.1%}".format)
-SCR_FORMATTER.update({SCR_MAE: "{:.2f}".format, SCR_RMSE: "{:.2f}".format,
+SCR_FORMATTER.update({SCR_MAE: "{:.2f}".format, SCR_RMSE: "{:.2f}".format, SCR_AUPRC: "{:.2f}".format,
                       SCR_AUROC: "{:.2f}".format, SCR_AUROC_NEG: "{:.2f}".format,
                       SCR_F1_BINCLF: "{:.2f}".format, SCR_F1_BINCLF_NEG: "{:.2f}".format, })
 
