@@ -55,8 +55,13 @@ def get_clf_name(clf):
   try:
     md_name = clf.model_type
     assert clf.__class__.__name__ == 'SafeOneClassWrapper'
+    if md_name.startswith('CalibratedClassifier'):
+      clf = clf.base_estimator
   except AttributeError:
     md_name = clf.__class__.__name__
+
+  if md_name.startswith('CalibratedClassifier'):
+    md_name = clf.base_estimator.__class__.__name__
   return md_name
 
 
@@ -154,10 +159,12 @@ def format_perf_df(perf_df: pd.DataFrame):
         formatter_ret[scr] = SCR_FORMATTER[SCR_MAE]
       elif scr.startswith(SCR_RMSE):
         formatter_ret[scr] = SCR_FORMATTER[SCR_RMSE]
-      elif scr.startswith(SCR_AUROC) or scr.startswith('auroc'):
-        formatter_ret[scr] = SCR_FORMATTER[SCR_AUROC]
+      elif scr.startswith('auroc'):  # scr.startswith(SCR_AUROC) or
+        formatter_ret[scr] = SCR_FORMATTER['auroc']
       elif scr.startswith(SCR_F1_BINCLF):
         formatter_ret[scr] = SCR_FORMATTER[SCR_F1_BINCLF]
+      elif scr.startswith(SCR_AUPRC):
+        formatter_ret[scr] = SCR_FORMATTER[SCR_AUPRC]
       else:
         formatter_ret[scr] = SCR_FORMATTER[scr]  # default formatter
 
@@ -174,13 +181,20 @@ def show_confmat_of_median_perf_for_mds(perf_df, model_to_confmats, which_md, Xt
   else:
     kt = show_confmat_of_median_perf_(perf_df, model_to_confmats[which_md], which_md, Xtype, criterion)
     if 'Surgeon' in model_to_confmats:
-      utils_plot.plot_confusion_matrix(model_to_confmats[SURGEON][kt], SURGEON, Xtype)
+      surg_confmat = model_to_confmats[SURGEON][kt]
+      if surg_confmat is not None:
+        utils_plot.plot_confusion_matrix(surg_confmat, SURGEON, Xtype, savefig='surgeon_perf.png')
+
 
 
 # Display the confusion matrix of a particular model on the dataset where it achieves its median perf across k trials
 def show_confmat_of_median_perf_(perf_df, kt_to_confmats, md, Xtype, criterion):
-  md_name = clf2name[md] if md != SURGEON else md
+  print(kt_to_confmats)
+  md2name = {SUPER_LEARNER: 'SuperLearner', ENSEMBLE_MAJ_EQ: 'Ensemble'}
+  md_name = md2name.get(md, 'Ensemble') if md != SURGEON else md
   criterion_sorted = perf_df[perf_df['Model'] == md_name].sort_values(by=criterion).reset_index(drop=True)
   kt = criterion_sorted.iloc[len(kt_to_confmats) // 2]['Trial']
-  utils_plot.plot_confusion_matrix(kt_to_confmats[kt], md_name, Xtype)
+  if md_name == 'Ensemble':
+    md_name = 'Voting Ensemble'
+  utils_plot.plot_confusion_matrix(kt_to_confmats[kt], md_name, Xtype, savefig=f'{md}_perf.png')
   return kt

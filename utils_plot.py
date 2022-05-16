@@ -11,6 +11,8 @@ import seaborn as sns
 from sklearn import metrics
 
 import globals
+from globals_fs import *
+from eda.eda import los_histogram
 
 
 # TODO: in future iterations, make sure class labels are always consecutive range starting at 0!!
@@ -59,29 +61,29 @@ def gen_and_plot_confusion_matrix(yTrue, yPred, md_name, Xtype, axis_ticklabels=
 def plot_confusion_matrix(confmat, md_name, Xtype, axis_ticklabels=None, title_note='', savefig=False):
   cmap = sns.color_palette("ch:start=.2,rot=-.3") if str(Xtype).lower() == 'train' else 'rocket_r'
   fmt = 'd' if np.all([float(i).is_integer() for i in confmat.flatten()]) else '.1%'
-  title = 'Confusion Matrix (%s - %s)' % (md_name, Xtype)
+  title = f'Confusion Matrix ({md_name})'
 
   # plot confusion matrix - todo: Add arg for axis tick labels
-  figs, axs = plt.subplots(1, 1, figsize=(12, 10))
+  figs, ax = plt.subplots(1, 1, figsize=(12, 10))
   sns.set(font_scale=1.3)  # for label size
   sns.heatmap(confmat, fmt=fmt, cmap=cmap, linecolor='white', linewidths=0.5,
-              annot=True, annot_kws={"size": 15}, ax=axs)  # font size
-  axs.set_title(title_note + title, fontsize=20, y=1.02)
-  axs.set_xlabel("Predicted outcome", fontsize=16)
-  axs.set_ylabel("True outcome", fontsize=16)
+              annot=True, annot_kws={"size": 15}, ax=ax)  # font size
+  ax.set_title(title_note + title, fontsize=20, y=1.03)
+  ax.set_xlabel("Predicted outcome", fontsize=16)
+  ax.set_ylabel("True outcome", fontsize=16)
   if axis_ticklabels is None:
-    axs.set_xticks(np.arange(globals.MAX_NNT + 2) + 0.5)
-    axs.set_xticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
-    axs.set_yticks(np.arange(globals.MAX_NNT + 2) + 0.5)
-    axs.set_yticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
+    ax.set_xticks(np.arange(globals.NNT_CLASS_CNT) + 0.5)
+    ax.set_xticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
+    ax.set_yticks(np.arange(globals.NNT_CLASS_CNT) + 0.5)
+    ax.set_yticklabels(globals.NNT_CLASS_LABELS, fontsize=13)
   else:
-    axs.set_xticklabels(axis_ticklabels, fontsize=13)
-    axs.set_yticklabels(axis_ticklabels, fontsize=13)
+    ax.set_xticklabels(axis_ticklabels, fontsize=13)
+    ax.set_yticklabels(axis_ticklabels, fontsize=13)
 
   if savefig:
-    extent = axs[0].get_window_extent().transformed(figs.dpi_scale_trans.inverted())
-    figs.savefig(savefig, bbox_inches=extent.expanded(1.1, 1.2))
-  plt.show()
+    extent = ax.get_window_extent().transformed(figs.dpi_scale_trans.inverted())
+    figs.savefig(FIG_DIR / savefig, dpi=200)
+  #plt.show()
 
   return confmat
 
