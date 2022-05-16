@@ -9,31 +9,33 @@ import pandas as pd
 import seaborn as sns
 
 from globals import *
+from globals_fs import *
 from c1_data_preprocessing import gen_y_nnt
 import utils_plot
 import utils
 
 
 # -------------------------------------------- LOS --------------------------------------------
-def los_histogram(y, dataType='Training', ax=None):
+def los_histogram(y, y_counter=None, dataType='Training', ax=None, figname=None):
   if ax is None:
-    fig, ax = plt.subplots(1, 1, figsize=(8, 10))
-  outcome_cnter = Counter(y)
+    fig, ax = plt.subplots(1, 1, figsize=(6, 10))
+  outcome_cnter = Counter(y) if y_counter is None else y_counter
   ys = sorted(outcome_cnter.keys())
   ax.barh(ys, [outcome_cnter[i] for i in ys], align='center')
-  ax.set_xlabel("Number of surgical cases", fontsize=16)
+  ax.set_xlabel("Number of cases", fontsize=16)
   ax.invert_yaxis()
   ax.set_yticks(ys)
   ax.set_yticklabels(NNT_CLASS_LABELS, fontsize=13)
-  ax.set_title("LoS Histogram (%s)" % dataType)
+  ax.set_title("LOS Histogram (%s)" % dataType if dataType else "LOS Histogram", fontsize=18, y=1.01)
+  ax.set_xlim([0, max(outcome_cnter.values()) + 150])
   rects = ax.patches
-  total_cnt = len(y)
+  total_cnt = sum(outcome_cnter.values())
   labels = ["{:.1%}".format(outcome_cnter[i] / total_cnt) for i in ys]
   for rect, label in zip(rects, labels):
     ht, wd = rect.get_height(), rect.get_width()
-    ax.text(wd + 2.5, rect.get_y() + ht / 2, label,
+    ax.text(wd + 5, rect.get_y() + ht / 2, label,
                 ha='left', va='center', fontsize=15)
-
+  plt.savefig(FIG_DIR / f'{figname}.png', dpi=200)
 
 # TODO: update EDA plots for NNT!!!
 def los_histogram_vert(y, ax=None, outcome=LOS, clip_y=False):
@@ -58,6 +60,7 @@ def los_histogram_vert(y, ax=None, outcome=LOS, clip_y=False):
     ht, wd = rect.get_height(), rect.get_width()
     ax.text(rect.get_x() + wd / 2, ht + 1, label,
             ha='center', va='bottom', fontsize=13)
+  plt.savefig(FIG_DIR / 'los.png', dpi=150)
 
 
 def los_histogram_by_year(df, outcome=NNT, clip_y=False, show_pct=False, os_df=None, os_aside=False, ax=None):
@@ -93,6 +96,7 @@ def los_histogram_by_year(df, outcome=NNT, clip_y=False, show_pct=False, os_df=N
   ax.set_xticklabels(NNT_CLASS_LABELS, fontsize=13)
   ax.set_title(f"LOS Distribution by Year", fontsize=16, y=1.01)
   ax.legend(prop={'size': 13})
+  plt.savefig(FIG_DIR / 'los-year.png', dpi=150)
 
 
 def los_histogram_by_care_class(df, outcome=NNT, clip_y=False, pct=False, stack_hist_by_year=False, os_df=None):
@@ -404,14 +408,15 @@ def language_interpreter_eda_violinplot(df, outcome, preprocess_y, freq_range, t
   sns.violinplot(x=LANGUAGE, data=df, y=outcome, hue=hue, hue_order=hue_order, split=split, ax=ax,
                  order=x_order, palette=palette)
   ax.set_xlabel('Language (count)', fontsize=16)
-  ax.set_ylabel('Length of stay', fontsize=16)
+  ax.set_ylabel('Length of stay', fontsize=18)
   title = f'LOS Distribution over Language (Top {freq_range[1] - freq_range[0]} most common languages)' if title is None else title
-  ax.set_title(title, fontsize=18, y=1.01)
-  ax.set_xticklabels(xticklabels, fontsize=13)
-  ax.yaxis.set_tick_params(labelsize=13)
+  ax.set_title(title, fontsize=20, y=1.01)
+  ax.set_xticklabels(xticklabels, fontsize=15)
+  ax.yaxis.set_tick_params(labelsize=15)
   ax.set_ylim([-0.90, 5.99])
   ax.set_xlim([-0.9, 15])
   fig.autofmt_xdate(rotation=45)
+  plt.savefig(FIG_DIR / 'age-los.png', dpi=150, bbox_inches="tight")
   plt.show()
 
 

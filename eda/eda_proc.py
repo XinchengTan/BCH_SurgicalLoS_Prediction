@@ -63,6 +63,7 @@ def clinical_var_risk_score_eda(dashb_df, use_pproc=False, use_cptgrp=False, use
     PROC_col, PROC_type = CCSRS, 'CCSR'
   else:
     PROC_col, PROC_type = CPTS, 'CPT'
+  title = 'Cohort LOS Median (rounded)' if use_pproc else 'Risk Score'
 
   total = dashb_df.shape[0]
   df = dashb_df[[LOS, NNT, PROC_col, 'SURG_CASE_KEY']]
@@ -115,8 +116,8 @@ def clinical_var_risk_score_eda(dashb_df, use_pproc=False, use_cptgrp=False, use
     ax.set_xticklabels(list(xs[:-1]) + [f'$\geq$ {max(counter.keys())}'], fontsize=14)
 
     ax2.bar(xticks, [100 * counter[x] / total for x in xs], alpha=0.85, color='grey')
-    ax2.set_title(f'{PROC_type} Risk Score Histogram', fontsize=18, y=1.01)
-    ax2.set_xlabel(f'{PROC_type} risk score', fontsize=16)
+    ax2.set_title(f'{PROC_type} {title} Histogram', fontsize=18, y=1.01)
+    ax2.set_xlabel(f'{PROC_type} {title.lower().replace("los", "LOS")}', fontsize=16)
     ax2.set_ylabel('Case count percentage (%)', fontsize=16)
     ax2.set_xticks(xticks)
     ax2.set_xticklabels(list(xs[:-1]) + [f'$\geq$ {max(counter.keys())}'], fontsize=14)
@@ -132,15 +133,15 @@ def clinical_var_risk_score_eda(dashb_df, use_pproc=False, use_cptgrp=False, use
                ha='center', va='bottom', fontsize=12)
     plt.tight_layout(h_pad=5)
 
-  ax.set_title(f'Per-case {PROC_type} Risk Score vs LOS Outcome', fontsize=18, y=1.04)
-  ax.set_xlabel(f'{PROC_type} risk score per case', fontsize=16)
+  ax.set_title(f'Per-case {PROC_type} {title} vs LOS Outcome', fontsize=18, y=1.04)
+  ax.set_xlabel(f'{PROC_type} {title.lower().replace("los", "LOS")}', fontsize=16)
   ax.set_ylabel('LOS (outcome class)', fontsize=16)
   if preprocess_y:
     ax.set_yticks(sorted(df[outcome].unique()))
     ax.set_yticklabels(NNT_CLASS_LABELS, fontsize=14)
   #plt.setp(ax.collections, alpha=.9)
   if save:
-    plt.savefig(f'{PROC_type}_risk_score.png', dpi=400)
+    plt.savefig(f'/Users/caratan/Desktop/a_thesis_plots/{PROC_type}_risk_score.png', dpi=300, bbox_inches="tight")
 
   # print(Counter(outlier_df[PROC_col]))
   #  return outlier_df.sort_values(by='case_cnt')

@@ -3,13 +3,14 @@ from collections import defaultdict
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import seaborn as sns
 import random
 from collections import Counter
 from tqdm import tqdm
 
-import globals
 from globals import *
+from globals_fs import *
 from c1_data_preprocessing import gen_y_nnt
 
 
@@ -129,52 +130,78 @@ def os_code_colors():
   return colors
 
 
+def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
+  new_cmap = colors.LinearSegmentedColormap.from_list(
+    'trunc({n},{a:.2f},{b:.2f})'.format(n=cmap.name, a=minval, b=maxval),
+    cmap(np.linspace(minval, maxval, n)))
+  return new_cmap
+
+
 # Surgical case histogram VS OS code
-def organ_system_eda(dashboard_df, show_pct=False):
-  diag_cnts = [dashboard_df[lbl].sum() for lbl in OS_CODE_LIST]
+def organ_system_eda(dashboard_df, show_pct=False, save=False, max_cnt=10):
+  df = dashboard_df[OS_CODE_LIST + [NNT]]
+  df[NNT] = gen_y_nnt(df[NNT])
+  diag_cnts = [df[lbl].sum() for lbl in OS_CODE_LIST]
 
   figs, axs = plt.subplots(1, 2, figsize=(18, 7))
   colors = os_code_colors()
-  axs[0].pie(diag_cnts, labels=OS_CODE_LIST, colors=colors, autopct='%.2f%%', startangle=90,
-             wedgeprops={"edgecolor": "gray", 'linewidth': 0.3})
-  axs[0].set_title("Organ System Diagnosis Code Distribution", y=1.07, fontsize=16)
+  wedges, labels, autopct = axs[0].pie(diag_cnts, labels=OS_CODE_LIST, colors=colors, autopct='%.1f%%', startangle=90,
+                                       wedgeprops={"edgecolor": "gray", 'linewidth': 0.3})
+  axs[0].set_title("Body System Diagnosis Code Distribution", y=1.06, fontsize=17)
   axs[0].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+  for lab in labels:
+    lab.set_fontsize(12.5)
 
-  dashboard_df['OS_code_count'] = dashboard_df[OS_CODE_LIST].sum(axis=1)
-  print("Number of patients with more than 1 diagnosed conditions: ",
-        dashboard_df[dashboard_df['OS_code_count'] > 1].shape[0])
+  df['OS_code_count'] = df[OS_CODE_LIST].sum(axis=1)
+  if max_cnt is not None:
+    df['OS_code_count'] = df['OS_code_count'].apply(lambda x: min(x, max_cnt))
+  outcome_stacked_df = df.groupby(by=['OS_code_count', NNT]).size().unstack(-1)
+  outcome_stacked_df.columns = ['$\leq$1', '2', '3', '4', '5', '$\geq$6']
+  outcome_stacked_df = outcome_stacked_df.reset_index()
 
-  os_counter = Counter(dashboard_df['OS_code_count'])
+  print("Number of patients with more than 1 diagnosed conditions: ", df[df['OS_code_count'] > 1].shape[0])
+
+  os_counter = Counter(df['OS_code_count'])
   xs = sorted(os_counter.keys())
-  axs[1].bar(xs, [os_counter[x] for x in xs],
-             color="purple", alpha=0.6, edgecolor="black", linewidth=0.5)
-  axs[1].set_title("Per-case Body System Diagnoses Count Distribution", fontsize=16, y=1.05)
-  axs[1].set_xlabel("Number of body system diagnoses per case", fontsize=14)
-  axs[1].set_ylabel("Number of cases", fontsize=14)
+  # axs[1].bar(xs, [os_counter[x] for x in xs],
+  #            color="purple", alpha=0.6, edgecolor="black", linewidth=0.5)
+  outcome_stacked_df.plot(x='OS_code_count', kind='bar', stacked=True, rot=0, ax=axs[1],
+                          colormap=truncate_colormap(plt.get_cmap('coolwarm'), 0.1, 0.95, NNT_CLASS_CNT),
+                          title='Per-case Body System Diagnoses Count Distribution')
+  axs[1].set_title("Per-case Body System Diagnoses Count Distribution", fontsize=17, y=1.05)
+  axs[1].set_xlabel("Number of body system diagnoses per case", fontsize=15)
+  axs[1].set_ylabel("Number of cases", fontsize=15)
   axs[1].set_xticks(xs)
+  axs[1].legend(title='LOS Outcome Class')
+  if max_cnt is not None:
+    axs[1].set_xticklabels(list(map(int, xs[:-1])) + [f'$\geq$ {int(xs[-1])}'], fontsize=14)
   rects = axs[1].patches
   if show_pct:
     labels = ["{:.1%}".format(os_counter[x] / dashboard_df.shape[0]) for x in xs]
   else:
     labels = [str(os_counter[x]) for x in xs]  # "{:.1%}".format(outcome_cnter[i] / total_cnt) for i in xs
-  for rect, label in zip(rects, labels):
-    ht, wd = rect.get_height(), rect.get_width()
-    axs[1].text(rect.get_x() + wd / 2, ht + 2.5, label,
-                ha='center', va='bottom', fontsize=9)
 
-  # for i in bins[:-1]:
-  #   plt.text(arr[1][i],arr[0][i],str(int(arr[0][i])))
-  plt.show()
+  for i in range(len(labels)):
+    label = labels[i]
+    x, wd = rects[i].get_x(), rects[i].get_width()
+    ht = os_counter[i]
+    axs[1].text(x + wd / 2, ht + 40, label,
+                ha='center', va='bottom', fontsize=9)
+  if save:
+    plt.savefig(FIG_DIR / 'body_sys_overview.png', dpi=200)
+  #return outcome_stacked_df.head(20)
 
 
 # Organ system code & LOS
-def organ_system_los_boxplot(dashboard_df, exclude_outliers=0, xlim=None):
+def organ_system_los_boxplot(dashboard_df, exclude_outliers=0, xlim=None, save=False):
   # Box plot of LoS distribution over all 21 OS codes
   #dashboard_df = utils.drop_outliers(dashboard_df, exclude_outliers)
-
+  df = dashboard_df[[LOS] + OS_CODE_LIST]
+  if xlim:
+    df[LOS] = df[LOS].apply(lambda x: x if x <= xlim else xlim + random.uniform(0, 0.5))
   diag2los = defaultdict(list)
   for diag in OS_CODE_LIST:
-    diag2los[diag] = dashboard_df[dashboard_df[diag] == 1].LENGTH_OF_STAY.tolist()
+    diag2los[diag] = df.loc[df[diag] == 1, LOS].tolist()
   dlabels = [k for k, _ in sorted(diag2los.items(), key=lambda kv: np.median(kv[1]))]
 
   fig, ax = plt.subplots(figsize=(25, 17))
@@ -183,13 +210,13 @@ def organ_system_los_boxplot(dashboard_df, exclude_outliers=0, xlim=None):
 
   bplot = ax.boxplot([diag2los[d] for d in dlabels], widths=0.7, notch=True, vert=False,
                      patch_artist=True, flierprops={'color': colors})
-  ax.set_title("LOS Distribution over Body System Diagnosis", fontsize=22, y=1.01)
-  ax.set_xlabel("LOS (day)", fontsize=18)
-  ax.set_yticklabels(dlabels, fontsize=14)
-  ax.set_ylabel("Body system diagnosis", fontsize=18)
-  ax.xaxis.set_tick_params(labelsize=14)
+  ax.set_title("LOS Distribution over Body System Diagnosis Category", fontsize=24, y=1.01)
+  ax.set_xlabel("Length of stay (day)", fontsize=20)
+  ax.set_yticklabels(dlabels, fontsize=18)
+  ax.set_ylabel("Body system category", fontsize=20)
+  ax.xaxis.set_tick_params(labelsize=16)
   if xlim:
-    ax.set_xlim([0, xlim])
+    ax.set_xlim([0, xlim + 0.7])
 
   for patch, color in zip(bplot["fliers"], colors):
     patch.set_markeredgecolor(color)
@@ -198,10 +225,13 @@ def organ_system_los_boxplot(dashboard_df, exclude_outliers=0, xlim=None):
   for patch, color in zip(bplot['boxes'], colors):
     patch.set_facecolor(color)
 
+  if save:
+    plt.savefig(FIG_DIR / 'body_sys_los.png', dpi=300)
 
 
 
-def pproc_cohort_ccsr_eda(ppcc_df, topK_ccsr=10, cohort=globals.COHORT_TO_PPROCS):
+
+def pproc_cohort_ccsr_eda(ppcc_df, topK_ccsr=10, cohort=COHORT_TO_PPROCS):
   """
 
   :param ppcc_df: Output df of 'primary_proc_assoc_ccsr_eda()'
@@ -250,7 +280,7 @@ def primary_proc_assoc_ccsr_eda(df, topK_ccsr=10):
     row = df.iloc[i]
     for ccsr_col in ccsrs:
       if row[ccsr_col] == 1:
-        pproc2ccsr_nnts[row['PRIMARY_PROC']][ccsr_col].append(row[globals.NNT])
+        pproc2ccsr_nnts[row['PRIMARY_PROC']][ccsr_col].append(row[NNT])
 
   # Compute aggregated stats for each pproc & ccsr combination
   for pproc in tqdm(pprocs, 'Generating agg stats for each pproc & ccsr'):
